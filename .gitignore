@@ -1,0 +1,209 @@
+/*************  ✨ Windsurf Command ⭐  *************/
+# See https://help.github.com/en/articles/ignoring-commit-changes-to-your-repository-s-local-git-ignore-file
+# for more information about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.env
+.pnp.js
+
+# testing
+/coverage
+
+# production
+/build
+/dist
+
+# misc
+.DS_Store
+.env.local
+.env.development.local
+.env.production.local
+.env.test.local
+.npm-debug.log
+.npm/_logs/
+.npmrc
+package-lock.json
+pnpm-debug.log
+pnpm.log
+yarn-error.log
+yarn.lock
+
+# local env files
+.env
+.env.local
+.env.development.local
+.env.production.local
+.env.test.local
+
+# log files and temp files
+*.log
+*.tmp
+*.temp
+
+# osx files
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs
+Thumbs.db
+
+# windows files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# windows visual studio files
+*.suo
+*.user
+*.userosscache
+*.cache
+
+# visual studio code explorer files
+*.dbmdl
+*.opendb
+
+# mono files
+*.exe
+*.dll
+*.pdb
+
+# android files
+local.properties
+
+# IntelliJ files
+*.iml
+*.ipr
+*.iws
+out
+
+# Netbeans project files
+nbproject
+build.xml
+nbbuild.xml
+
+# Maven files
+target
+
+# Eclipse files
+.classpath
+.project
+.settings.xml
+.loadpath
+
+# Sublime Text project files
+*.sublime-project
+*.sublime-workspace
+
+# Sublime Text cache files
+Cache/
+
+# Intellij project files
+*.iml
+*.ipr
+*.iws
+out
+
+# package files
+# it is recommended to add to the ignore list the files that
+# should not be tracked by git.
+*.7z
+*.exe
+*.dll
+*.iso
+*.docx
+*.doc
+*.pdf
+*.one
+*.ppt
+*.pptx
+*.key
+*.pfx
+*.vbproj
+*.psd
+*.bin
+*.ai
+*.swf
+*.stp
+*.cc
+*.cpp
+*.cs
+*.h
+*.odp
+*.ods
+*.txt
+*.log
+*.m
+*.markdown
+*.md
+*.yml
+*.xml
+*.xaml
+*.resx
+*.dbml
+*.opendb
+*.pdb
+*.suo
+*.exe
+*.com
+*.cmd
+*.bat
+*.sh
+*.commander
+*.vsix
+*.sln
+*.userprefs
+*.suo
+*.opendb
+*.pdb
+*.sln
+*.vspscc
+*.vssscccache
+*.scc
+*.dbmdl
+*.opendb
+*.pdb
+*.suo
+*.userprefs
+*.sln
+*.vspscc
+*.vsssccache
+*.scc
+*.dbmdl
+*.opendb
+*.pdb
+*.suo
+*.userprefs
+*.sln
+*.vspscc
+*.vsssccache
+*.scc
+*.dbmdl
+*.opendb
+*.pdb
+*.suo
+*.userprefs
+*.vspscc
+*.vsssccache
+*.scc
+*.dbmdl
+*.opendb
+*.pdb
+*.suo
+*.userprefs
+*.sln
+*.vspscc
+*.vsssccache
+*.scc
+*.dbmdl
+*.opendb
+*.pdb
+*.suo
+*.userprefs
+*.sln
+*.vspscc
+*.vsssccache
+*.scc
+
