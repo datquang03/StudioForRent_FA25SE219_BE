@@ -2,8 +2,10 @@ import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
 import bodyParser from "body-parser";
-import connectDB from "./config/db.js";
-import userRoutes from "./routes/user.route.js";
+import { connectDB } from "./src/config/db.js";
+import authRoutes from "./src/routes/auth.route.js";
+import customerRoutes from "./src/routes/customer.route.js";
+import adminRoutes from "./src/routes/admin.route.js";
 
 dotenv.config();
 
@@ -19,7 +21,9 @@ app.use(bodyParser.urlencoded({ extended: true }));
 connectDB();
 
 // Routes
-app.use("/api/users", userRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/customers", customerRoutes);
+app.use("/api/admin", adminRoutes);
 
 // Routes (placeholder)
 app.get("/", (req, res) => {
