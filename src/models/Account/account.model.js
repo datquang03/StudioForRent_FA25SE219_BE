@@ -18,6 +18,8 @@ const accountSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    
+    // Account-specific fields (Staff & Admin only)
     role: {
       type: String,
       enum: ["staff", "admin"],
@@ -27,14 +29,24 @@ const accountSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    
+    // Additional fields
+    avatarUrl: {
+      type: String,
+      default: "https://static.vecteezy.com/system/resources/thumbnails/009/292/244/small_2x/default-avatar-icon-of-social-media-user-vector.jpg",
+    },
+    
+    // Activity tracking
+    lastLogin: {
+      type: Date,
+    },
   },
   {
     timestamps: true,
   }
 );
 
-// Indexes
-accountSchema.index({ email: 1 });
+// Indexes (email đã có index từ unique: true)
 accountSchema.index({ role: 1, isActive: 1 });
 
 const Account = mongoose.model("Account", accountSchema);
