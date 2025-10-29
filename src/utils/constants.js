@@ -50,15 +50,23 @@ export const RATE_LIMIT_MESSAGES = {
 // ENUMS
 // ============================================
 
+// User & Authentication
 export const USER_ROLES = {
   CUSTOMER: "customer",
   STAFF: "staff",
   ADMIN: "admin",
 };
 
-export const ACCOUNT_ROLES = {
+export const STAFF_POSITIONS = {
   STAFF: "staff",
   ADMIN: "admin",
+};
+
+// Studio & Resources
+export const STUDIO_STATUS = {
+  ACTIVE: "active",
+  INACTIVE: "inactive",
+  MAINTENANCE: "maintenance",
 };
 
 export const EQUIPMENT_STATUS = {
@@ -67,49 +75,53 @@ export const EQUIPMENT_STATUS = {
   MAINTENANCE: "maintenance",
 };
 
+// Scheduling
+export const SCHEDULE_STATUS = {
+  AVAILABLE: "available",
+  BOOKED: "booked",
+  CANCELLED: "cancelled",
+};
+
+// Booking
 export const BOOKING_STATUS = {
   PENDING: "pending",
   CONFIRMED: "confirmed",
-  CANCELLED: "cancelled",
+  CHECKED_IN: "checked_in", // NEW: Added checked-in status
   COMPLETED: "completed",
+  CANCELLED: "cancelled",
 };
 
-export const BILL_STATUS = {
-  PENDING: "pending",
-  PAID: "paid",
-  CANCELLED: "cancelled",
+// Payment Types
+export const PAY_TYPE = {
+  FULL: "full",
+  PREPAY_30: "prepay_30",
+  PREPAY_50: "prepay_50",
 };
 
 export const PAYMENT_STATUS = {
   PENDING: "pending",
-  SUCCESS: "success",
+  PAID: "paid", // Changed from SUCCESS to PAID
   FAILED: "failed",
   REFUNDED: "refunded",
 };
 
-export const REPORT_STATUS = {
-  OPEN: "open",
-  RESOLVED: "resolved",
+// Promotions
+export const DISCOUNT_TYPE = {
+  PERCENT: "percent",
+  FIXED: "fixed",
 };
 
-export const NOTIFICATION_TYPE = {
-  CONFIRMATION: "confirmation",
-  CHANGE: "change",
-  REMINDER: "reminder",
+// AI Set Design (Updated workflow)
+export const AI_SET_DESIGN_STATUS = {
+  DRAFTING: "drafting", // Khách đang tạo/chọn ảnh AI
+  DESIGN_APPROVED: "design_approved", // Khách đã chốt ảnh
+  STAFF_CONFIRMED: "staff_confirmed", // Staff xác nhận + báo giá
+  PENDING_IMPLEMENTATION: "pending_implementation", // Đang dựng
+  COMPLETED: "completed",
+  CANCELLED: "cancelled",
 };
 
-export const POLICY_TYPE = {
-  CANCELLATION: "cancellation",
-  REFUND: "refund",
-  ADDITIONAL_SERVICES: "additional_services",
-};
-
-export const REPORT_TARGET_TYPE = {
-  STUDIO: "studio",
-  BOOKING: "booking",
-  USER: "user",
-};
-
+// Refund
 export const REFUND_STATUS = {
   PENDING: "pending",
   APPROVED: "approved",
@@ -117,12 +129,27 @@ export const REFUND_STATUS = {
   PROCESSED: "processed",
 };
 
-export const SET_DESIGN_STATUS = {
-  PENDING: "pending",
-  GENERATED: "generated",
-  APPROVED: "approved",
-  REJECTED: "rejected",
-  IMPLEMENTED: "implemented",
+// Review & Report
+export const REPORT_STATUS = {
+  PENDING: "pending", // Changed from OPEN
+  RESOLVED: "resolved",
+};
+
+export const REPORT_ISSUE_TYPE = {
+  EQUIPMENT: "equipment",
+  STUDIO: "studio",
+  STAFF: "staff",
+  OTHER: "other",
+};
+
+// Notifications
+export const NOTIFICATION_TYPE = {
+  INFO: "info",
+  WARNING: "warning",
+  ERROR: "error",
+  CONFIRMATION: "confirmation",
+  CHANGE: "change",
+  REMINDER: "reminder",
 };
 
 // ============================================
@@ -130,6 +157,7 @@ export const SET_DESIGN_STATUS = {
 // ============================================
 
 export const TIME_CONSTANTS = {
+  VERIFICATION_CODE_EXPIRY: 15 * 60 * 1000, // 15 minutes in milliseconds
   VERIFICATION_CODE_EXPIRY_MINUTES: 15,
   JWT_EXPIRY: "1d",
   REFRESH_TOKEN_EXPIRY: "7d",
