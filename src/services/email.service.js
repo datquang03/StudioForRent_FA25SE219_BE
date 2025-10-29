@@ -150,9 +150,9 @@ export const sendVerificationEmail = async (to, code) => {
       subject: "Xác thực email - STUDIO MANAGEMENT",
       html: createVerificationEmailTemplate(code),
     });
-    console.log(`✅ Verification email sent to ${to}`);
+    console.log(`Verification email sent to ${to}`);
   } catch (error) {
-    console.error(`❌ Failed to send verification email to ${to}:`, error.message);
+    console.error(`Failed to send verification email to ${to}:`, error.message);
     throw new Error(`EMAIL_SEND_FAILED: ${error.message}`);
   }
 };

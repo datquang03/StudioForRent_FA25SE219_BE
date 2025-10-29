@@ -1,526 +1,196 @@
-import bcrypt from "bcryptjs";
-import Customer from "../models/Customer/customer.model.js";
-import Account from "../models/Account/account.model.js";
-import { generateVerificationCode, getExpiryTime, isExpired } from "../utils/helpers.js";
-import { sendVerificationEmail } from "./email.service.js";
-import { AUTH_MESSAGES } from "../utils/constants.js";
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import { User, CustomerProfile, StaffProfile } from '../models/index.js';
+import { sendVerificationEmail } from './email.service.js';
+import { AUTH_MESSAGES, USER_ROLES, TIME_CONSTANTS } from '../utils/constants.js';
 
-/**
- * Auth Service - Xử lý business logic cho authentication
- */
-class AuthService {
-  /**
-   * Đăng ký customer mới
-   * @param {Object} userData - { username, email, password, phone, fullName }
-   * @returns {Promise<Object>} - Customer object
-   */
-  async register({ username, email, password, phone, fullName }) {
-    // Kiểm tra email đã tồn tại
-    const customerExistsEmail = await Customer.findOne({ email });
-    if (customerExistsEmail) {
-      throw new Error("EMAIL_EXISTS");
-    }
+export const generateToken = (userId, role) => {
+  return jwt.sign(
+    { id: userId, role },
+    process.env.JWT_SECRET,
+    { expiresIn: TIME_CONSTANTS.JWT_EXPIRY }
+  );
+};
 
-    // Kiểm tra username đã tồn tại
-    const customerExistsUsername = await Customer.findOne({ username });
-    if (customerExistsUsername) {
-      throw new Error("USERNAME_EXISTS");
-    }
+const generateVerificationCode = () => {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+};
 
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
+const hashPassword = async (password) => {
+  const salt = await bcrypt.genSalt(10);
+  return bcrypt.hash(password, salt);
+};
 
-    // Tạo verification code
-    const verificationCode = generateVerificationCode();
-    const verificationCodeExpires = getExpiryTime(15); // 15 phút
+const comparePassword = async (plainPassword, hashedPassword) => {
+  return bcrypt.compare(plainPassword, hashedPassword);
+};
 
-    // Tạo customer mới
-    const customer = await Customer.create({
-      username,
-      email,
-      passwordHash: hashedPassword,
-      phone,
-      fullName: fullName || username,
-      verificationCode,
-      verificationCodeExpires,
-      isVerified: false,
-    });
+export const registerCustomer = async (data) => {
+  const { username, email, password, fullName, phone } = data;
 
-    // Gửi email xác thực
-    await sendVerificationEmail(email, verificationCode);
-
-    return customer;
+  const existingEmail = await User.findOne({ email });
+  if (existingEmail) {
+    throw new Error(AUTH_MESSAGES.EMAIL_EXISTS);
   }
 
-  /**
-   * Xác thực email
-   * @param {string} email - Email
-   * @param {string} code - Mã xác thực
-   * @returns {Promise<Object>} - Customer object
-   */
-  async verifyEmail(email, code) {
-    const customer = await Customer.findOne({ email });
-
-    if (!customer) {
-      throw new Error("USER_NOT_FOUND");
-    }
-
-    if (customer.isVerified) {
-      throw new Error("ALREADY_VERIFIED");
-    }
-
-    // Kiểm tra mã xác thực tồn tại
-    if (!customer.verificationCode || !customer.verificationCodeExpires) {
-      throw new Error("CODE_NOT_FOUND");
-    }
-
-    // Kiểm tra mã hết hạn
-    if (isExpired(customer.verificationCodeExpires)) {
-      // Clear expired code
-      customer.verificationCode = null;
-      customer.verificationCodeExpires = null;
-      await customer.save();
-      throw new Error("CODE_EXPIRED");
-    }
-
-    // Kiểm tra mã đúng
-    if (customer.verificationCode !== code) {
-      throw new Error("INVALID_CODE");
-    }
-
-    // Verify thành công
-    customer.isVerified = true;
-    customer.verificationCode = null;
-    customer.verificationCodeExpires = null;
-    await customer.save();
-
-    return customer;
+  const existingUsername = await User.findOne({ username });
+  if (existingUsername) {
+    throw new Error(AUTH_MESSAGES.USERNAME_EXISTS);
   }
 
-  /**
-   * Gửi lại mã xác thực
-   * @param {string} email - Email
-   * @returns {Promise<boolean>}
-   */
-  async resendVerificationCode(email) {
-    const customer = await Customer.findOne({ email });
+  const passwordHash = await hashPassword(password);
+  const verificationCode = generateVerificationCode();
+  const codeExpiry = new Date(Date.now() + TIME_CONSTANTS.VERIFICATION_CODE_EXPIRY);
 
-    if (!customer) {
-      throw new Error("USER_NOT_FOUND");
-    }
+  const user = await User.create({
+    username,
+    email,
+    phone,
+    passwordHash,
+    role: USER_ROLES.CUSTOMER,
+    fullName,
+    isVerified: false,
+    verificationCode,
+    verificationCodeExpiry: codeExpiry,
+  });
 
-    if (customer.isVerified) {
-      throw new Error("ALREADY_VERIFIED");
-    }
+  await CustomerProfile.create({
+    userId: user._id,
+    loyaltyPoints: 0,
+  });
 
-    // Tạo mã mới
-    const newCode = generateVerificationCode();
-    customer.verificationCode = newCode;
-    customer.verificationCodeExpires = getExpiryTime(15);
-    await customer.save();
+  await sendVerificationEmail(email, verificationCode);
 
-    // Gửi email
-    await sendVerificationEmail(email, newCode);
+  const userObject = user.toObject();
+  delete userObject.passwordHash;
+  delete userObject.verificationCode;
+  delete userObject.verificationCodeExpiry;
 
-    return true;
+  return userObject;
+};
+
+export const verifyEmail = async (email, code) => {
+  const user = await User.findOne({ email });
+
+  if (!user) {
+    throw new Error(AUTH_MESSAGES.USER_NOT_FOUND);
   }
 
-  /**
-   * Đăng nhập
-   * @param {string} username - Username
-   * @param {string} password - Password
-   * @returns {Promise<Object>} - Customer object
-   */
-  async login(username, password) {
-    const customer = await Customer.findOne({ username });
-
-    if (!customer) {
-      throw new Error("INVALID_CREDENTIALS");
-    }
-
-    if (!customer.isVerified) {
-      throw new Error("NOT_VERIFIED");
-    }
-
-    // Kiểm tra password
-    const isMatch = await bcrypt.compare(password, customer.passwordHash);
-    if (!isMatch) {
-      throw new Error("INVALID_CREDENTIALS");
-    }
-
-    // Update last login
-    customer.lastLogin = Date.now();
-    await customer.save();
-
-    return customer;
+  if (user.isVerified) {
+    throw new Error(AUTH_MESSAGES.ALREADY_VERIFIED);
   }
 
-  /**
-   * Đăng nhập cho Staff & Admin
-   * @param {string} email - Email
-   * @param {string} password - Password
-   * @returns {Promise<Object>} - Account object
-   */
-  async loginStaffAdmin(email, password) {
-    const account = await Account.findOne({ email });
-
-    if (!account) {
-      throw new Error("INVALID_CREDENTIALS");
-    }
-
-    // Kiểm tra account có active không
-    if (!account.isActive) {
-      throw new Error("ACCOUNT_INACTIVE");
-    }
-
-    // Kiểm tra password
-    const isMatch = await bcrypt.compare(password, account.passwordHash);
-    if (!isMatch) {
-      throw new Error("INVALID_CREDENTIALS");
-    }
-
-    // Update last login
-    account.lastLogin = Date.now();
-    await account.save();
-
-    return account;
+  if (new Date() > user.verificationCodeExpiry) {
+    throw new Error(AUTH_MESSAGES.CODE_EXPIRED);
   }
 
-  /**
-   * Tìm customer theo ID
-   * @param {string} customerId - Customer ID
-   * @returns {Promise<Object>} - Customer object
-   */
-  async findById(customerId) {
-    const customer = await Customer.findById(customerId).select("-passwordHash");
-    if (!customer) {
-      throw new Error("USER_NOT_FOUND");
-    }
-    return customer;
+  if (user.verificationCode !== code) {
+    throw new Error(AUTH_MESSAGES.INVALID_CODE);
   }
 
-  /**
-   * Cập nhật thông tin customer
-   * @param {string} customerId - Customer ID
-   * @param {Object} updateData - Dữ liệu cập nhật
-   * @returns {Promise<Object>} - Customer object
-   */
-  async updateUser(customerId, updateData) {
-    // Loại bỏ các field không được phép update trực tiếp
-    const { passwordHash, verificationCode, verificationCodeExpires, ...allowedData } = updateData;
+  user.isVerified = true;
+  user.verificationCode = undefined;
+  user.verificationCodeExpiry = undefined;
+  await user.save();
 
-    const customer = await Customer.findByIdAndUpdate(
-      customerId,
-      allowedData,
-      { new: true, runValidators: true }
-    ).select("-passwordHash");
+  const token = generateToken(user._id, user.role);
+  const userObject = user.toObject();
+  delete userObject.passwordHash;
 
-    if (!customer) {
-      throw new Error("USER_NOT_FOUND");
-    }
+  return { user: userObject, token };
+};
 
-    return customer;
+export const resendVerificationCode = async (email) => {
+  const user = await User.findOne({ email });
+
+  if (!user) {
+    throw new Error(AUTH_MESSAGES.USER_NOT_FOUND);
   }
 
-  /**
-   * Đổi mật khẩu
-   * @param {string} customerId - Customer ID
-   * @param {string} oldPassword - Mật khẩu cũ
-   * @param {string} newPassword - Mật khẩu mới
-   * @returns {Promise<boolean>}
-   */
-  async changePassword(customerId, oldPassword, newPassword) {
-    const customer = await Customer.findById(customerId);
-
-    if (!customer) {
-      throw new Error("USER_NOT_FOUND");
-    }
-
-    // Kiểm tra mật khẩu cũ
-    const isMatch = await bcrypt.compare(oldPassword, customer.passwordHash);
-    if (!isMatch) {
-      throw new Error("INVALID_OLD_PASSWORD");
-    }
-
-    // Hash mật khẩu mới
-    const salt = await bcrypt.genSalt(10);
-    customer.passwordHash = await bcrypt.hash(newPassword, salt);
-    await customer.save();
-
-    return true;
+  if (user.isVerified) {
+    throw new Error(AUTH_MESSAGES.ALREADY_VERIFIED);
   }
 
-  // ============================================
-  // ADMIN SETUP
-  // ============================================
+  const verificationCode = generateVerificationCode();
+  const codeExpiry = new Date(Date.now() + TIME_CONSTANTS.VERIFICATION_CODE_EXPIRY);
 
-  /**
-   * Tạo tài khoản admin (One-time setup)
-   * @param {Object} adminData - { email, password, fullName }
-   * @returns {Promise<Object>} - Account object
-   */
-  async createAdmin({ email, password, fullName }) {
-    // Kiểm tra đã có admin chưa
-    const existingAdmin = await Account.findOne({ role: "admin" });
-    if (existingAdmin) {
-      throw new Error("Admin đã tồn tại! Không thể tạo thêm.");
-    }
+  user.verificationCode = verificationCode;
+  user.verificationCodeExpiry = codeExpiry;
+  await user.save();
 
-    // Kiểm tra email đã tồn tại
-    const accountExists = await Account.findOne({ email });
-    if (accountExists) {
-      throw new Error("EMAIL_EXISTS");
-    }
+  await sendVerificationEmail(email, verificationCode);
+};
 
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
+export const login = async (data) => {
+  const { username, password } = data;
 
-    // Tạo admin account
-    const admin = await Account.create({
-      email,
-      passwordHash: hashedPassword,
-      fullName: fullName || "Admin",
-      role: "admin",
-      isActive: true,
-    });
+  const user = await User.findOne({
+    $or: [{ username }, { email: username }]
+  });
 
-    return admin;
+  if (!user) {
+    throw new Error(AUTH_MESSAGES.INVALID_CREDENTIALS);
   }
 
-  // ============================================
-  // CUSTOMER-SPECIFIC METHODS (NEW)
-  // ============================================
-
-  /**
-   * Đăng ký customer mới
-   * @param {Object} customerData - { fullName, email, password, phone }
-   * @returns {Promise<Object>} - Customer object
-   */
-  async registerCustomer({ fullName, email, password, phone }) {
-    // Kiểm tra email đã tồn tại
-    const customerExists = await Customer.findOne({ email });
-    if (customerExists) {
-      throw new Error("EMAIL_EXISTS");
-    }
-
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash(password, salt);
-
-    // Tạo verification code
-    const verificationCode = generateVerificationCode();
-    const verificationCodeExpires = getExpiryTime(15); // 15 phút
-
-    // Tạo customer mới
-    const customer = await Customer.create({
-      fullName,
-      email,
-      phone,
-      passwordHash,
-      verificationCode,
-      verificationCodeExpires,
-      isVerified: false,
-    });
-
-    // Gửi email xác thực
-    await sendVerificationEmail(email, verificationCode);
-
-    return customer;
+  if (!user.isActive) {
+    throw new Error(AUTH_MESSAGES.ACCOUNT_INACTIVE);
   }
 
-  /**
-   * Đăng nhập customer
-   * @param {string} email - Email
-   * @param {string} password - Password
-   * @returns {Promise<Object>} - Customer object
-   */
-  async loginCustomer(email, password) {
-    const customer = await Customer.findOne({ email });
-
-    if (!customer) {
-      throw new Error("INVALID_CREDENTIALS");
-    }
-
-    if (!customer.isVerified) {
-      throw new Error("NOT_VERIFIED");
-    }
-
-    if (customer.isBanned) {
-      throw new Error("ACCOUNT_BANNED");
-    }
-
-    // Kiểm tra password
-    const isMatch = await bcrypt.compare(password, customer.passwordHash);
-    if (!isMatch) {
-      throw new Error("INVALID_CREDENTIALS");
-    }
-
-    // Update last login
-    customer.lastLogin = Date.now();
-    await customer.save();
-
-    return customer;
+  const isPasswordValid = await comparePassword(password, user.passwordHash);
+  if (!isPasswordValid) {
+    throw new Error(AUTH_MESSAGES.INVALID_CREDENTIALS);
   }
 
-  /**
-   * Xác thực email customer
-   * @param {string} email - Email
-   * @param {string} code - Mã xác thực
-   * @returns {Promise<Object>} - Customer object
-   */
-  async verifyCustomerEmail(email, code) {
-    const customer = await Customer.findOne({ email });
-
-    if (!customer) {
-      throw new Error("USER_NOT_FOUND");
-    }
-
-    if (customer.isVerified) {
-      throw new Error("ALREADY_VERIFIED");
-    }
-
-    // Kiểm tra mã xác thực tồn tại
-    if (!customer.verificationCode || !customer.verificationCodeExpires) {
-      throw new Error("CODE_NOT_FOUND");
-    }
-
-    // Kiểm tra mã hết hạn
-    if (isExpired(customer.verificationCodeExpires)) {
-      customer.verificationCode = null;
-      customer.verificationCodeExpires = null;
-      await customer.save();
-      throw new Error("CODE_EXPIRED");
-    }
-
-    // Kiểm tra mã đúng
-    if (customer.verificationCode !== code) {
-      throw new Error("INVALID_CODE");
-    }
-
-    // Verify thành công
-    customer.isVerified = true;
-    customer.verificationCode = null;
-    customer.verificationCodeExpires = null;
-    await customer.save();
-
-    return customer;
+  if (user.role === USER_ROLES.CUSTOMER && !user.isVerified) {
+    throw new Error(AUTH_MESSAGES.NOT_VERIFIED);
   }
 
-  /**
-   * Gửi lại mã xác thực cho customer
-   * @param {string} email - Email
-   * @returns {Promise<boolean>}
-   */
-  async resendCustomerVerificationCode(email) {
-    const customer = await Customer.findOne({ email });
+  const token = generateToken(user._id, user.role);
+  const userObject = user.toObject();
+  delete userObject.passwordHash;
+  delete userObject.verificationCode;
+  delete userObject.verificationCodeExpiry;
 
-    if (!customer) {
-      throw new Error("USER_NOT_FOUND");
-    }
+  return { user: userObject, token };
+};
 
-    if (customer.isVerified) {
-      throw new Error("ALREADY_VERIFIED");
-    }
+export const createStaffAccount = async (data) => {
+  const { username, email, password, fullName, phone, position, salary } = data;
 
-    // Tạo mã mới
-    const newCode = generateVerificationCode();
-    customer.verificationCode = newCode;
-    customer.verificationCodeExpires = getExpiryTime(15);
-    await customer.save();
-
-    // Gửi email
-    await sendVerificationEmail(email, newCode);
-
-    return true;
+  const existingEmail = await User.findOne({ email });
+  if (existingEmail) {
+    throw new Error(AUTH_MESSAGES.EMAIL_EXISTS);
   }
 
-  // ============================================
-  // ACCOUNT-SPECIFIC METHODS (STAFF & ADMIN)
-  // ============================================
-
-  /**
-   * Tạo account mới (chỉ admin mới có quyền)
-   * @param {Object} accountData - { fullName, email, password, phone, role }
-   * @returns {Promise<Object>} - Account object
-   */
-  async createAccount({ fullName, email, password, phone, role }) {
-    // Kiểm tra email đã tồn tại
-    const accountExists = await Account.findOne({ email });
-    if (accountExists) {
-      throw new Error("EMAIL_EXISTS");
-    }
-
-    // Validate role
-    if (!["staff", "admin"].includes(role)) {
-      throw new Error("INVALID_ROLE");
-    }
-
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash(password, salt);
-
-    // Tạo account mới (không cần verify email)
-    const account = await Account.create({
-      fullName,
-      email,
-      phone,
-      passwordHash,
-      role,
-      isActive: true,
-    });
-
-    return account;
+  const existingUsername = await User.findOne({ username });
+  if (existingUsername) {
+    throw new Error(AUTH_MESSAGES.USERNAME_EXISTS);
   }
 
-  /**
-   * Đăng nhập account (staff/admin)
-   * @param {string} email - Email
-   * @param {string} password - Password
-   * @returns {Promise<Object>} - Account object
-   */
-  async loginAccount(email, password) {
-    const account = await Account.findOne({ email });
+  const passwordHash = await hashPassword(password);
+  const role = position === 'admin' ? USER_ROLES.ADMIN : USER_ROLES.STAFF;
+  
+  const user = await User.create({
+    username,
+    email,
+    phone,
+    passwordHash,
+    role,
+    fullName,
+    isVerified: true,
+    isActive: true,
+  });
 
-    if (!account) {
-      throw new Error("INVALID_CREDENTIALS");
-    }
+  await StaffProfile.create({
+    userId: user._id,
+    position,
+    salary,
+    hireDate: new Date(),
+    isActive: true,
+  });
 
-    if (!account.isActive) {
-      throw new Error("ACCOUNT_DEACTIVATED");
-    }
+  const userObject = user.toObject();
+  delete userObject.passwordHash;
 
-    // Kiểm tra password
-    const isMatch = await bcrypt.compare(password, account.passwordHash);
-    if (!isMatch) {
-      throw new Error("INVALID_CREDENTIALS");
-    }
-
-    // Update last login
-    account.lastLogin = Date.now();
-    await account.save();
-
-    return account;
-  }
-
-  /**
-   * Deactivate account
-   * @param {string} accountId - Account ID
-   * @returns {Promise<Object>} - Account object
-   */
-  async deactivateAccount(accountId) {
-    const account = await Account.findById(accountId);
-    
-    if (!account) {
-      throw new Error("USER_NOT_FOUND");
-    }
-
-    account.isActive = false;
-    await account.save();
-
-    return account;
-  }
-}
-
-export default new AuthService();
+  return userObject;
+};
