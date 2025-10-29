@@ -1,53 +1,69 @@
 import mongoose from "mongoose";
+import { BOOKING_STATUS, PAY_TYPE } from "../../utils/constants.js";
 
+/**
+ * BOOKING MODEL
+ * Theo PostgreSQL schema với price breakdown và payment type
+ */
 const bookingSchema = new mongoose.Schema(
   {
     userId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Customer",
+      ref: "User",
       required: true,
     },
-    startTime: {
-      type: Date,
+    scheduleId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Schedule",
       required: true,
+      unique: true,
     },
-    endTime: {
-      type: Date,
+    totalBeforeDiscount: {
+      type: Number,
       required: true,
-      validate: {
-        validator: function (value) {
-          return value > this.startTime;
-        },
-        message: "endTime must be greater than startTime",
-      },
+      default: 0,
+      min: 0,
+    },
+    discountAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    finalAmount: {
+      type: Number,
+      required: true,
+      default: 0,
+      min: 0,
+    },
+    promoId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Promotion",
+    },
+    payType: {
+      type: String,
+      enum: Object.values(PAY_TYPE),
+      default: PAY_TYPE.FULL,
+      required: true,
     },
     status: {
       type: String,
-      enum: ["pending", "confirmed", "cancelled", "completed"],
-      default: "pending",
+      enum: Object.values(BOOKING_STATUS),
+      default: BOOKING_STATUS.PENDING,
       required: true,
     },
-    combinedWith: {
-      type: [mongoose.Schema.Types.ObjectId],
-      default: [],
-    },
-    packageId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Package",
-    },
-    paymentId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Payment",
+    notes: {
+      type: String,
     },
   },
   {
-    timestamps: { createdAt: true, updatedAt: false },
+    timestamps: true,
   }
 );
 
 // Indexes
-bookingSchema.index({ userId: 1, startTime: 1 });
+bookingSchema.index({ userId: 1, status: 1 });
 bookingSchema.index({ status: 1 });
+bookingSchema.index({ scheduleId: 1 });
 
 const Booking = mongoose.model("Booking", bookingSchema);
 

@@ -1,22 +1,24 @@
 import mongoose from "mongoose";
 
+/**
+ * MESSAGE MODEL
+ * Simplified - user-to-user messaging (theo PostgreSQL schema)
+ */
 const messageSchema = new mongoose.Schema(
   {
-    senderCustomerId: {
+    bookingId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Customer",
+      ref: "Booking",
     },
-    senderAccountId: {
+    fromUserId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Account",
+      ref: "User",
+      required: true,
     },
-    receiverCustomerId: {
+    toUserId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Customer",
-    },
-    receiverAccountId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Account",
+      ref: "User",
+      required: true,
     },
     content: {
       type: String,
@@ -32,31 +34,9 @@ const messageSchema = new mongoose.Schema(
   }
 );
 
-// Validation để đảm bảo chỉ có một loại sender và một loại receiver
-messageSchema.pre("save", function (next) {
-  const hasSenderCustomer = !!this.senderCustomerId;
-  const hasSenderAccount = !!this.senderAccountId;
-  const hasReceiverCustomer = !!this.receiverCustomerId;
-  const hasReceiverAccount = !!this.receiverAccountId;
-
-  if (
-    (hasSenderCustomer && hasSenderAccount) ||
-    (!hasSenderCustomer && !hasSenderAccount)
-  ) {
-    return next(new Error("Must have exactly one sender type"));
-  }
-
-  if (
-    (hasReceiverCustomer && hasReceiverAccount) ||
-    (!hasReceiverCustomer && !hasReceiverAccount)
-  ) {
-    return next(new Error("Must have exactly one receiver type"));
-  }
-
-  next();
-});
-
 // Indexes
+messageSchema.index({ bookingId: 1 });
+messageSchema.index({ toUserId: 1, isRead: 1 });
 messageSchema.index({ createdAt: -1 });
 
 const Message = mongoose.model("Message", messageSchema);

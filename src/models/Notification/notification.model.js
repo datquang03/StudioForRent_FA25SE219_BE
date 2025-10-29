@@ -1,20 +1,33 @@
 import mongoose from "mongoose";
+import { NOTIFICATION_TYPE } from "../../utils/constants.js";
 
+/**
+ * NOTIFICATION MODEL
+ * Theo PostgreSQL schema với type và related_id
+ */
 const notificationSchema = new mongoose.Schema(
   {
     userId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Customer",
+      ref: "User",
       required: true,
     },
-    type: {
+    title: {
       type: String,
-      enum: ["confirmation", "change", "reminder"],
       required: true,
     },
     message: {
       type: String,
       required: true,
+    },
+    type: {
+      type: String,
+      enum: Object.values(NOTIFICATION_TYPE),
+      default: NOTIFICATION_TYPE.INFO,
+    },
+    relatedId: {
+      type: mongoose.Schema.Types.ObjectId,
+      // booking_id, etc.
     },
     isRead: {
       type: Boolean,
@@ -25,6 +38,10 @@ const notificationSchema = new mongoose.Schema(
     timestamps: { createdAt: true, updatedAt: false },
   }
 );
+
+// Indexes
+notificationSchema.index({ userId: 1, isRead: 1 });
+notificationSchema.index({ createdAt: -1 });
 
 const Notification = mongoose.model("Notification", notificationSchema);
 

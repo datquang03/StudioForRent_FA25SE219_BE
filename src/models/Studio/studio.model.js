@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { STUDIO_STATUS } from "../../utils/constants.js";
 
 const studioSchema = new mongoose.Schema(
   {
@@ -6,31 +7,29 @@ const studioSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    type: {
-      type: String,
-      required: true,
-    },
     description: {
       type: String,
     },
-    location: {
-      type: String,
+    basePricePerHour: {
+      type: Number,
+      required: true,
+      default: 0,
+      min: 0,
     },
-    availability: {
-      type: [mongoose.Schema.Types.Mixed],
+    capacity: {
+      type: Number,
+      default: 10,
+      min: 0,
+    },
+    images: {
+      type: [String],
       default: [],
     },
-    isApproved: {
-      type: Boolean,
-      default: false,
-    },
-    isBanned: {
-      type: Boolean,
-      default: false,
-    },
-    managedBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Account",
+    status: {
+      type: String,
+      enum: Object.values(STUDIO_STATUS),
+      default: STUDIO_STATUS.ACTIVE,
+      required: true,
     },
   },
   {
@@ -39,7 +38,7 @@ const studioSchema = new mongoose.Schema(
 );
 
 // Indexes
-studioSchema.index({ type: 1, isApproved: 1 });
+studioSchema.index({ status: 1 });
 
 const Studio = mongoose.model("Studio", studioSchema);
 

@@ -1,5 +1,10 @@
 import mongoose from "mongoose";
+import { REFUND_STATUS } from "../../utils/constants.js";
 
+/**
+ * REFUND MODEL
+ * Updated để tham chiếu User thay vì Account
+ */
 const refundSchema = new mongoose.Schema(
   {
     paymentId: {
@@ -23,13 +28,13 @@ const refundSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["pending", "approved", "rejected", "processed"],
-      default: "pending",
+      enum: Object.values(REFUND_STATUS),
+      default: REFUND_STATUS.PENDING,
       required: true,
     },
     approvedBy: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Account",
+      ref: "User", // Changed from Account to User
     },
     approvalNotes: {
       type: String,
