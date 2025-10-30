@@ -1,3 +1,4 @@
+// #region Imports
 import asyncHandler from 'express-async-handler';
 import {
   getAllCustomers,
@@ -8,7 +9,9 @@ import {
   updateStaffProfile,
   toggleStaffActive,
 } from '../services/user.service.js';
+// #endregion
 
+// #region Customer Management
 export const getCustomers = asyncHandler(async (req, res) => {
   const { page, limit, isActive, search } = req.query;
 
@@ -55,7 +58,9 @@ export const unbanCustomer = asyncHandler(async (req, res) => {
     data: user,
   });
 });
+// #endregion
 
+// #region Staff Management
 export const getStaffList = asyncHandler(async (req, res) => {
   const { page, limit, position, isActive } = req.query;
 
@@ -119,3 +124,4 @@ export const activateStaff = asyncHandler(async (req, res) => {
     data: user,
   });
 });
+// #endregion

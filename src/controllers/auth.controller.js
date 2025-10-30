@@ -1,3 +1,4 @@
+// #region Imports
 import asyncHandler from 'express-async-handler';
 import {
   registerCustomer,
@@ -7,7 +8,9 @@ import {
   createStaffAccount,
 } from '../services/auth.service.js';
 import { AUTH_MESSAGES, VALIDATION_MESSAGES } from '../utils/constants.js';
+// #endregion
 
+// #region Customer Registration & Verification
 export const registerCustomerController = asyncHandler(async (req, res) => {
   const { username, email, password, fullName, phone } = req.body;
 
@@ -57,7 +60,9 @@ export const resendCodeController = asyncHandler(async (req, res) => {
     message: AUTH_MESSAGES.RESEND_CODE_SUCCESS,
   });
 });
+// #endregion
 
+// #region Login & Authentication
 export const loginController = asyncHandler(async (req, res) => {
   const { username, password } = req.body;
 
@@ -75,6 +80,15 @@ export const loginController = asyncHandler(async (req, res) => {
   });
 });
 
+export const getMeController = asyncHandler(async (req, res) => {
+  res.status(200).json({
+    success: true,
+    data: req.user,
+  });
+});
+// #endregion
+
+// #region Staff Account Creation (Admin Only)
 export const createStaffController = asyncHandler(async (req, res) => {
   const { username, email, password, fullName, phone, position, salary } = req.body;
 
@@ -99,10 +113,4 @@ export const createStaffController = asyncHandler(async (req, res) => {
     data: staff,
   });
 });
-
-export const getMeController = asyncHandler(async (req, res) => {
-  res.status(200).json({
-    success: true,
-    data: req.user,
-  });
-});
+// #endregion

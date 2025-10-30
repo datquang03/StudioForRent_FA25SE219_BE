@@ -1,7 +1,6 @@
-// ============================================
-// RESPONSE MESSAGES
-// ============================================
+// #region Response Messages
 
+// Authentication Messages
 export const AUTH_MESSAGES = {
   // Success messages
   REGISTER_SUCCESS: "Đăng ký thành công. Vui lòng kiểm tra email để xác thực tài khoản.",
@@ -24,6 +23,7 @@ export const AUTH_MESSAGES = {
   ACCOUNT_INACTIVE: "Tài khoản đã bị vô hiệu hóa!",
 };
 
+// Validation Messages
 export const VALIDATION_MESSAGES = {
   REQUIRED_USERNAME: "Vui lòng điền tên đăng nhập!",
   REQUIRED_EMAIL: "Vui lòng điền email!",
@@ -37,6 +37,7 @@ export const VALIDATION_MESSAGES = {
   MISSING_FIELDS: "Vui lòng điền đầy đủ thông tin!",
 };
 
+// Rate Limit Messages
 export const RATE_LIMIT_MESSAGES = {
   AUTH_LIMIT: "Quá nhiều yêu cầu từ IP này. Vui lòng thử lại sau 15 phút!",
   LOGIN_LIMIT: "Quá nhiều lần đăng nhập thất bại. Tài khoản tạm thời bị khóa 15 phút để bảo mật!",
@@ -46,9 +47,9 @@ export const RATE_LIMIT_MESSAGES = {
   GENERAL_LIMIT: "Quá nhiều yêu cầu. Vui lòng thử lại sau!",
 };
 
-// ============================================
-// ENUMS
-// ============================================
+// #endregion
+
+// #region Enums
 
 // User & Authentication
 export const USER_ROLES = {
@@ -91,6 +92,12 @@ export const BOOKING_STATUS = {
   CANCELLED: "cancelled",
 };
 
+// Booking Detail Types (for booking_details table)
+export const BOOKING_DETAIL_TYPE = {
+  EQUIPMENT: "equipment",
+  EXTRA_SERVICE: "extra_service",
+};
+
 // Payment Types
 export const PAY_TYPE = {
   FULL: "full",
@@ -121,14 +128,6 @@ export const AI_SET_DESIGN_STATUS = {
   CANCELLED: "cancelled",
 };
 
-// Refund
-export const REFUND_STATUS = {
-  PENDING: "pending",
-  APPROVED: "approved",
-  REJECTED: "rejected",
-  PROCESSED: "processed",
-};
-
 // Review & Report
 export const REPORT_STATUS = {
   PENDING: "pending", // Changed from OPEN
@@ -152,9 +151,9 @@ export const NOTIFICATION_TYPE = {
   REMINDER: "reminder",
 };
 
-// ============================================
-// TIME CONSTANTS
-// ============================================
+// #endregion
+
+// #region Time Constants
 
 export const TIME_CONSTANTS = {
   VERIFICATION_CODE_EXPIRY: 15 * 60 * 1000, // 15 minutes in milliseconds
@@ -163,9 +162,9 @@ export const TIME_CONSTANTS = {
   REFRESH_TOKEN_EXPIRY: "7d",
 };
 
-// ============================================
-// RATE LIMIT CONSTANTS
-// ============================================
+// #endregion
+
+// #region Rate Limit Configuration
 
 export const RATE_LIMIT_CONFIG = {
   // Authentication endpoints
@@ -193,9 +192,9 @@ export const RATE_LIMIT_CONFIG = {
   GENERAL_MAX_REQUESTS: 100, // 100 requests
 };
 
-// ============================================
-// REGEX PATTERNS
-// ============================================
+// #endregion
+
+// #region Regex Patterns
 
 export const REGEX_PATTERNS = {
   EMAIL: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
@@ -203,3 +202,5 @@ export const REGEX_PATTERNS = {
   PHONE: /^[0-9]{10,11}$/,
   VERIFICATION_CODE: /^[0-9]{6}$/,
 };
+
+// #endregion

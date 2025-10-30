@@ -1,8 +1,14 @@
+// #region Imports
 import jwt from "jsonwebtoken";
 import asyncHandler from "express-async-handler";
 import { User } from "../models/index.js";
 import { AUTH_MESSAGES } from "../utils/constants.js";
+// #endregion
 
+// #region Authentication Middleware
+/**
+ * Protect routes - Verify JWT token
+ */
 export const protect = asyncHandler(async (req, res, next) => {
   let token;
 
@@ -41,7 +47,12 @@ export const protect = asyncHandler(async (req, res, next) => {
     });
   }
 });
+// #endregion
 
+// #region Authorization Middleware
+/**
+ * Authorize roles - Check user role permissions
+ */
 export const authorize = (...roles) => {
   return (req, res, next) => {
     if (!roles.includes(req.user.role)) {
@@ -53,5 +64,6 @@ export const authorize = (...roles) => {
     next();
   };
 };
+// #endregion
 
 

@@ -1,5 +1,8 @@
+// #region Imports
 import { User, CustomerProfile, StaffProfile } from '../models/index.js';
+// #endregion
 
+// #region Customer Profile Management
 export const getCustomerProfile = async (userId) => {
   const user = await User.findById(userId)
     .select('-passwordHash -verificationCode -verificationCodeExpiry');
@@ -54,7 +57,9 @@ export const updateCustomerProfile = async (userId, updateData) => {
 
   return user;
 };
+// #endregion
 
+// #region Customer List & Search (Admin)
 export const getAllCustomers = async ({ page = 1, limit = 10, isActive, search }) => {
   const query = { role: 'customer' };
 
@@ -119,7 +124,9 @@ export const toggleCustomerActive = async (userId, isActive) => {
 
   return user;
 };
+// #endregion
 
+// #region Staff Management (Admin)
 export const getAllStaff = async ({ page = 1, limit = 10, position, isActive }) => {
   const query = { role: { $in: ['staff', 'admin'] } };
 
@@ -238,3 +245,4 @@ export const toggleStaffActive = async (userId, isActive) => {
 
   return user;
 };
+// #endregion

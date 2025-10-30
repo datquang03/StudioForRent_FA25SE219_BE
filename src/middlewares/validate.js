@@ -1,7 +1,10 @@
+//#region Imports
 import { isValidEmail, isValidPassword, isNotEmpty } from "../utils/validators.js";
 import { VALIDATION_MESSAGES } from "../utils/constants.js";
 import { createResponse } from "../utils/helpers.js";
+//#endregion
 
+//#region Authentication Validators
 /**
  * Validate dữ liệu đăng ký
  */
@@ -66,6 +69,35 @@ export const validateLogin = (req, res, next) => {
 };
 
 /**
+ * Validate dữ liệu đổi mật khẩu
+ */
+export const validateChangePassword = (req, res, next) => {
+  const { oldPassword, newPassword } = req.body;
+
+  if (!isNotEmpty(oldPassword)) {
+    return res.status(400).json(
+      createResponse(false, "Vui lòng điền mật khẩu cũ!")
+    );
+  }
+
+  if (!isNotEmpty(newPassword)) {
+    return res.status(400).json(
+      createResponse(false, "Vui lòng điền mật khẩu mới!")
+    );
+  }
+
+  if (!isValidPassword(newPassword)) {
+    return res.status(400).json(
+      createResponse(false, VALIDATION_MESSAGES.WEAK_PASSWORD)
+    );
+  }
+
+  next();
+};
+//#endregion
+
+//#region Email Verification Validators
+/**
  * Validate dữ liệu xác thực email
  */
 export const validateVerifyEmail = (req, res, next) => {
@@ -118,34 +150,9 @@ export const validateResendCode = (req, res, next) => {
 
   next();
 };
+//#endregion
 
-/**
- * Validate dữ liệu đổi mật khẩu
- */
-export const validateChangePassword = (req, res, next) => {
-  const { oldPassword, newPassword } = req.body;
-
-  if (!isNotEmpty(oldPassword)) {
-    return res.status(400).json(
-      createResponse(false, "Vui lòng điền mật khẩu cũ!")
-    );
-  }
-
-  if (!isNotEmpty(newPassword)) {
-    return res.status(400).json(
-      createResponse(false, "Vui lòng điền mật khẩu mới!")
-    );
-  }
-
-  if (!isValidPassword(newPassword)) {
-    return res.status(400).json(
-      createResponse(false, VALIDATION_MESSAGES.WEAK_PASSWORD)
-    );
-  }
-
-  next();
-};
-
+//#region General Validators
 /**
  * Validate ObjectId
  */
@@ -163,3 +170,4 @@ export const validateObjectId = (paramName = "id") => {
     next();
   };
 };
+//#endregion

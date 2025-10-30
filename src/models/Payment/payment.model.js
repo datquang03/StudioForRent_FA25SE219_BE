@@ -12,6 +12,15 @@ const paymentSchema = new mongoose.Schema(
       ref: "Booking",
       required: true,
     },
+    
+    // Mã giao dịch nội bộ (VD: "SCREW-1001", "PAY-20251031-001")
+    paymentCode: {
+      type: String,
+      required: true,
+      unique: true,
+      index: true,
+    },
+    
     amount: {
       type: Number,
       required: true,
@@ -28,11 +37,14 @@ const paymentSchema = new mongoose.Schema(
       default: PAYMENT_STATUS.PENDING,
       required: true,
     },
+    
+    // Mã giao dịch từ bên thứ 3 (VD: PayOS)
     transactionId: {
       type: String,
       unique: true,
       sparse: true,
     },
+    
     qrCodeUrl: {
       type: String,
     },
@@ -54,6 +66,7 @@ const paymentSchema = new mongoose.Schema(
 
 // Indexes
 paymentSchema.index({ bookingId: 1, status: 1 });
+paymentSchema.index({ paymentCode: 1 });
 paymentSchema.index({ transactionId: 1 });
 paymentSchema.index({ status: 1 });
 

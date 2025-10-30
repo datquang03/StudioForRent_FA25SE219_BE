@@ -1,9 +1,12 @@
+// #region Imports
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { User, CustomerProfile, StaffProfile } from '../models/index.js';
 import { sendVerificationEmail } from './email.service.js';
 import { AUTH_MESSAGES, USER_ROLES, TIME_CONSTANTS } from '../utils/constants.js';
+// #endregion
 
+// #region Helper Functions
 export const generateToken = (userId, role) => {
   return jwt.sign(
     { id: userId, role },
@@ -24,7 +27,9 @@ const hashPassword = async (password) => {
 const comparePassword = async (plainPassword, hashedPassword) => {
   return bcrypt.compare(plainPassword, hashedPassword);
 };
+// #endregion
 
+// #region Customer Registration & Verification
 export const registerCustomer = async (data) => {
   const { username, email, password, fullName, phone } = data;
 
@@ -120,7 +125,9 @@ export const resendVerificationCode = async (email) => {
 
   await sendVerificationEmail(email, verificationCode);
 };
+// #endregion
 
+// #region Login & Authentication
 export const login = async (data) => {
   const { username, password } = data;
 
@@ -153,7 +160,9 @@ export const login = async (data) => {
 
   return { user: userObject, token };
 };
+// #endregion
 
+// #region Staff Account Management
 export const createStaffAccount = async (data) => {
   const { username, email, password, fullName, phone, position, salary } = data;
 
@@ -194,3 +203,4 @@ export const createStaffAccount = async (data) => {
 
   return userObject;
 };
+// #endregion

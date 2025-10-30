@@ -1,11 +1,8 @@
+// #region Imports & Configuration
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 
 dotenv.config();
-
-// ============================================
-// EMAIL CONFIGURATION
-// ============================================
 
 const EMAIL_CONFIG = {
   SERVICE: "gmail",
@@ -21,10 +18,9 @@ const transporter = nodemailer.createTransport({
     pass: EMAIL_CONFIG.PASS,
   },
 });
+// #endregion
 
-// ============================================
-// EMAIL TEMPLATES
-// ============================================
+// #region Email Templates
 
 /**
  * Tạo HTML template cho email xác thực
@@ -132,10 +128,9 @@ const createBookingConfirmationTemplate = (bookingDetails) => {
     </div>
   </div>`;
 };
+// #endregion
 
-// ============================================
-// EMAIL SERVICES
-// ============================================
+// #region Email Sending Services
 
 /**
  * Gửi email xác thực
@@ -217,10 +212,13 @@ export const sendEmail = async (to, subject, htmlContent) => {
     throw new Error(`EMAIL_SEND_FAILED: ${error.message}`);
   }
 };
+// #endregion
 
+// #region Default Export
 export default {
   sendVerificationEmail,
   sendPasswordResetEmail,
   sendBookingConfirmationEmail,
   sendEmail,
 };
+// #endregion

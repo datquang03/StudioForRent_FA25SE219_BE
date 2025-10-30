@@ -1,11 +1,11 @@
 import mongoose from "mongoose";
 
 /**
- * CANCELLATION POLICY MODEL
- * Thay thế Policy generic - structured policies
- * Theo PostgreSQL schema: cancellation_policies table
+ * ROOM POLICY MODEL
+ * Chính sách hủy phòng/studio - structured policies
+ * Theo PostgreSQL schema: room_policies table
  */
-const cancellationPolicySchema = new mongoose.Schema(
+const roomPolicySchema = new mongoose.Schema(
   {
     name: {
       type: String,
@@ -38,9 +38,9 @@ const cancellationPolicySchema = new mongoose.Schema(
 );
 
 // Indexes
-cancellationPolicySchema.index({ isActive: 1 });
-cancellationPolicySchema.index({ hoursBeforeBooking: 1 });
+roomPolicySchema.index({ isActive: 1 });
+roomPolicySchema.index({ hoursBeforeBooking: 1 });
 
-const CancellationPolicy = mongoose.model("CancellationPolicy", cancellationPolicySchema);
+const RoomPolicy = mongoose.model("RoomPolicy", roomPolicySchema);
 
-export default CancellationPolicy;
+export default RoomPolicy;

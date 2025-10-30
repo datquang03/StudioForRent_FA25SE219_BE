@@ -1,10 +1,13 @@
+// #region Imports
 import asyncHandler from 'express-async-handler';
 import {
   getCustomerProfile,
   updateCustomerProfile,
   toggleCustomerActive,
 } from '../services/user.service.js';
+// #endregion
 
+// #region Customer Profile Management
 export const getProfile = asyncHandler(async (req, res) => {
   const user = await getCustomerProfile(req.user._id);
 
@@ -42,3 +45,4 @@ export const deleteAccount = asyncHandler(async (req, res) => {
     message: 'Xóa tài khoản thành công!',
   });
 });
+// #endregion
