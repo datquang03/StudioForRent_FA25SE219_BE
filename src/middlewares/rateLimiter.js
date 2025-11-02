@@ -39,7 +39,7 @@ export const authLimiter = rateLimit({
 export const strictLoginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 phút
   max: 10, // Tối đa 10 lần login
-  skipSuccessfulRequests: true, // Chỉ đếm các request thất bại
+  skipSuccessfulRequests: true, // Chỉ đếm request trả về status code không phải 2xx (ví dụ: 401/400 cho login thất bại)
   message: {
     success: false,
     message: "Quá nhiều lần đăng nhập thất bại. Vui lòng thử lại sau 15 phút!",

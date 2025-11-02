@@ -315,7 +315,7 @@ export const changePassword = async (userId, oldPassword, newPassword) => {
   }
 
   // Verify old password
-  const isValidPassword = await bcrypt.compare(oldPassword, user.passwordHash);
+  const isValidPassword = await comparePassword(oldPassword, user.passwordHash);
   if (!isValidPassword) {
     throw new Error('Mật khẩu cũ không đúng!');
   }

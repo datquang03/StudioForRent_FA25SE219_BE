@@ -76,7 +76,7 @@ const promotionSchema = new mongoose.Schema(
 // Validation: usedCount không được vượt quá usageLimit
 promotionSchema.pre('save', function(next) {
   if (this.usageLimit !== null && this.usedCount > this.usageLimit) {
-    next(new Error('usedCount cannot exceed usageLimit'));
+    return next(new Error('usedCount cannot exceed usageLimit'));
   }
   next();
 });

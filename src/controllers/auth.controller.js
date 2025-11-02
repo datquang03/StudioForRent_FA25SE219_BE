@@ -163,7 +163,7 @@ export const createStaffController = asyncHandler(async (req, res) => {
 // Change Password
 export const changePasswordController = asyncHandler(async (req, res) => {
   const { oldPassword, newPassword } = req.body;
-  const userId = req.user.id; // Từ middleware protect
+  const userId = req.user._id; // Từ middleware protect
 
   if (!oldPassword || !newPassword) {
     res.status(400);
