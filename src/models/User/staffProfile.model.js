@@ -22,10 +22,6 @@ const staffProfileSchema = new mongoose.Schema(
     hireDate: {
       type: Date,
     },
-    salary: {
-      type: Number,
-      min: 0,
-    },
     isActive: {
       type: Boolean,
       default: true,
@@ -36,8 +32,7 @@ const staffProfileSchema = new mongoose.Schema(
   }
 );
 
-// Indexes
-staffProfileSchema.index({ userId: 1 });
+// Indexes - userId đã có unique: true, chỉ giữ composite index
 staffProfileSchema.index({ position: 1, isActive: 1 });
 
 const StaffProfile = mongoose.model("StaffProfile", staffProfileSchema);

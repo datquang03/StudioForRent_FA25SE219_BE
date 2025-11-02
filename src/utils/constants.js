@@ -21,6 +21,8 @@ export const AUTH_MESSAGES = {
   TOKEN_INVALID: "Token không hợp lệ!",
   TOKEN_MISSING: "Không có token, từ chối truy cập!",
   ACCOUNT_INACTIVE: "Tài khoản đã bị vô hiệu hóa!",
+  INVALID_REFRESH_TOKEN: "Refresh token không hợp lệ hoặc đã hết hạn!",
+  LOGOUT_SUCCESS: "Đăng xuất thành công!",
 };
 
 // Validation Messages
@@ -158,8 +160,9 @@ export const NOTIFICATION_TYPE = {
 export const TIME_CONSTANTS = {
   VERIFICATION_CODE_EXPIRY: 15 * 60 * 1000, // 15 minutes in milliseconds
   VERIFICATION_CODE_EXPIRY_MINUTES: 15,
-  JWT_EXPIRY: "1d",
-  REFRESH_TOKEN_EXPIRY: "7d",
+  JWT_EXPIRY: "15m", // Access token: 15 minutes
+  REFRESH_TOKEN_EXPIRY: "7d", // Refresh token: 7 days
+  REFRESH_TOKEN_EXPIRY_DAYS: 7,
 };
 
 // #endregion

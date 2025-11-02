@@ -8,6 +8,7 @@
 export { default as User } from './User/user.model.js';
 export { default as CustomerProfile } from './User/customerProfile.model.js';
 export { default as StaffProfile } from './User/staffProfile.model.js';
+export { default as RefreshToken } from './RefreshToken/refreshToken.model.js';
 
 // Studio & Resources
 export { default as Studio } from './Studio/studio.model.js';

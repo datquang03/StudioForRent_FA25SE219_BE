@@ -189,7 +189,7 @@ export const getStaffById = async (userId) => {
 
 export const updateStaffProfile = async (userId, updateData) => {
   const allowedUserFields = ['fullName', 'phone', 'avatar'];
-  const allowedProfileFields = ['position', 'salary'];
+  const allowedProfileFields = ['position']; // Removed salary
 
   const userUpdateData = {};
   allowedUserFields.forEach((field) => {

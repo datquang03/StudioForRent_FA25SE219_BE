@@ -35,8 +35,7 @@ const customerProfileSchema = new mongoose.Schema(
   }
 );
 
-// Indexes
-customerProfileSchema.index({ userId: 1 });
+// Indexes - userId đã có unique: true, không cần khai báo lại
 
 const CustomerProfile = mongoose.model("CustomerProfile", customerProfileSchema);
 

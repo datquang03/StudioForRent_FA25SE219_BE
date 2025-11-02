@@ -36,7 +36,7 @@ const scheduleSchema = new mongoose.Schema(
     bookingId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Booking",
-      unique: true,
+      unique: true, // unique tự động tạo index
       sparse: true, // Cho phép nhiều null values
     },
   },
@@ -48,7 +48,7 @@ const scheduleSchema = new mongoose.Schema(
 // Indexes
 scheduleSchema.index({ studioId: 1, startTime: 1, status: 1 });
 scheduleSchema.index({ studioId: 1, status: 1 }, { partialFilterExpression: { status: SCHEDULE_STATUS.AVAILABLE } });
-scheduleSchema.index({ bookingId: 1 });
+// bookingId đã có unique: true, không cần index riêng
 
 const Schedule = mongoose.model("Schedule", scheduleSchema);
 

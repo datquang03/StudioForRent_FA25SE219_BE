@@ -17,8 +17,7 @@ const paymentSchema = new mongoose.Schema(
     paymentCode: {
       type: String,
       required: true,
-      unique: true,
-      index: true,
+      unique: true, // unique tự động tạo index
     },
     
     amount: {
@@ -66,8 +65,7 @@ const paymentSchema = new mongoose.Schema(
 
 // Indexes
 paymentSchema.index({ bookingId: 1, status: 1 });
-paymentSchema.index({ paymentCode: 1 });
-paymentSchema.index({ transactionId: 1 });
+// paymentCode và transactionId đã có unique: true, không cần index riêng
 paymentSchema.index({ status: 1 });
 
 const Payment = mongoose.model("Payment", paymentSchema);

@@ -89,13 +89,12 @@ export const getStaff = asyncHandler(async (req, res) => {
 });
 
 export const updateStaff = asyncHandler(async (req, res) => {
-  const { fullName, phone, position, salary } = req.body;
+  const { fullName, phone, position } = req.body; // Removed salary
 
   const user = await updateStaffProfile(req.params.id, {
     fullName,
     phone,
     position,
-    salary,
   });
 
   res.status(200).json({

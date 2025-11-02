@@ -82,7 +82,7 @@ promotionSchema.pre('save', function(next) {
 });
 
 // Indexes
-promotionSchema.index({ code: 1 });
+// code đã có unique: true với sparse, không cần index riêng
 promotionSchema.index({ isActive: 1, validFrom: 1, validTo: 1 });
 
 const Promotion = mongoose.model("Promotion", promotionSchema);

@@ -71,10 +71,7 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-// Indexes
-userSchema.index({ username: 1 });
-userSchema.index({ email: 1 });
-userSchema.index({ phone: 1 });
+// Indexes - Chỉ giữ composite index (username, email, phone đã có unique: true)
 userSchema.index({ role: 1, isActive: 1 });
 
 const User = mongoose.model("User", userSchema);

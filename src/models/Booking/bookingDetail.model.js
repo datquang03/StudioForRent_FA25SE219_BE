@@ -15,7 +15,7 @@ const bookingDetailSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Booking",
       required: true,
-      index: true,
+      // Không cần index: true vì đã có composite index bên dưới
     },
     
     // Phân loại: 'equipment' hoặc 'extra_service'
@@ -23,7 +23,7 @@ const bookingDetailSchema = new mongoose.Schema(
       type: String,
       enum: Object.values(BOOKING_DETAIL_TYPE),
       required: true,
-      index: true,
+      // Không cần index: true vì đã có composite index bên dưới
     },
     
     // Foreign Keys (nullable - chỉ 1 trong 2 được set)
