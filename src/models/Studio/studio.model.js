@@ -10,6 +10,15 @@ const studioSchema = new mongoose.Schema(
     description: {
       type: String,
     },
+    area: {
+      type: Number,
+      min: 0,
+      // Diện tích phòng (m²)
+    },
+    location: {
+      type: String,
+      // Vị trí: "Tầng 2, Tòa A" hoặc "Quận 1, TPHCM"
+    },
     basePricePerHour: {
       type: Number,
       required: true,

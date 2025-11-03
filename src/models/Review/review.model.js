@@ -37,7 +37,7 @@ const reviewSchema = new mongoose.Schema(
 );
 
 // Indexes
-reviewSchema.index({ bookingId: 1 });
+// bookingId đã có unique: true, không cần index riêng
 reviewSchema.index({ userId: 1 });
 reviewSchema.index({ rating: 1 });
 

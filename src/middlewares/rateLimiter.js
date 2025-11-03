@@ -1,5 +1,6 @@
 //#region Imports
 import rateLimit from "express-rate-limit";
+import logger from "../utils/logger.js";
 //#endregion
 
 /**
@@ -47,7 +48,7 @@ export const strictLoginLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   handler: (req, res) => {
-    console.warn(`⚠️ Rate limit exceeded for IP: ${req.ip} on login endpoint`);
+    logger.warn(`Rate limit exceeded for IP: ${req.ip} on login endpoint`);
     res.status(429).json({
       success: false,
       message: "Quá nhiều lần đăng nhập thất bại. Tài khoản tạm thời bị khóa 15 phút để bảo mật!",

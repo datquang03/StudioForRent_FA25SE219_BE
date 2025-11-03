@@ -1,5 +1,7 @@
 // #region Imports
 import { User, CustomerProfile, StaffProfile } from '../models/index.js';
+import { USER_MESSAGES } from '../utils/constants.js';
+import { NotFoundError } from '../utils/errors.js';
 // #endregion
 
 // #region Customer Profile Management
@@ -8,7 +10,7 @@ export const getCustomerProfile = async (userId) => {
     .select('-passwordHash -verificationCode -verificationCodeExpiry');
 
   if (!user) {
-    throw new Error('USER_NOT_FOUND');
+    throw new NotFoundError(USER_MESSAGES.USER_NOT_FOUND);
   }
 
   const customerProfile = await CustomerProfile.findOne({ userId });
@@ -44,7 +46,7 @@ export const updateCustomerProfile = async (userId, updateData) => {
   ).select('-passwordHash -verificationCode -verificationCodeExpiry');
 
   if (!user) {
-    throw new Error('USER_NOT_FOUND');
+    throw new NotFoundError(USER_MESSAGES.USER_NOT_FOUND);
   }
 
   if (Object.keys(profileUpdateData).length > 0) {
@@ -100,7 +102,7 @@ export const getCustomerById = async (userId) => {
     .select('-passwordHash -verificationCode -verificationCodeExpiry');
 
   if (!user || user.role !== 'customer') {
-    throw new Error('USER_NOT_FOUND');
+    throw new NotFoundError(USER_MESSAGES.USER_NOT_FOUND);
   }
 
   const customerProfile = await CustomerProfile.findOne({ userId });
@@ -119,7 +121,7 @@ export const toggleCustomerActive = async (userId, isActive) => {
   ).select('-passwordHash -verificationCode -verificationCodeExpiry');
 
   if (!user || user.role !== 'customer') {
-    throw new Error('USER_NOT_FOUND');
+    throw new NotFoundError(USER_MESSAGES.USER_NOT_FOUND);
   }
 
   return user;
@@ -176,7 +178,7 @@ export const getStaffById = async (userId) => {
     .select('-passwordHash -verificationCode -verificationCodeExpiry');
 
   if (!user || !['staff', 'admin'].includes(user.role)) {
-    throw new Error('USER_NOT_FOUND');
+    throw new NotFoundError(USER_MESSAGES.USER_NOT_FOUND);
   }
 
   const staffProfile = await StaffProfile.findOne({ userId });
@@ -212,7 +214,7 @@ export const updateStaffProfile = async (userId, updateData) => {
   ).select('-passwordHash -verificationCode -verificationCodeExpiry');
 
   if (!user) {
-    throw new Error('USER_NOT_FOUND');
+    throw new NotFoundError(USER_MESSAGES.USER_NOT_FOUND);
   }
 
   if (Object.keys(profileUpdateData).length > 0) {
@@ -234,7 +236,7 @@ export const toggleStaffActive = async (userId, isActive) => {
   ).select('-passwordHash -verificationCode -verificationCodeExpiry');
 
   if (!user || !['staff', 'admin'].includes(user.role)) {
-    throw new Error('USER_NOT_FOUND');
+    throw new NotFoundError(USER_MESSAGES.USER_NOT_FOUND);
   }
 
   await StaffProfile.findOneAndUpdate(

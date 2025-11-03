@@ -5,6 +5,8 @@ import crypto from 'crypto';
 import { User, CustomerProfile, StaffProfile, RefreshToken } from '../models/index.js';
 import { sendVerificationEmail } from './email.service.js';
 import { AUTH_MESSAGES, USER_ROLES, TIME_CONSTANTS } from '../utils/constants.js';
+import { generateVerificationCode } from '../utils/helpers.js';
+import { NotFoundError, ValidationError, UnauthorizedError } from '../utils/errors.js';
 // #endregion
 
 // #region Helper Functions
@@ -87,10 +89,6 @@ export const revokeRefreshToken = async (token, ipAddress) => {
 
   refreshToken.revoke(ipAddress);
   await refreshToken.save();
-};
-
-const generateVerificationCode = () => {
-  return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
 const hashPassword = async (password) => {
@@ -296,6 +294,21 @@ export const createStaffAccount = async (data) => {
     isActive: true,
   });
 
+  // Gửi email thông tin tài khoản cho staff (non-blocking)
+  try {
+    const { sendStaffCredentialsEmail } = await import('./email.service.js');
+    await sendStaffCredentialsEmail(email, {
+      username,
+      password: autoPassword,
+      fullName,
+      role,
+    });
+  } catch (emailError) {
+    // Log error nhưng không fail toàn bộ request
+    const logger = (await import('../utils/logger.js')).default;
+    logger.error('Failed to send staff credentials email', emailError);
+  }
+
   const userObject = user.toObject();
   delete userObject.passwordHash;
 
@@ -311,13 +324,13 @@ export const changePassword = async (userId, oldPassword, newPassword) => {
   const user = await User.findById(userId);
   
   if (!user) {
-    throw new Error('Người dùng không tồn tại!');
+    throw new NotFoundError('Người dùng không tồn tại!');
   }
 
   // Verify old password
   const isValidPassword = await comparePassword(oldPassword, user.passwordHash);
   if (!isValidPassword) {
-    throw new Error('Mật khẩu cũ không đúng!');
+    throw new UnauthorizedError('Mật khẩu cũ không đúng!');
   }
 
   // Hash new password
