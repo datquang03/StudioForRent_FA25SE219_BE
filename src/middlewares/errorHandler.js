@@ -14,10 +14,9 @@ import { NotFoundError, ValidationError, UnauthorizedError, ForbiddenError, Conf
  */
 export const errorHandler = (err, req, res, next) => {
   // Log error chi tiết để dev debug (chỉ dev thấy, user không thấy)
-  logger.error(`[${req.method}] ${req.path} - Error:`, {
-    message: err.message,
+  // logger.error signature: error(message, error = null, meta = {})
+  logger.error(`[${req.method}] ${req.path} - Error:`, err, {
     statusCode: err.statusCode || 500,
-    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
   });
 
   // Xác định status code dựa trên loại error

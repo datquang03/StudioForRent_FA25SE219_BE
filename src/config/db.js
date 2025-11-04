@@ -44,7 +44,9 @@ mongoose.connection.on("error", (err) => {
 
 mongoose.connection.on("disconnected", () => {
   logger.warn("Mongoose disconnected. Trying to reconnect...");
-});  connectWithRetry();
+});
+
+  connectWithRetry();
 };
 
 export default connectDB;

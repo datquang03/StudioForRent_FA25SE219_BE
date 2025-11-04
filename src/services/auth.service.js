@@ -3,10 +3,11 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { User, CustomerProfile, StaffProfile, RefreshToken } from '../models/index.js';
-import { sendVerificationEmail } from './email.service.js';
+import { sendVerificationEmail, sendStaffCredentialsEmail } from './email.service.js';
 import { AUTH_MESSAGES, USER_ROLES, TIME_CONSTANTS } from '../utils/constants.js';
 import { generateVerificationCode } from '../utils/helpers.js';
-import { NotFoundError, ValidationError, UnauthorizedError } from '../utils/errors.js';
+import { NotFoundError, UnauthorizedError } from '../utils/errors.js';
+import logger from '../utils/logger.js';
 // #endregion
 
 // #region Helper Functions
@@ -296,7 +297,6 @@ export const createStaffAccount = async (data) => {
 
   // Gửi email thông tin tài khoản cho staff (non-blocking)
   try {
-    const { sendStaffCredentialsEmail } = await import('./email.service.js');
     await sendStaffCredentialsEmail(email, {
       username,
       password: autoPassword,
@@ -305,7 +305,6 @@ export const createStaffAccount = async (data) => {
     });
   } catch (emailError) {
     // Log error nhưng không fail toàn bộ request
-    const logger = (await import('../utils/logger.js')).default;
     logger.error('Failed to send staff credentials email', emailError);
   }
 
