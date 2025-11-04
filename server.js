@@ -6,6 +6,9 @@ import { connectDB } from "./src/config/db.js";
 import authRoutes from "./src/routes/auth.route.js";
 import customerRoutes from "./src/routes/customer.route.js";
 import adminRoutes from "./src/routes/admin.route.js";
+import studioRoutes from "./src/routes/studio.route.js";
+import logger from "./src/utils/logger.js";
+import { errorHandler, notFoundHandler } from "./src/middlewares/errorHandler.js";
 
 dotenv.config();
 
@@ -21,22 +24,18 @@ connectDB();
 app.use("/api/auth", authRoutes);
 app.use("/api/customers", customerRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/studios", studioRoutes);
 
 app.get("/", (req, res) => {
   res.send("🚀 API is running...");
 });
 
-app.use((err, req, res, next) => {
-  console.error("❌ Error:", err.message);
-  
-  const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
-  res.status(statusCode).json({
-    success: false,
-    message: err.message,
-    stack: process.env.NODE_ENV === 'production' ? null : err.stack,
-  });
-});
+// 404 handler - must be after all routes
+app.use(notFoundHandler);
+
+// Global error handler - must be last
+app.use(errorHandler);
 
 app.listen(PORT, () => {
-  console.log(`✅ Server is running on http://localhost:${PORT}`);
+  logger.success(`Server is running on http://localhost:${PORT}`);
 });

@@ -11,7 +11,7 @@ import {
   changePasswordController,
 } from '../controllers/auth.controller.js';
 import { protect, authorize } from '../middlewares/auth.js';
-import { authLimiter, strictLoginLimiter, verificationLimiter } from '../middlewares/rateLimiter.js';
+import { authLimiter, strictLoginLimiter, verificationLimiter, passwordResetLimiter } from '../middlewares/rateLimiter.js';
 import { 
   validateRegistration,
   validateStaffRegistration,
@@ -19,7 +19,7 @@ import {
   validateEmailVerification,
   validateRefreshToken,
   sanitizeInput 
-} from '../middlewares/validation.js';
+} from '../middlewares/validate.js';
 import { USER_ROLES } from '../utils/constants.js';
 
 const router = express.Router();
@@ -37,7 +37,7 @@ router.post('/logout', validateRefreshToken, logoutController);
 
 // Protected routes
 router.get('/me', protect, getMeController);
-router.post('/change-password', protect, changePasswordController);
+router.post('/change-password', protect, passwordResetLimiter, changePasswordController);
 router.post('/register/staff', protect, authorize(USER_ROLES.ADMIN), validateStaffRegistration, createStaffController);
 
 export default router;

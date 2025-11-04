@@ -49,6 +49,13 @@ export const RATE_LIMIT_MESSAGES = {
   GENERAL_LIMIT: "Quá nhiều yêu cầu. Vui lòng thử lại sau!",
 };
 
+// User Management Messages
+export const USER_MESSAGES = {
+  USER_NOT_FOUND: "Người dùng không tồn tại!",
+  UPDATE_SUCCESS: "Cập nhật thông tin thành công!",
+  DELETE_SUCCESS: "Xóa tài khoản thành công!",
+};
+
 // #endregion
 
 // #region Enums

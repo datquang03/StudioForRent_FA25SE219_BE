@@ -11,6 +11,7 @@ import {
   changePassword,
 } from '../services/auth.service.js';
 import { AUTH_MESSAGES, VALIDATION_MESSAGES } from '../utils/constants.js';
+import { ValidationError } from '../utils/errors.js';
 // #endregion
 
 // #region Customer Registration & Verification
@@ -89,7 +90,7 @@ export const refreshTokenController = asyncHandler(async (req, res) => {
 
   if (!refreshToken) {
     res.status(400);
-    throw new Error('Refresh token is required!');
+    throw new ValidationError('Refresh token is required!');
   }
 
   const ipAddress = req.ip || req.connection.remoteAddress;
@@ -107,7 +108,7 @@ export const logoutController = asyncHandler(async (req, res) => {
 
   if (!refreshToken) {
     res.status(400);
-    throw new Error('Refresh token is required!');
+    throw new ValidationError('Refresh token is required!');
   }
 
   const ipAddress = req.ip || req.connection.remoteAddress;
@@ -163,17 +164,17 @@ export const createStaffController = asyncHandler(async (req, res) => {
 // Change Password
 export const changePasswordController = asyncHandler(async (req, res) => {
   const { oldPassword, newPassword } = req.body;
-  const userId = req.user.id; // Từ middleware protect
+  const userId = req.user._id; // Từ middleware protect
 
   if (!oldPassword || !newPassword) {
     res.status(400);
-    throw new Error('Vui lòng nhập đầy đủ mật khẩu cũ và mật khẩu mới!');
+    throw new ValidationError('Vui lòng nhập đầy đủ mật khẩu cũ và mật khẩu mới!');
   }
 
   // Validate new password
   if (newPassword.length < 8) {
     res.status(400);
-    throw new Error('Mật khẩu mới phải có ít nhất 8 ký tự!');
+    throw new ValidationError('Mật khẩu mới phải có ít nhất 8 ký tự!');
   }
 
   const result = await changePassword(userId, oldPassword, newPassword);

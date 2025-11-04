@@ -1,6 +1,7 @@
 // #region Imports & Configuration
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
+import logger from "../utils/logger.js";
 
 dotenv.config();
 
@@ -128,6 +129,54 @@ const createBookingConfirmationTemplate = (bookingDetails) => {
     </div>
   </div>`;
 };
+
+/**
+ * Tạo HTML template cho email thông tin tài khoản staff
+ * @param {Object} staffInfo - Thông tin staff (username, password, role)
+ * @returns {string} - HTML template
+ */
+const createStaffCredentialsTemplate = (staffInfo) => {
+  const { username, password, fullName, role } = staffInfo;
+  return `
+  <div style="font-family: Arial, sans-serif; background: #f4f6f8; padding: 30px;">
+    <div style="max-width: 500px; margin: auto; background: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+      <div style="background: linear-gradient(135deg,#6a11cb 0%,#2575fc 100%); padding: 20px; text-align: center; color: white;">
+        <h1 style="margin: 0; font-size: 22px; font-weight: bold; color: white;">🎉 Chào mừng đến Studio Management!</h1>
+      </div>
+      <div style="padding: 30px; color: #333;">
+        <h2 style="margin-bottom: 10px; text-align: center;">Xin chào ${fullName}!</h2>
+        <p style="margin-bottom: 20px; text-align: center;">Tài khoản ${role === 'admin' ? 'quản trị viên' : 'nhân viên'} của bạn đã được tạo thành công.</p>
+        
+        <div style="background: #f9fafb; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #2575fc;">
+          <h3 style="margin-top: 0; color: #2575fc;">🔐 Thông tin đăng nhập:</h3>
+          <p style="margin: 10px 0;"><strong>Tên đăng nhập:</strong> <code style="background: #fff; padding: 4px 8px; border-radius: 4px; color: #e91e63;">${username}</code></p>
+          <p style="margin: 10px 0;"><strong>Mật khẩu tạm:</strong> <code style="background: #fff; padding: 4px 8px; border-radius: 4px; color: #e91e63;">${password}</code></p>
+          <p style="margin: 10px 0;"><strong>Vai trò:</strong> <span style="background: #4caf50; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">${role.toUpperCase()}</span></p>
+        </div>
+
+        <div style="background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107; margin: 20px 0;">
+          <p style="margin: 0; color: #856404; font-size: 14px;">
+            ⚠️ <strong>Lưu ý quan trọng:</strong> Vui lòng đổi mật khẩu ngay sau lần đăng nhập đầu tiên để bảo mật tài khoản.
+          </p>
+        </div>
+
+        <div style="text-align: center; margin-top: 30px;">
+          <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/login" 
+             style="display: inline-block; padding: 12px 30px; background: #2575fc; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">
+            Đăng nhập ngay
+          </a>
+        </div>
+
+        <p style="font-size: 14px; color: #777; margin-top: 20px; text-align: center;">
+          Nếu bạn có thắc mắc, vui lòng liên hệ quản trị viên.
+        </p>
+      </div>
+      <div style="background: #f9fafb; padding: 15px; text-align: center; font-size: 12px; color: #aaa;">
+        &copy; ${new Date().getFullYear()} StudioManagement. All rights reserved.
+      </div>
+    </div>
+  </div>`;
+};
 // #endregion
 
 // #region Email Sending Services
@@ -145,9 +194,9 @@ export const sendVerificationEmail = async (to, code) => {
       subject: "Xác thực email - STUDIO MANAGEMENT",
       html: createVerificationEmailTemplate(code),
     });
-    console.log(`Verification email sent to ${to}`);
+    logger.success(`Verification email sent to ${to}`);
   } catch (error) {
-    console.error(`Failed to send verification email to ${to}:`, error.message);
+    logger.error(`Failed to send verification email to ${to}`, error);
     throw new Error(`EMAIL_SEND_FAILED: ${error.message}`);
   }
 };
@@ -165,9 +214,9 @@ export const sendPasswordResetEmail = async (to, resetLink) => {
       subject: "Đặt lại mật khẩu - STUDIO MANAGEMENT",
       html: createPasswordResetTemplate(resetLink),
     });
-    console.log(`✅ Password reset email sent to ${to}`);
+    logger.success(`Password reset email sent to ${to}`);
   } catch (error) {
-    console.error(`❌ Failed to send password reset email to ${to}:`, error.message);
+    logger.error(`Failed to send password reset email to ${to}`, error);
     throw new Error(`EMAIL_SEND_FAILED: ${error.message}`);
   }
 };
@@ -185,9 +234,29 @@ export const sendBookingConfirmationEmail = async (to, bookingDetails) => {
       subject: "Xác nhận đặt phòng - STUDIO MANAGEMENT",
       html: createBookingConfirmationTemplate(bookingDetails),
     });
-    console.log(`✅ Booking confirmation email sent to ${to}`);
+    logger.success(`Booking confirmation email sent to ${to}`);
   } catch (error) {
-    console.error(`❌ Failed to send booking confirmation email to ${to}:`, error.message);
+    logger.error(`Failed to send booking confirmation email to ${to}`, error);
+    throw new Error(`EMAIL_SEND_FAILED: ${error.message}`);
+  }
+};
+
+/**
+ * Gửi email thông tin tài khoản cho staff/admin mới
+ * @param {string} to - Email người nhận
+ * @param {Object} staffInfo - Thông tin đăng nhập (username, password, fullName, role)
+ */
+export const sendStaffCredentialsEmail = async (to, staffInfo) => {
+  try {
+    await transporter.sendMail({
+      from: `"Studio Management" <${EMAIL_CONFIG.USER}>`,
+      to,
+      subject: "🎉 Tài khoản nhân viên - STUDIO MANAGEMENT",
+      html: createStaffCredentialsTemplate(staffInfo),
+    });
+    logger.success(`Staff credentials email sent to ${to}`);
+  } catch (error) {
+    logger.error(`Failed to send staff credentials email to ${to}`, error);
     throw new Error(`EMAIL_SEND_FAILED: ${error.message}`);
   }
 };
@@ -206,9 +275,9 @@ export const sendEmail = async (to, subject, htmlContent) => {
       subject,
       html: htmlContent,
     });
-    console.log(`✅ Email sent to ${to}`);
+    logger.success(`Email sent to ${to}`);
   } catch (error) {
-    console.error(`❌ Failed to send email to ${to}:`, error.message);
+    logger.error(`Failed to send email to ${to}`, error);
     throw new Error(`EMAIL_SEND_FAILED: ${error.message}`);
   }
 };
@@ -219,6 +288,7 @@ export default {
   sendVerificationEmail,
   sendPasswordResetEmail,
   sendBookingConfirmationEmail,
+  sendStaffCredentialsEmail,
   sendEmail,
 };
 // #endregion

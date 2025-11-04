@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
+import logger from "../utils/logger.js";
 
-const MAX_RETRIES = 5;
+const MAX_RETRIES = 3;
 const RETRY_INTERVAL = 3000; // 3s
 
 export const connectDB = async () => {
@@ -11,39 +12,39 @@ export const connectDB = async () => {
       await mongoose.connect(process.env.MONGODB_URI, {
         autoIndex: true, // Tự động build index
         maxPoolSize: 10, // Connection pool
-        serverSelectionTimeoutMS: 5000, // Timeout khi không connect được server
-        socketTimeoutMS: 45000, // Timeout socket
+        serverSelectionTimeoutMS: 5000,
+        socketTimeoutMS: 45000,
       });
 
-      console.log("✅ Database connected successfully");
+      logger.success("Database connected successfully");
     } catch (error) {
       retries += 1;
-      console.error(
-        `❌ Database connection failed (attempt ${retries}/${MAX_RETRIES}):`,
-        error.message
+      logger.error(
+        `Database connection failed (attempt ${retries}/${MAX_RETRIES})`,
+        error
       );
 
       if (retries < MAX_RETRIES) {
-        console.log(`🔄 Retrying in ${RETRY_INTERVAL / 1000}s...`);
+        logger.info(`Retrying in ${RETRY_INTERVAL / 1000}s...`);
         setTimeout(connectWithRetry, RETRY_INTERVAL);
       } else {
-        console.error("🚨 Max retries reached. Exiting process.");
+        logger.error("Max retries reached. Exiting process.");
         process.exit(1);
       }
     }
-  };
+};
 
-  mongoose.connection.on("connected", () => {
-    console.log("📡 Mongoose is connected to MongoDB");
-  });
+mongoose.connection.on("connected", () => {
+  logger.info("Mongoose is connected to MongoDB");
+});
 
-  mongoose.connection.on("error", (err) => {
-    console.error("⚠️ Mongoose connection error:", err.message);
-  });
+mongoose.connection.on("error", (err) => {
+  logger.error("Mongoose connection error", err);
+});
 
-  mongoose.connection.on("disconnected", () => {
-    console.warn("⚡ Mongoose disconnected. Trying to reconnect...");
-  });
+mongoose.connection.on("disconnected", () => {
+  logger.warn("Mongoose disconnected. Trying to reconnect...");
+});
 
   connectWithRetry();
 };

@@ -63,7 +63,7 @@ const bookingSchema = new mongoose.Schema(
 // Indexes
 bookingSchema.index({ userId: 1, status: 1 });
 bookingSchema.index({ status: 1 });
-bookingSchema.index({ scheduleId: 1 });
+// scheduleId đã có unique: true, không cần index riêng
 
 const Booking = mongoose.model("Booking", bookingSchema);
 
