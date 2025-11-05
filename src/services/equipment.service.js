@@ -6,6 +6,13 @@ import { EQUIPMENT_STATUS } from '../utils/constants.js';
 
 // #region Helper Functions
 /**
+ * Escape special regex characters to prevent regex injection
+ */
+const escapeRegex = (string) => {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};
+
+/**
  * Calculate equipment status based on quantities
  * Business logic: Status được xác định dựa trên số lượng các loại equipment
  */
@@ -118,8 +125,9 @@ export const createEquipment = async (equipmentData) => {
     throw new ValidationError('Số lượng phải >= 0!');
   }
 
-  // Check duplicate name
-  const existingEquipment = await Equipment.findOne({ name: { $regex: `^${name}$`, $options: 'i' } });
+  // Check duplicate name (escape regex để tránh injection)
+  const escapedName = escapeRegex(name);
+  const existingEquipment = await Equipment.findOne({ name: { $regex: `^${escapedName}$`, $options: 'i' } });
   if (existingEquipment) {
     throw new ValidationError('Tên equipment đã tồn tại!');
   }
@@ -158,10 +166,11 @@ export const updateEquipment = async (equipmentId, updateData) => {
 
   const { name, description, pricePerHour, totalQty, image } = updateData;
 
-  // Validate if updating name - check duplicate
+  // Validate if updating name - check duplicate (escape regex để tránh injection)
   if (name && name !== equipment.name) {
+    const escapedName = escapeRegex(name);
     const existingEquipment = await Equipment.findOne({
-      name: { $regex: `^${name}$`, $options: 'i' },
+      name: { $regex: `^${escapedName}$`, $options: 'i' },
       _id: { $ne: equipmentId },
     });
     if (existingEquipment) {
@@ -211,7 +220,8 @@ export const updateEquipment = async (equipmentId, updateData) => {
 
 // #region Delete Equipment
 /**
- * Xóa equipment (soft delete bằng cách set status = maintenance hoặc hard delete nếu chưa dùng)
+ * Xóa equipment: chỉ hard delete nếu chưa được sử dụng (inUseQty = 0).
+ * Nếu equipment đang được sử dụng, không thể xóa.
  */
 export const deleteEquipment = async (equipmentId) => {
   const equipment = await Equipment.findById(equipmentId);

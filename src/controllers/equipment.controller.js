@@ -123,7 +123,6 @@ export const deleteEquipmentController = asyncHandler(async (req, res) => {
   res.status(200).json({
     success: true,
     message: result.message,
-    data: result.equipment,
   });
 });
 // #endregion
