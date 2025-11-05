@@ -44,11 +44,12 @@ export const getAllEquipment = async ({ page = 1, limit = 10, status, search, so
     query.status = status;
   }
 
-  // Search by name or description
+  // Search by name or description (escape regex để tránh injection)
   if (search) {
+    const escapedSearch = escapeRegex(search);
     query.$or = [
-      { name: { $regex: search, $options: 'i' } },
-      { description: { $regex: search, $options: 'i' } },
+      { name: { $regex: escapedSearch, $options: 'i' } },
+      { description: { $regex: escapedSearch, $options: 'i' } },
     ];
   }
 
@@ -336,10 +337,7 @@ export const setMaintenanceQuantity = async (equipmentId, newMaintenanceQty) => 
     throw new NotFoundError('Equipment không tồn tại!');
   }
 
-  // Validate số lượng
-  if (newMaintenanceQty < 0 || !Number.isInteger(newMaintenanceQty)) {
-    throw new ValidationError('Số lượng maintenance phải là số nguyên >= 0!');
-  }
+  // Note: Validation đã được thực hiện ở middleware validateMaintenanceQuantity
 
   // Calculate số lượng cần điều chỉnh
   const currentMaintenance = equipment.maintenanceQty;

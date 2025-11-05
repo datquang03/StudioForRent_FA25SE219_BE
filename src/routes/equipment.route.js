@@ -15,26 +15,33 @@ import { generalLimiter } from '../middlewares/rateLimiter.js';
 
 const router = express.Router();
 
-// Apply sanitization and rate limiting to all routes
+// Global middlewares
 router.use(sanitizeInput);
 router.use(generalLimiter);
 
-// Public routes - Customer có thể xem equipment available khi booking
-// IMPORTANT: Specific routes (/available) MUST come BEFORE dynamic routes (/:id)
+// ==================== PUBLIC ROUTES ====================
 router.get('/available', getAvailableEquipmentList);
 
-// Protected routes - Chỉ staff và admin
+// ==================== PROTECTED ROUTES ====================
 router.use(protect);
 router.use(authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN));
 
-// CRUD operations
-router.get('/', getEquipmentList);
-router.get('/:id', validateObjectId(), getEquipmentDetail);
-router.post('/', validateEquipmentCreation, createEquipmentController);
-router.patch('/:id', validateObjectId(), validateEquipmentUpdate, updateEquipmentController);
-router.delete('/:id', validateObjectId(), deleteEquipmentController);
+// Collection routes
+router.route('/')
+  .get(getEquipmentList)
+  .post(validateEquipmentCreation, createEquipmentController);
 
-// Quantity management (specific route before /:id)
-router.patch('/:id/set-maintenance-quantity', validateObjectId(), validateMaintenanceQuantity, setMaintenanceQuantityController);
+// Specific actions (must be before /:id)
+router.patch('/:id/set-maintenance-quantity', 
+  validateObjectId(), 
+  validateMaintenanceQuantity, 
+  setMaintenanceQuantityController
+);
+
+// Resource routes
+router.route('/:id')
+  .get(validateObjectId(), getEquipmentDetail)
+  .patch(validateObjectId(), validateEquipmentUpdate, updateEquipmentController)
+  .delete(validateObjectId(), deleteEquipmentController);
 
 export default router;
