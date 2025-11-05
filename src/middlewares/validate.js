@@ -307,6 +307,95 @@ export const validateStudioUpdate = (req, res, next) => {
 };
 //#endregion
 
+//#region Equipment Validators
+/**
+ * Validate dữ liệu tạo equipment mới
+ */
+export const validateEquipmentCreation = (req, res, next) => {
+  const { name, pricePerHour, totalQty } = req.body;
+
+  if (!isNotEmpty(name)) {
+    return res.status(400).json(
+      createResponse(false, 'Tên equipment không được để trống!')
+    );
+  }
+
+  if (pricePerHour === undefined || pricePerHour === null) {
+    return res.status(400).json(
+      createResponse(false, 'Giá thuê theo giờ không được để trống!')
+    );
+  }
+
+  if (typeof pricePerHour !== 'number' || pricePerHour < 0) {
+    return res.status(400).json(
+      createResponse(false, 'Giá thuê phải là số >= 0!')
+    );
+  }
+
+  if (totalQty === undefined || totalQty === null) {
+    return res.status(400).json(
+      createResponse(false, 'Số lượng không được để trống!')
+    );
+  }
+
+  if (typeof totalQty !== 'number' || totalQty < 0 || !Number.isInteger(totalQty)) {
+    return res.status(400).json(
+      createResponse(false, 'Số lượng phải là số nguyên >= 0!')
+    );
+  }
+
+  next();
+};
+
+/**
+ * Validate dữ liệu cập nhật equipment
+ */
+export const validateEquipmentUpdate = (req, res, next) => {
+  const { name, pricePerHour, totalQty } = req.body;
+
+  if (name !== undefined && !isNotEmpty(name)) {
+    return res.status(400).json(
+      createResponse(false, 'Tên equipment không được để trống!')
+    );
+  }
+
+  if (pricePerHour !== undefined && (typeof pricePerHour !== 'number' || pricePerHour < 0)) {
+    return res.status(400).json(
+      createResponse(false, 'Giá thuê phải là số >= 0!')
+    );
+  }
+
+  if (totalQty !== undefined && (typeof totalQty !== 'number' || totalQty < 0 || !Number.isInteger(totalQty))) {
+    return res.status(400).json(
+      createResponse(false, 'Số lượng phải là số nguyên >= 0!')
+    );
+  }
+
+  next();
+};
+
+/**
+ * Validate số lượng equipment đang bảo trì
+ */
+export const validateMaintenanceQuantity = (req, res, next) => {
+  const { quantity } = req.body;
+
+  if (quantity === undefined || quantity === null) {
+    return res.status(400).json(
+      createResponse(false, 'Vui lòng nhập số lượng maintenance!')
+    );
+  }
+
+  if (typeof quantity !== 'number' || quantity < 0 || !Number.isInteger(quantity)) {
+    return res.status(400).json(
+      createResponse(false, 'Số lượng maintenance phải là số nguyên >= 0!')
+    );
+  }
+
+  next();
+};
+//#endregion
+
 //#region Sanitization
 /**
  * Sanitize input để ngăn chặn XSS và NoSQL injection

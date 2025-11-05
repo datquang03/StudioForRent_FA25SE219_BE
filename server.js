@@ -7,6 +7,7 @@ import authRoutes from "./src/routes/auth.route.js";
 import customerRoutes from "./src/routes/customer.route.js";
 import adminRoutes from "./src/routes/admin.route.js";
 import studioRoutes from "./src/routes/studio.route.js";
+import equipmentRoutes from "./src/routes/equipment.route.js";
 import logger from "./src/utils/logger.js";
 import { errorHandler, notFoundHandler } from "./src/middlewares/errorHandler.js";
 
@@ -14,6 +15,8 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+app.set('trust proxy', 1);
 
 app.use(cors());
 app.use(bodyParser.json());
@@ -25,6 +28,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/customers", customerRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/studios", studioRoutes);
+app.use("/api/equipment", equipmentRoutes);
 
 app.get("/", (req, res) => {
   res.send("🚀 API is running...");
