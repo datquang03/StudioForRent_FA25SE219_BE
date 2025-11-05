@@ -2,16 +2,10 @@
 import Equipment from '../models/Equipment/equipment.model.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
 import { EQUIPMENT_STATUS } from '../utils/constants.js';
+import { escapeRegex } from '../utils/helpers.js';
 // #endregion
 
 // #region Helper Functions
-/**
- * Escape special regex characters to prevent regex injection
- */
-const escapeRegex = (string) => {
-  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-};
-
 /**
  * Calculate equipment status based on quantities
  * Business logic: Status được xác định dựa trên số lượng các loại equipment
@@ -37,7 +31,14 @@ const calculateEquipmentStatus = (equipment) => {
  * Lấy danh sách equipment với pagination, filtering và sorting
  */
 export const getAllEquipment = async ({ page = 1, limit = 10, status, search, sortBy = 'createdAt', sortOrder = 'desc' }) => {
-  const query = {};
+  // Validate and sanitize pagination
+  const safePage = Math.max(parseInt(page) || 1, 1);
+  const safeLimit = Math.min(Math.max(parseInt(limit) || 10, 1), 100);
+  
+  // Validate and sanitize search (prevent ReDoS)
+  const safeSearch = search && search.length > 100 ? search.substring(0, 100) : search;
+  
+  const query = { isDeleted: false }; // Exclude deleted equipment
 
   // Filter by status
   if (status && Object.values(EQUIPMENT_STATUS).includes(status)) {
@@ -45,15 +46,15 @@ export const getAllEquipment = async ({ page = 1, limit = 10, status, search, so
   }
 
   // Search by name or description (escape regex để tránh injection)
-  if (search) {
-    const escapedSearch = escapeRegex(search);
+  if (safeSearch) {
+    const escapedSearch = escapeRegex(safeSearch);
     query.$or = [
       { name: { $regex: escapedSearch, $options: 'i' } },
       { description: { $regex: escapedSearch, $options: 'i' } },
     ];
   }
 
-  const skip = (page - 1) * limit;
+  const skip = (safePage - 1) * safeLimit;
   const sort = {};
   sort[sortBy] = sortOrder === 'asc' ? 1 : -1;
 
@@ -61,7 +62,7 @@ export const getAllEquipment = async ({ page = 1, limit = 10, status, search, so
     Equipment.find(query)
       .sort(sort)
       .skip(skip)
-      .limit(limit)
+      .limit(safeLimit)
       .select('-__v'),
     Equipment.countDocuments(query),
   ]);
@@ -70,9 +71,9 @@ export const getAllEquipment = async ({ page = 1, limit = 10, status, search, so
     equipment,
     pagination: {
       total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
+      page: safePage,
+      limit: safeLimit,
+      totalPages: Math.ceil(total / safeLimit),
     },
   };
 };
@@ -81,7 +82,10 @@ export const getAllEquipment = async ({ page = 1, limit = 10, status, search, so
  * Lấy equipment theo ID
  */
 export const getEquipmentById = async (equipmentId) => {
-  const equipment = await Equipment.findById(equipmentId).select('-__v');
+  const equipment = await Equipment.findOne({ 
+    _id: equipmentId, 
+    isDeleted: false 
+  }).select('-__v');
 
   if (!equipment) {
     throw new NotFoundError('Equipment không tồn tại!');
@@ -95,6 +99,7 @@ export const getEquipmentById = async (equipmentId) => {
  */
 export const getAvailableEquipment = async () => {
   const equipment = await Equipment.find({
+    isDeleted: false,
     status: EQUIPMENT_STATUS.AVAILABLE,
     availableQty: { $gt: 0 },
   })
@@ -126,31 +131,32 @@ export const createEquipment = async (equipmentData) => {
     throw new ValidationError('Số lượng phải >= 0!');
   }
 
-  // Check duplicate name (escape regex để tránh injection)
-  const escapedName = escapeRegex(name);
-  const existingEquipment = await Equipment.findOne({ name: { $regex: `^${escapedName}$`, $options: 'i' } });
-  if (existingEquipment) {
-    throw new ValidationError('Tên equipment đã tồn tại!');
+  try {
+    // Create equipment với availableQty = totalQty, inUseQty = 0, maintenanceQty = 0
+    const equipment = new Equipment({
+      name,
+      description,
+      pricePerHour,
+      totalQty,
+      availableQty: totalQty,   // Mặc định available = total
+      inUseQty: 0,              // Chưa ai dùng
+      maintenanceQty: 0,        // Không có maintenance
+      image,
+    });
+
+    // Calculate và set status dựa trên quantities (Service layer logic)
+    equipment.status = calculateEquipmentStatus(equipment);
+
+    await equipment.save();
+
+    return equipment;
+  } catch (error) {
+    // Handle MongoDB duplicate key error (E11000)
+    if (error.code === 11000) {
+      throw new ValidationError('Tên equipment đã tồn tại!');
+    }
+    throw error;
   }
-
-  // Create equipment với availableQty = totalQty, inUseQty = 0, maintenanceQty = 0
-  const equipment = new Equipment({
-    name,
-    description,
-    pricePerHour,
-    totalQty,
-    availableQty: totalQty,   // Mặc định available = total
-    inUseQty: 0,              // Chưa ai dùng
-    maintenanceQty: 0,        // Không có maintenance
-    image,
-  });
-
-  // Calculate và set status dựa trên quantities (Service layer logic)
-  equipment.status = calculateEquipmentStatus(equipment);
-
-  await equipment.save();
-
-  return equipment;
 };
 // #endregion
 
@@ -166,18 +172,6 @@ export const updateEquipment = async (equipmentId, updateData) => {
   }
 
   const { name, description, pricePerHour, totalQty, image } = updateData;
-
-  // Validate if updating name - check duplicate (escape regex để tránh injection)
-  if (name && name !== equipment.name) {
-    const escapedName = escapeRegex(name);
-    const existingEquipment = await Equipment.findOne({
-      name: { $regex: `^${escapedName}$`, $options: 'i' },
-      _id: { $ne: equipmentId },
-    });
-    if (existingEquipment) {
-      throw new ValidationError('Tên equipment đã tồn tại!');
-    }
-  }
 
   // Validate numbers
   if (pricePerHour !== undefined && pricePerHour < 0) {
@@ -204,25 +198,33 @@ export const updateEquipment = async (equipmentId, updateData) => {
     equipment.availableQty = totalQty - equipment.inUseQty - equipment.maintenanceQty;
   }
 
-  // Update other fields
-  if (name) equipment.name = name;
-  if (description !== undefined) equipment.description = description;
-  if (pricePerHour !== undefined) equipment.pricePerHour = pricePerHour;
-  if (image !== undefined) equipment.image = image;
+  try {
+    // Update other fields
+    if (name) equipment.name = name;
+    if (description !== undefined) equipment.description = description;
+    if (pricePerHour !== undefined) equipment.pricePerHour = pricePerHour;
+    if (image !== undefined) equipment.image = image;
 
-  // Calculate và set status dựa trên quantities (Service layer logic)
-  equipment.status = calculateEquipmentStatus(equipment);
+    // Calculate và set status dựa trên quantities (Service layer logic)
+    equipment.status = calculateEquipmentStatus(equipment);
 
-  await equipment.save();
+    await equipment.save();
 
-  return equipment;
+    return equipment;
+  } catch (error) {
+    // Handle MongoDB duplicate key error (E11000)
+    if (error.code === 11000) {
+      throw new ValidationError('Tên equipment đã tồn tại!');
+    }
+    throw error;
+  }
 };
 // #endregion
 
 // #region Delete Equipment
 /**
- * Xóa equipment: chỉ hard delete nếu chưa được sử dụng (inUseQty = 0).
- * Nếu equipment đang được sử dụng, không thể xóa.
+ * Soft delete equipment: mark as deleted instead of removing from database
+ * Preserves historical data and booking references
  */
 export const deleteEquipment = async (equipmentId) => {
   const equipment = await Equipment.findById(equipmentId);
@@ -231,15 +233,14 @@ export const deleteEquipment = async (equipmentId) => {
     throw new NotFoundError('Equipment không tồn tại!');
   }
 
-  // Check nếu đang được sử dụng (có booking thực sự) → KHÔNG CHO XÓA
-  if (equipment.inUseQty > 0) {
-    throw new ValidationError(
-      `Không thể xóa equipment đang được sử dụng (${equipment.inUseQty}/${equipment.totalQty} units đang trong booking)!`
-    );
+  if (equipment.isDeleted) {
+    throw new ValidationError('Equipment đã bị xóa trước đó!');
   }
 
-  // Hard delete nếu không có booking nào sử dụng
-  await equipment.deleteOne();
+  // Soft delete: mark as deleted and set status to MAINTENANCE
+  equipment.isDeleted = true;
+  equipment.status = EQUIPMENT_STATUS.MAINTENANCE;
+  await equipment.save();
 
   return {
     message: 'Xóa equipment thành công!',
@@ -272,25 +273,37 @@ export const checkEquipmentAvailability = async (equipmentId, requiredQty) => {
 
 /**
  * Reserve equipment (giảm availableQty, tăng inUseQty khi tạo booking)
+ * Uses atomic operation to prevent race conditions
  */
 export const reserveEquipment = async (equipmentId, quantity) => {
-  const equipment = await Equipment.findById(equipmentId);
+  // Atomic operation: check and update in single query
+  const equipment = await Equipment.findOneAndUpdate(
+    {
+      _id: equipmentId,
+      availableQty: { $gte: quantity }, // Only succeed if enough available
+    },
+    {
+      $inc: {
+        availableQty: -quantity,
+        inUseQty: quantity,
+      },
+    },
+    { new: true, runValidators: true }
+  );
 
   if (!equipment) {
-    throw new NotFoundError('Equipment không tồn tại!');
+    // Either equipment not found OR not enough quantity
+    const existing = await Equipment.findById(equipmentId);
+    if (!existing) {
+      throw new NotFoundError('Equipment không tồn tại!');
+    }
+    throw new ValidationError(
+      `Equipment "${existing.name}" chỉ còn ${existing.availableQty}/${existing.totalQty} có sẵn!`
+    );
   }
 
-  if (equipment.availableQty < quantity) {
-    throw new ValidationError(`Không đủ số lượng equipment "${equipment.name}"!`);
-  }
-
-  // Update 2 fields
-  equipment.availableQty -= quantity;
-  equipment.inUseQty += quantity;
-  
   // Calculate và set status dựa trên quantities (Service layer logic)
   equipment.status = calculateEquipmentStatus(equipment);
-  
   await equipment.save();
 
   return equipment;
@@ -298,27 +311,37 @@ export const reserveEquipment = async (equipmentId, quantity) => {
 
 /**
  * Release equipment (tăng availableQty, giảm inUseQty khi hủy booking hoặc hoàn thành)
+ * Uses atomic operation to prevent race conditions
  */
 export const releaseEquipment = async (equipmentId, quantity) => {
-  const equipment = await Equipment.findById(equipmentId);
+  // Atomic operation: check and update in single query
+  const equipment = await Equipment.findOneAndUpdate(
+    {
+      _id: equipmentId,
+      inUseQty: { $gte: quantity }, // Only succeed if enough inUse to release
+    },
+    {
+      $inc: {
+        availableQty: quantity,
+        inUseQty: -quantity,
+      },
+    },
+    { new: true, runValidators: true }
+  );
 
   if (!equipment) {
-    throw new NotFoundError('Equipment không tồn tại!');
-  }
-
-  if (equipment.inUseQty < quantity) {
+    // Either equipment not found OR not enough inUse quantity
+    const existing = await Equipment.findById(equipmentId);
+    if (!existing) {
+      throw new NotFoundError('Equipment không tồn tại!');
+    }
     throw new ValidationError(
-      `Không thể release ${quantity} equipment vì chỉ có ${equipment.inUseQty} đang được sử dụng!`
+      `Không thể release ${quantity} equipment vì chỉ có ${existing.inUseQty} đang được sử dụng!`
     );
   }
 
-  // Update 2 fields
-  equipment.availableQty += quantity;
-  equipment.inUseQty -= quantity;
-  
   // Calculate và set status dựa trên quantities (Service layer logic)
   equipment.status = calculateEquipmentStatus(equipment);
-  
   await equipment.save();
 
   return equipment;
@@ -336,6 +359,14 @@ export const setMaintenanceQuantity = async (equipmentId, newMaintenanceQty) => 
   }
 
   // Note: Validation đã được thực hiện ở middleware validateMaintenanceQuantity
+
+  // Validate: maintenance + inUse cannot exceed total
+  if (newMaintenanceQty + equipment.inUseQty > equipment.totalQty) {
+    throw new ValidationError(
+      `Không thể set ${newMaintenanceQty} maintenance vì đã có ${equipment.inUseQty} đang sử dụng (total: ${equipment.totalQty}). ` +
+      `Tối đa có thể set: ${equipment.totalQty - equipment.inUseQty} maintenance.`
+    );
+  }
 
   // Calculate số lượng cần điều chỉnh
   const currentMaintenance = equipment.maintenanceQty;

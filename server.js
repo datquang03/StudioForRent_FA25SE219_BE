@@ -8,10 +8,21 @@ import customerRoutes from "./src/routes/customer.route.js";
 import adminRoutes from "./src/routes/admin.route.js";
 import studioRoutes from "./src/routes/studio.route.js";
 import equipmentRoutes from "./src/routes/equipment.route.js";
+import serviceRoutes from "./src/routes/service.route.js";
 import logger from "./src/utils/logger.js";
 import { errorHandler, notFoundHandler } from "./src/middlewares/errorHandler.js";
 
 dotenv.config();
+
+// Validate required environment variables
+const requiredEnvVars = ['JWT_SECRET', 'MONGODB_URI', 'EMAIL_USER', 'EMAIL_PASS'];
+const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+
+if (missingVars.length > 0) {
+  logger.error(`Missing required environment variables: ${missingVars.join(', ')}`);
+  logger.error('Please create a .env file with these variables');
+  process.exit(1);
+}
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -29,6 +40,7 @@ app.use("/api/customers", customerRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/studios", studioRoutes);
 app.use("/api/equipment", equipmentRoutes);
+app.use("/api/services", serviceRoutes);
 
 app.get("/", (req, res) => {
   res.send("🚀 API is running...");

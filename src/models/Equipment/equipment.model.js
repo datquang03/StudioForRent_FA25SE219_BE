@@ -54,6 +54,10 @@ const equipmentSchema = new mongoose.Schema(
       default: EQUIPMENT_STATUS.AVAILABLE,
       required: true,
     },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: { createdAt: true, updatedAt: false },
@@ -76,6 +80,10 @@ equipmentSchema.pre('save', function(next) {
 equipmentSchema.index({ status: 1 });
 equipmentSchema.index({ availableQty: 1 });
 equipmentSchema.index({ createdAt: -1 });
+equipmentSchema.index({ isDeleted: 1 });
+
+// Text index for search performance
+equipmentSchema.index({ name: 'text', description: 'text' });
 
 const Equipment = mongoose.model("Equipment", equipmentSchema);
 
