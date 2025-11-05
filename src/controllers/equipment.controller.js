@@ -9,7 +9,6 @@ import {
   deleteEquipment,
   setMaintenanceQuantity,
 } from '../services/equipment.service.js';
-import { VALIDATION_MESSAGES } from '../utils/constants.js';
 // #endregion
 
 // #region Get Equipment
