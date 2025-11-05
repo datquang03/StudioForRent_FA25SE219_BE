@@ -259,10 +259,8 @@ export const checkEquipmentAvailability = async (equipmentId, requiredQty) => {
     throw new NotFoundError('Equipment không tồn tại!');
   }
 
-  if (equipment.status !== EQUIPMENT_STATUS.AVAILABLE) {
-    throw new ValidationError(`Equipment "${equipment.name}" hiện không khả dụng!`);
-  }
-
+  // Chỉ check availableQty, không check status
+  // Vì equipment có thể IN_USE nhưng vẫn còn available units
   if (equipment.availableQty < requiredQty) {
     throw new ValidationError(
       `Equipment "${equipment.name}" chỉ còn ${equipment.availableQty}/${equipment.totalQty} có sẵn!`

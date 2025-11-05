@@ -69,11 +69,7 @@ export const getEquipmentDetail = asyncHandler(async (req, res) => {
 export const createEquipmentController = asyncHandler(async (req, res) => {
   const { name, description, pricePerHour, totalQty, image } = req.body;
 
-  if (!name || pricePerHour === undefined || totalQty === undefined) {
-    res.status(400);
-    throw new Error(VALIDATION_MESSAGES.MISSING_FIELDS);
-  }
-
+  // Validation already handled by validateEquipmentCreation middleware
   const equipment = await createEquipment({
     name,
     description,
