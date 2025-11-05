@@ -33,6 +33,18 @@ const equipmentSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    inUseQty: {
+      type: Number,
+      required: true,
+      default: 0,
+      min: 0,
+    },
+    maintenanceQty: {
+      type: Number,
+      required: true,
+      default: 0,
+      min: 0,
+    },
     image: {
       type: String,
     },
@@ -48,17 +60,22 @@ const equipmentSchema = new mongoose.Schema(
   }
 );
 
-// Validation: availableQty không được vượt quá totalQty
+// Pre-save hook: Validate quantities only
 equipmentSchema.pre('save', function(next) {
-  if (this.availableQty > this.totalQty) {
-    next(new Error('availableQty cannot exceed totalQty'));
+  // Validation: totalQty = availableQty + inUseQty + maintenanceQty
+  const sum = this.availableQty + this.inUseQty + this.maintenanceQty;
+  
+  if (sum !== this.totalQty) {
+    return next(new Error(`Equipment quantity mismatch: totalQty (${this.totalQty}) must equal availableQty (${this.availableQty}) + inUseQty (${this.inUseQty}) + maintenanceQty (${this.maintenanceQty}) = ${sum}`));
   }
+  
   next();
 });
 
-// Indexes
+// Indexes (status có thể query/filter được)
 equipmentSchema.index({ status: 1 });
 equipmentSchema.index({ availableQty: 1 });
+equipmentSchema.index({ createdAt: -1 });
 
 const Equipment = mongoose.model("Equipment", equipmentSchema);
 
