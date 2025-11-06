@@ -81,9 +81,7 @@ equipmentSchema.index({ status: 1 });
 equipmentSchema.index({ availableQty: 1 });
 equipmentSchema.index({ createdAt: -1 });
 equipmentSchema.index({ isDeleted: 1 });
-
-// Text index for search performance
-equipmentSchema.index({ name: 'text', description: 'text' });
+// Note: Using regex search in service, not text search
 
 const Equipment = mongoose.model("Equipment", equipmentSchema);
 

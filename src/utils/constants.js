@@ -128,7 +128,7 @@ export const PAYMENT_STATUS = {
 
 // Promotions
 export const DISCOUNT_TYPE = {
-  PERCENT: "percent",
+  PERCENTAGE: "percentage",
   FIXED: "fixed",
 };
 

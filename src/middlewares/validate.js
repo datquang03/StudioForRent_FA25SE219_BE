@@ -1,7 +1,7 @@
 //#region Imports
 import mongoose from 'mongoose';
 import { isValidEmail, isValidPassword, isNotEmpty } from "../utils/validators.js";
-import { VALIDATION_MESSAGES, REGEX_PATTERNS } from "../utils/constants.js";
+import { VALIDATION_MESSAGES, REGEX_PATTERNS, SERVICE_STATUS } from "../utils/constants.js";
 import { createResponse } from "../utils/helpers.js";
 //#endregion
 
@@ -514,10 +514,10 @@ export const validateServiceUpdate = (req, res, next) => {
 
   // Validate status if provided
   if (status !== undefined) {
-    const validStatuses = ['active', 'inactive'];
+    const validStatuses = Object.values(SERVICE_STATUS);
     if (!validStatuses.includes(status)) {
       return res.status(400).json(
-        createResponse(false, 'Trạng thái không hợp lệ! Chỉ chấp nhận: active, inactive')
+        createResponse(false, `Trạng thái không hợp lệ! Chỉ chấp nhận: ${validStatuses.join(', ')}`)
       );
     }
   }
