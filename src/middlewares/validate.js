@@ -224,20 +224,6 @@ export const validateRefreshToken = (req, res, next) => {
 //#endregion
 
 //#region General Validators
-export const validateObjectId = (paramName = "id") => {
-  return (req, res, next) => {
-    const id = req.params[paramName];
-    const objectIdPattern = /^[0-9a-fA-F]{24}$/;
-
-    if (!objectIdPattern.test(id)) {
-      return res.status(400).json(
-        createResponse(false, `${paramName} không hợp lệ!`)
-      );
-    }
-
-    next();
-  };
-};
 //#endregion
 
 //#region Studio Validators
@@ -526,6 +512,252 @@ export const validateServiceUpdate = (req, res, next) => {
   if (description !== undefined && typeof description !== 'string') {
     return res.status(400).json(
       createResponse(false, 'Mô tả dịch vụ phải là chuỗi!')
+    );
+  }
+
+  next();
+};
+
+//#endregion
+
+//#region Promotion Validators
+
+/**
+ * Validate tạo promotion mới
+ */
+export const validatePromotionCreation = (req, res, next) => {
+  const { name, code, discountType, discountValue, maxDiscount, startDate, endDate } = req.body;
+
+  // Required fields
+  if (!name || !name.trim()) {
+    return res.status(400).json(
+      createResponse(false, 'Tên khuyến mãi là bắt buộc!')
+    );
+  }
+
+  if (!code || !code.trim()) {
+    return res.status(400).json(
+      createResponse(false, 'Mã khuyến mãi là bắt buộc!')
+    );
+  }
+
+  if (!discountType) {
+    return res.status(400).json(
+      createResponse(false, 'Loại giảm giá là bắt buộc!')
+    );
+  }
+
+  if (discountValue === undefined || discountValue === null) {
+    return res.status(400).json(
+      createResponse(false, 'Giá trị giảm là bắt buộc!')
+    );
+  }
+
+  if (!startDate) {
+    return res.status(400).json(
+      createResponse(false, 'Ngày bắt đầu là bắt buộc!')
+    );
+  }
+
+  if (!endDate) {
+    return res.status(400).json(
+      createResponse(false, 'Ngày kết thúc là bắt buộc!')
+    );
+  }
+
+  // Validate code format (6-20 chars, uppercase, numbers only)
+  const codePattern = /^[A-Z0-9]{6,20}$/;
+  if (!codePattern.test(code.toUpperCase())) {
+    return res.status(400).json(
+      createResponse(false, 'Mã khuyến mãi chỉ chấp nhận chữ HOA và số, từ 6-20 ký tự!')
+    );
+  }
+
+  // Validate discountType
+  const validDiscountTypes = ['percentage', 'fixed'];
+  if (!validDiscountTypes.includes(discountType)) {
+    return res.status(400).json(
+      createResponse(false, 'Loại giảm giá không hợp lệ! Chỉ chấp nhận: percentage, fixed')
+    );
+  }
+
+  // Validate discountValue
+  if (typeof discountValue !== 'number' || discountValue < 0) {
+    return res.status(400).json(
+      createResponse(false, 'Giá trị giảm phải là số >= 0!')
+    );
+  }
+
+  // Nếu là percentage, phải từ 0-100 và có maxDiscount
+  if (discountType === 'percentage') {
+    if (discountValue > 100) {
+      return res.status(400).json(
+        createResponse(false, 'Giảm theo % phải từ 0-100!')
+      );
+    }
+
+    if (!maxDiscount || maxDiscount <= 0) {
+      return res.status(400).json(
+        createResponse(false, 'Giảm theo % phải có giá trị giảm tối đa (maxDiscount)!')
+      );
+    }
+
+    if (typeof maxDiscount !== 'number') {
+      return res.status(400).json(
+        createResponse(false, 'Giá trị giảm tối đa phải là số!')
+      );
+    }
+  }
+
+  // Validate dates
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+
+  if (isNaN(start.getTime())) {
+    return res.status(400).json(
+      createResponse(false, 'Ngày bắt đầu không hợp lệ!')
+    );
+  }
+
+  if (isNaN(end.getTime())) {
+    return res.status(400).json(
+      createResponse(false, 'Ngày kết thúc không hợp lệ!')
+    );
+  }
+
+  if (end <= start) {
+    return res.status(400).json(
+      createResponse(false, 'Ngày kết thúc phải sau ngày bắt đầu!')
+    );
+  }
+
+  next();
+};
+
+/**
+ * Validate cập nhật promotion
+ */
+export const validatePromotionUpdate = (req, res, next) => {
+  const { name, code, discountType, discountValue, maxDiscount, startDate, endDate } = req.body;
+
+  // At least one field required
+  if (!name && !code && !discountType && discountValue === undefined && 
+      maxDiscount === undefined && !startDate && !endDate && 
+      req.body.minOrderValue === undefined && req.body.usageLimit === undefined && 
+      req.body.isActive === undefined && req.body.applicableFor === undefined) {
+    return res.status(400).json(
+      createResponse(false, 'Vui lòng cung cấp ít nhất một trường để cập nhật!')
+    );
+  }
+
+  // Validate name if provided
+  if (name !== undefined && (!name || !name.trim())) {
+    return res.status(400).json(
+      createResponse(false, 'Tên khuyến mãi không được để trống!')
+    );
+  }
+
+  // Validate code if provided
+  if (code !== undefined) {
+    if (!code || !code.trim()) {
+      return res.status(400).json(
+        createResponse(false, 'Mã khuyến mãi không được để trống!')
+      );
+    }
+
+    const codePattern = /^[A-Z0-9]{6,20}$/;
+    if (!codePattern.test(code.toUpperCase())) {
+      return res.status(400).json(
+        createResponse(false, 'Mã khuyến mãi chỉ chấp nhận chữ HOA và số, từ 6-20 ký tự!')
+      );
+    }
+  }
+
+  // Validate discountType if provided
+  if (discountType !== undefined) {
+    const validDiscountTypes = ['percentage', 'fixed'];
+    if (!validDiscountTypes.includes(discountType)) {
+      return res.status(400).json(
+        createResponse(false, 'Loại giảm giá không hợp lệ! Chỉ chấp nhận: percentage, fixed')
+      );
+    }
+  }
+
+  // Validate discountValue if provided
+  if (discountValue !== undefined) {
+    if (typeof discountValue !== 'number' || discountValue < 0) {
+      return res.status(400).json(
+        createResponse(false, 'Giá trị giảm phải là số >= 0!')
+      );
+    }
+
+    if (discountType === 'percentage' && discountValue > 100) {
+      return res.status(400).json(
+        createResponse(false, 'Giảm theo % phải từ 0-100!')
+      );
+    }
+  }
+
+  // Validate maxDiscount if provided
+  if (maxDiscount !== undefined && (typeof maxDiscount !== 'number' || maxDiscount < 0)) {
+    return res.status(400).json(
+      createResponse(false, 'Giá trị giảm tối đa phải là số >= 0!')
+    );
+  }
+
+  // Validate dates if provided
+  if (startDate !== undefined || endDate !== undefined) {
+    const start = startDate ? new Date(startDate) : null;
+    const end = endDate ? new Date(endDate) : null;
+
+    if (start && isNaN(start.getTime())) {
+      return res.status(400).json(
+        createResponse(false, 'Ngày bắt đầu không hợp lệ!')
+      );
+    }
+
+    if (end && isNaN(end.getTime())) {
+      return res.status(400).json(
+        createResponse(false, 'Ngày kết thúc không hợp lệ!')
+      );
+    }
+
+    if (start && end && end <= start) {
+      return res.status(400).json(
+        createResponse(false, 'Ngày kết thúc phải sau ngày bắt đầu!')
+      );
+    }
+  }
+
+  // Validate applicableFor if provided
+  if (req.body.applicableFor !== undefined) {
+    const validApplicableFor = ['all', 'first_time', 'return'];
+    if (!validApplicableFor.includes(req.body.applicableFor)) {
+      return res.status(400).json(
+        createResponse(false, 'Đối tượng áp dụng không hợp lệ! Chỉ chấp nhận: all, first_time, return')
+      );
+    }
+  }
+
+  next();
+};
+
+/**
+ * Validate promotion code format (cho apply promotion)
+ */
+export const validatePromotionCode = (req, res, next) => {
+  const code = req.params.code || req.body.code;
+
+  if (!code || !code.trim()) {
+    return res.status(400).json(
+      createResponse(false, 'Mã khuyến mãi là bắt buộc!')
+    );
+  }
+
+  const codePattern = /^[A-Z0-9]{6,20}$/;
+  if (!codePattern.test(code.toUpperCase())) {
+    return res.status(400).json(
+      createResponse(false, 'Mã khuyến mãi không hợp lệ!')
     );
   }
 
