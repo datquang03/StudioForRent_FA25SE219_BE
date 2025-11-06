@@ -85,6 +85,11 @@ export const EQUIPMENT_STATUS = {
   MAINTENANCE: "maintenance",
 };
 
+export const SERVICE_STATUS = {
+  ACTIVE: "active",
+  INACTIVE: "inactive",
+};
+
 // Scheduling
 export const SCHEDULE_STATUS = {
   AVAILABLE: "available",
@@ -123,7 +128,7 @@ export const PAYMENT_STATUS = {
 
 // Promotions
 export const DISCOUNT_TYPE = {
-  PERCENT: "percent",
+  PERCENTAGE: "percentage",
   FIXED: "fixed",
 };
 

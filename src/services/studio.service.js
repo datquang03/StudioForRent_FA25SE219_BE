@@ -2,31 +2,40 @@
 import Studio from '../models/Studio/studio.model.js';
 import { STUDIO_STATUS } from '../utils/constants.js';
 import { NotFoundError, ValidationError } from '../utils/errors.js';
+import { escapeRegex } from '../utils/helpers.js';
 // #endregion
 
 // #region Get Studios
 export const getAllStudios = async ({ page = 1, limit = 10, status, search, sortBy = 'createdAt', sortOrder = 'desc' }) => {
+  // Validate and sanitize pagination
+  const safePage = Math.max(parseInt(page) || 1, 1);
+  const safeLimit = Math.min(Math.max(parseInt(limit) || 10, 1), 100);
+  
+  // Validate and sanitize search (prevent ReDoS)
+  const safeSearch = search && search.length > 100 ? search.substring(0, 100) : search;
+  
   const query = {};
   
   if (status && Object.values(STUDIO_STATUS).includes(status)) {
     query.status = status;
   }
   
-  if (search) {
+  if (safeSearch) {
+    const escapedSearch = escapeRegex(safeSearch);
     query.$or = [
-      { name: { $regex: search, $options: 'i' } },
-      { description: { $regex: search, $options: 'i' } },
+      { name: { $regex: escapedSearch, $options: 'i' } },
+      { description: { $regex: escapedSearch, $options: 'i' } },
     ];
   }
   
-  const skip = (page - 1) * limit;
+  const skip = (safePage - 1) * safeLimit;
   const sortOptions = { [sortBy]: sortOrder === 'asc' ? 1 : -1 };
   
   const [studios, total] = await Promise.all([
     Studio.find(query)
       .sort(sortOptions)
       .skip(skip)
-      .limit(limit)
+      .limit(safeLimit)
       .lean(),
     Studio.countDocuments(query),
   ]);
@@ -34,10 +43,10 @@ export const getAllStudios = async ({ page = 1, limit = 10, status, search, sort
   return {
     studios,
     pagination: {
-      page,
-      limit,
       total,
-      totalPages: Math.ceil(total / limit),
+      page: safePage,
+      limit: safeLimit,
+      totalPages: Math.ceil(total / safeLimit),
     },
   };
 };

@@ -1,6 +1,7 @@
 //#region Imports
+import mongoose from 'mongoose';
 import { isValidEmail, isValidPassword, isNotEmpty } from "../utils/validators.js";
-import { VALIDATION_MESSAGES, REGEX_PATTERNS } from "../utils/constants.js";
+import { VALIDATION_MESSAGES, REGEX_PATTERNS, SERVICE_STATUS } from "../utils/constants.js";
 import { createResponse } from "../utils/helpers.js";
 //#endregion
 
@@ -439,4 +440,125 @@ export const sanitizeInput = (req, res, next) => {
 
   next();
 };
+
+//#region Service Validation
+
+/**
+ * Validate tạo service mới
+ */
+export const validateServiceCreation = (req, res, next) => {
+  const { name, pricePerUse, description } = req.body;
+
+  // Required fields
+  if (!name || !name.trim()) {
+    return res.status(400).json(
+      createResponse(false, 'Tên dịch vụ là bắt buộc!')
+    );
+  }
+
+  if (pricePerUse === undefined || pricePerUse === null) {
+    return res.status(400).json(
+      createResponse(false, 'Giá dịch vụ là bắt buộc!')
+    );
+  }
+
+  // Validate types
+  if (typeof name !== 'string' || name.trim().length === 0) {
+    return res.status(400).json(
+      createResponse(false, 'Tên dịch vụ không hợp lệ!')
+    );
+  }
+
+  if (typeof pricePerUse !== 'number' || pricePerUse < 0) {
+    return res.status(400).json(
+      createResponse(false, 'Giá dịch vụ phải là số >= 0!')
+    );
+  }
+
+  // Validate description if provided
+  if (description !== undefined && typeof description !== 'string') {
+    return res.status(400).json(
+      createResponse(false, 'Mô tả dịch vụ phải là chuỗi!')
+    );
+  }
+
+  next();
+};
+
+/**
+ * Validate cập nhật service
+ */
+export const validateServiceUpdate = (req, res, next) => {
+  const { name, pricePerUse, status, description } = req.body;
+
+  // At least one field required
+  if (!name && pricePerUse === undefined && status === undefined && description === undefined) {
+    return res.status(400).json(
+      createResponse(false, 'Vui lòng cung cấp ít nhất một trường để cập nhật!')
+    );
+  }
+
+  // Validate name if provided
+  if (name !== undefined && (typeof name !== 'string' || name.trim().length === 0)) {
+    return res.status(400).json(
+      createResponse(false, 'Tên dịch vụ không hợp lệ!')
+    );
+  }
+
+  // Validate price if provided
+  if (pricePerUse !== undefined && (typeof pricePerUse !== 'number' || pricePerUse < 0)) {
+    return res.status(400).json(
+      createResponse(false, 'Giá dịch vụ phải là số >= 0!')
+    );
+  }
+
+  // Validate status if provided
+  if (status !== undefined) {
+    const validStatuses = Object.values(SERVICE_STATUS);
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json(
+        createResponse(false, `Trạng thái không hợp lệ! Chỉ chấp nhận: ${validStatuses.join(', ')}`)
+      );
+    }
+  }
+
+  // Validate description if provided
+  if (description !== undefined && typeof description !== 'string') {
+    return res.status(400).json(
+      createResponse(false, 'Mô tả dịch vụ phải là chuỗi!')
+    );
+  }
+
+  next();
+};
+
 //#endregion
+
+//#region ObjectId Validator
+
+/**
+ * Validate MongoDB ObjectId
+ * @param {string} paramName - Name of the parameter to validate (default: 'id')
+ */
+export const validateObjectId = (paramName = 'id') => {
+  return (req, res, next) => {
+    const id = req.params[paramName];
+    
+    if (!id) {
+      return res.status(400).json(
+        createResponse(false, `${paramName} là bắt buộc!`)
+      );
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json(
+        createResponse(false, `${paramName} không hợp lệ!`)
+      );
+    }
+
+    next();
+  };
+};
+
+//#endregion
+

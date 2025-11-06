@@ -145,3 +145,12 @@ export const groupBy = (array, key) => {
     return result;
   }, {});
 };
+
+/**
+ * Escape special regex characters to prevent regex injection attacks
+ * @param {string} string - String to escape
+ * @returns {string} - Escaped string safe for use in RegExp
+ */
+export const escapeRegex = (string) => {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};

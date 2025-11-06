@@ -2,6 +2,7 @@
 import { User, CustomerProfile, StaffProfile } from '../models/index.js';
 import { USER_MESSAGES } from '../utils/constants.js';
 import { NotFoundError } from '../utils/errors.js';
+import { escapeRegex } from '../utils/helpers.js';
 // #endregion
 
 // #region Customer Profile Management
@@ -63,28 +64,36 @@ export const updateCustomerProfile = async (userId, updateData) => {
 
 // #region Customer List & Search (Admin)
 export const getAllCustomers = async ({ page = 1, limit = 10, isActive, search }) => {
+  // Validate and sanitize pagination
+  const safePage = Math.max(parseInt(page) || 1, 1);
+  const safeLimit = Math.min(Math.max(parseInt(limit) || 10, 1), 100);
+  
+  // Validate and sanitize search (prevent ReDoS)
+  const safeSearch = search && search.length > 100 ? search.substring(0, 100) : search;
+  
   const query = { role: 'customer' };
 
   if (isActive !== undefined) {
     query.isActive = isActive;
   }
 
-  if (search) {
+  if (safeSearch) {
+    const escapedSearch = escapeRegex(safeSearch);
     query.$or = [
-      { username: { $regex: search, $options: 'i' } },
-      { email: { $regex: search, $options: 'i' } },
-      { fullName: { $regex: search, $options: 'i' } },
+      { username: { $regex: escapedSearch, $options: 'i' } },
+      { email: { $regex: escapedSearch, $options: 'i' } },
+      { fullName: { $regex: escapedSearch, $options: 'i' } },
     ];
   }
 
-  const skip = (page - 1) * limit;
+  const skip = (safePage - 1) * safeLimit;
 
   const [users, total] = await Promise.all([
     User.find(query)
       .select('-passwordHash -verificationCode -verificationCodeExpiry')
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(limit)
+      .limit(safeLimit)
       .lean(),
     User.countDocuments(query),
   ]);
@@ -92,8 +101,8 @@ export const getAllCustomers = async ({ page = 1, limit = 10, isActive, search }
   return {
     users,
     total,
-    page: parseInt(page),
-    pages: Math.ceil(total / limit),
+    page: safePage,
+    pages: Math.ceil(total / safeLimit),
   };
 };
 
@@ -130,20 +139,24 @@ export const toggleCustomerActive = async (userId, isActive) => {
 
 // #region Staff Management (Admin)
 export const getAllStaff = async ({ page = 1, limit = 10, position, isActive }) => {
+  // Validate and sanitize pagination
+  const safePage = Math.max(parseInt(page) || 1, 1);
+  const safeLimit = Math.min(Math.max(parseInt(limit) || 10, 1), 100);
+  
   const query = { role: { $in: ['staff', 'admin'] } };
 
   if (isActive !== undefined) {
     query.isActive = isActive;
   }
 
-  const skip = (page - 1) * limit;
+  const skip = (safePage - 1) * safeLimit;
 
   const [users, total] = await Promise.all([
     User.find(query)
       .select('-passwordHash -verificationCode -verificationCodeExpiry')
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(limit)
+      .limit(safeLimit)
       .lean(),
     User.countDocuments(query),
   ]);
@@ -168,8 +181,8 @@ export const getAllStaff = async ({ page = 1, limit = 10, position, isActive }) 
   return {
     users: usersWithProfiles,
     total: position ? filteredUsers.length : total,
-    page: parseInt(page),
-    pages: Math.ceil((position ? filteredUsers.length : total) / limit),
+    page: safePage,
+    pages: Math.ceil((position ? filteredUsers.length : total) / safeLimit),
   };
 };
 
