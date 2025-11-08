@@ -9,24 +9,21 @@ on:
  
 
 jobs:
-  build:
-
-    runs-on: self-hosted
-
-    strategy:
-      matrix:
-        node-version: [24.x]
-        # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
+  deploy:
+    runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
+    - name: Deploy to AWS EC2
+      uses: appleboy/ssh-action@v1.0.0
       with:
-        node-version: ${{ matrix.node-version }}
-        cache: 'npm'
-    - run: npm ci
-    - run: |
-        touch .env
-        echo "${{ secrets.SPLUS_STUDIO_ENV_FILE }}"
-    - run: pm2 restart BackendAPI
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USERNAME }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        port: 22
+        script: |
+          cd /home/ubuntu/StudioForRent_FA25SE219_BE
+          git pull origin main
+          npm install --production
+          echo "${{ secrets.SPLUS_STUDIO_ENV_FILE }}" > .env
+          pm2 restart BackendAPI || pm2 start ecosystem.config.js
+
