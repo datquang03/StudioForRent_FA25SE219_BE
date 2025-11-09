@@ -2,16 +2,12 @@
 # For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-nodejs
 
 name: Node.js CI/CD
-
 on:
   push:
     branches: [ "main" ]
- 
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
     - name: Deploy to AWS EC2
       uses: appleboy/ssh-action@v1.0.0
@@ -21,9 +17,11 @@ jobs:
         key: ${{ secrets.EC2_SSH_KEY }}
         port: 22
         script: |
-          cd /home/ubuntu/StudioForRent_FA25SE219_BE
-          git pull origin main
-          npm install --production
+          cd /home/ubuntu/StudioForRent_FA25SE219_BE || { echo "Dir not found"; exit 1; }
+          git pull origin main || { echo "Git pull failed"; exit 1; }
+          npm ci --production --frozen-lockfile || { echo "NPM install failed"; exit 1; }
           echo "${{ secrets.SPLUS_STUDIO_ENV_FILE }}" > .env
-          pm2 restart BackendAPI || pm2 start ecosystem.config.js
-
+          pm2 restart BackendAPI || pm2 start ecosystem.config.js || { echo "PM2 failed"; exit 1; }
+          echo "Deploy complete at $(date)"
+        timeout: 10s  # Connection timeout
+        command_timeout: 5m  # Script timeout
