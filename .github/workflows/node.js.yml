@@ -10,12 +10,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Deploy to AWS EC2
-      uses: appleboy/ssh-action@v1.0.0
+      uses: appleboy/ssh-action@v1.2.3  # Or @v1 for auto-latest
       with:
         host: ${{ secrets.EC2_HOST }}
         username: ${{ secrets.EC2_USERNAME }}
         key: ${{ secrets.EC2_SSH_KEY }}
-        port: 22
+        port: 22  # Keep this—now it should pass correctly
         script: |
           cd /home/ubuntu/StudioForRent_FA25SE219_BE || { echo "Dir not found"; exit 1; }
           git pull origin main || { echo "Git pull failed"; exit 1; }
@@ -23,5 +23,4 @@ jobs:
           echo "${{ secrets.SPLUS_STUDIO_ENV_FILE }}" > .env
           pm2 restart BackendAPI || pm2 start ecosystem.config.js || { echo "PM2 failed"; exit 1; }
           echo "Deploy complete at $(date)"
-        timeout: 10s  # Connection timeout
-        command_timeout: 5m  # Script timeout
+        debug: true  # ADD TEMPORARILY: Verbose logs for INPUT_PORT confirmation
