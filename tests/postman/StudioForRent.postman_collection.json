@@ -1,0 +1,181 @@
+{
+  "info": {
+    "name": "StudioForRent API - Basic Tests",
+    "_postman_id": "studioforrent-collection-001",
+    "description": "Collection to smoke-test auth, schedules and bookings endpoints.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 - Login (get token)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "login"
+          ]
+        }
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const res = pm.response.json();",
+              "pm.test('login success', () => pm.expect(res.success).to.be.true);",
+              "if (res.data && res.data.accessToken) {",
+              "  pm.environment.set('accessToken', res.data.accessToken);",
+              "}",
+              "if (res.data && res.data.user && res.data.user._id) pm.environment.set('userId', res.data.user._id);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - List schedules (public)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/schedules",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "schedules"
+          ]
+        }
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const res = pm.response.json();",
+              "pm.test('schedules fetched', () => pm.expect(res.success).to.be.true);",
+              "const items = res.data && res.data.items ? res.data.items : (res.data || []);",
+              "if (items && items.length > 0) {",
+              "  pm.environment.set('scheduleId', items[0]._id || items[0].id);",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Create booking (customer)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"scheduleId\": \"{{scheduleId}}\",\n  \"totalBeforeDiscount\": 100,\n  \"discountAmount\": 0,\n  \"finalAmount\": 100\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/bookings",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "bookings"
+          ]
+        }
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const res = pm.response.json();",
+              "pm.test('booking created', () => pm.expect(res.success).to.be.true);",
+              "if (res.data && res.data._id) pm.environment.set('bookingId', res.data._id);",
+              "if (res.data && res.data._id === undefined && res.data.id) pm.environment.set('bookingId', res.data.id);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Get my bookings (customer)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/bookings",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "bookings"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "05 - Cancel booking (customer)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/bookings/{{bookingId}}/cancel",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "bookings",
+            "{{bookingId}}",
+            "cancel"
+          ]
+        }
+      },
+      "response": []
+    }
+  ]
+}
