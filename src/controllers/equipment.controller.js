@@ -8,6 +8,7 @@ import {
   updateEquipment,
   deleteEquipment,
   setMaintenanceQuantity,
+  importEquipmentFromExcel,
 } from '../services/equipment.service.js';
 // #endregion
 
@@ -136,6 +137,29 @@ export const setMaintenanceQuantityController = asyncHandler(async (req, res) =>
     success: true,
     message: 'Cập nhật số lượng maintenance thành công!',
     data: equipment,
+  });
+});
+// #endregion
+
+// #region Import Equipment
+/**
+ * Import equipment from uploaded Excel file (xlsx)
+ * Expected columns: name, description, pricePerHour, totalQty, image
+ */
+export const importEquipmentController = asyncHandler(async (req, res) => {
+  // multer memoryStorage will put buffer at req.file.buffer
+  if (!req.file || !req.file.buffer) {
+    return res.status(400).json({ success: false, message: 'Missing file upload (form field name: file)' });
+  }
+
+  const buffer = req.file.buffer;
+
+  const result = await importEquipmentFromExcel(buffer);
+
+  res.status(200).json({
+    success: true,
+    message: 'Import equipment completed',
+    data: result,
   });
 });
 // #endregion

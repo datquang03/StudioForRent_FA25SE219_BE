@@ -9,6 +9,7 @@ import {
   createStaffController,
   getMeController,
   changePasswordController,
+  forgotPasswordController,
 } from '../controllers/auth.controller.js';
 import { protect, authorize } from '../middlewares/auth.js';
 import { authLimiter, strictLoginLimiter, verificationLimiter, passwordResetLimiter } from '../middlewares/rateLimiter.js';
@@ -34,6 +35,7 @@ router.post('/resend-code', verificationLimiter, resendCodeController);
 router.post('/login', strictLoginLimiter, validateLogin, loginController);
 router.post('/refresh', authLimiter, validateRefreshToken, refreshTokenController);
 router.post('/logout', validateRefreshToken, logoutController);
+router.post('/forgot-password', passwordResetLimiter, forgotPasswordController);
 
 // Protected routes
 router.get('/me', protect, getMeController);

@@ -1,25 +1,53 @@
 // #region Imports
 import { Booking, Schedule } from '../models/index.js';
 import { NotFoundError, ValidationError, ConflictError } from '../utils/errors.js';
-import { BOOKING_STATUS } from '../utils/constants.js';
+import { BOOKING_STATUS, SCHEDULE_STATUS } from '../utils/constants.js';
+import { createSchedule as createScheduleService, markScheduleBooked as markScheduleBookedService, freeSchedule as freeScheduleService } from './schedule.service.js';
+import { createBookingDetails as createBookingDetailsService } from './bookingDetail.service.js';
 // #endregion
 
 export const createBooking = async (data) => {
-  const { userId, scheduleId } = data;
-  if (!userId || !scheduleId) {
-    throw new ValidationError('Missing userId or scheduleId');
+  const { userId } = data;
+  if (!userId) throw new ValidationError('Missing userId');
+
+  let schedule = null;
+
+  // If scheduleId provided, use existing schedule
+  if (data.scheduleId) {
+    schedule = await Schedule.findById(data.scheduleId);
+    if (!schedule) throw new NotFoundError('Schedule not found');
+    if (![SCHEDULE_STATUS.AVAILABLE, BOOKING_STATUS.PENDING].includes(schedule.status)) {
+      throw new ConflictError('Schedule is not available');
+    }
+  } else {
+    // Expect schedule details: studioId, startTime, endTime
+    const { studioId, startTime, endTime } = data;
+    if (!studioId || !startTime || !endTime) {
+      throw new ValidationError('Missing schedule info: studioId, startTime, endTime');
+    }
+
+    const s = new Date(startTime);
+    const e = new Date(endTime);
+    if (!(e > s)) throw new ValidationError('endTime must be greater than startTime');
+
+    // Try to find exact matching schedule (same studio and times)
+    schedule = await Schedule.findOne({ studioId, startTime: s, endTime: e });
+
+    if (schedule) {
+      // Found an existing schedule; ensure it's available
+      if (![SCHEDULE_STATUS.AVAILABLE, BOOKING_STATUS.PENDING].includes(schedule.status)) {
+        throw new ConflictError('Existing schedule is not available');
+      }
+    } else {
+      // Create a new schedule (this will check for overlaps and throw on conflict)
+      schedule = await createScheduleService({ studioId, startTime: s, endTime: e, status: SCHEDULE_STATUS.AVAILABLE });
+    }
   }
 
-  const schedule = await Schedule.findById(scheduleId);
-  if (!schedule) throw new NotFoundError('Schedule not found');
-  if (schedule.status !== 'available' && schedule.status !== BOOKING_STATUS.PENDING) {
-    // allow pending as a fallback, but prefer explicit available
-    throw new ConflictError('Schedule is not available');
-  }
-
+  // Create booking
   const bookingData = {
     userId,
-    scheduleId,
+    scheduleId: schedule._id,
     totalBeforeDiscount: data.totalBeforeDiscount || 0,
     discountAmount: data.discountAmount || 0,
     finalAmount: data.finalAmount || 0,
@@ -31,10 +59,38 @@ export const createBooking = async (data) => {
 
   const booking = await Booking.create(bookingData);
 
-  // link schedule -> booking
-  schedule.status = BOOKING_STATUS.PENDING === BOOKING_STATUS.PENDING ? 'booked' : 'booked';
-  schedule.bookingId = booking._id;
-  await schedule.save();
+  // Mark schedule booked and link
+  try {
+    await markScheduleBookedService(schedule._id, booking._id);
+  } catch (err) {
+    // If marking failed, rollback booking
+    await Booking.findByIdAndDelete(booking._id);
+    throw err;
+  }
+
+  // If booking details provided, create them and calculate totals
+  if (Array.isArray(data.details) && data.details.length > 0) {
+    try {
+      const { total } = await createBookingDetailsService(booking._id, data.details);
+
+      // Update booking totals based on details
+      booking.totalBeforeDiscount = total;
+      booking.discountAmount = data.discountAmount || 0;
+      booking.finalAmount = Math.max(0, total - booking.discountAmount);
+      await booking.save();
+    } catch (err) {
+      // rollback: free schedule and delete booking
+      try {
+        await freeScheduleService(schedule._id);
+      } catch (freeErr) {
+        // log and continue
+        // eslint-disable-next-line no-console
+        console.error('Failed to free schedule during rollback', freeErr);
+      }
+      await Booking.findByIdAndDelete(booking._id);
+      throw err;
+    }
+  }
 
   return booking;
 };

@@ -6,6 +6,7 @@ import {
   cancelBooking,
   confirmBooking,
 } from '../controllers/booking.controller.js';
+import { createBookingDetailsController } from '../controllers/bookingDetail.controller.js';
 import { protect, authorize } from '../middlewares/auth.js';
 import { sanitizeInput, validateObjectId } from '../middlewares/validate.js';
 import { generalLimiter } from '../middlewares/rateLimiter.js';
@@ -23,6 +24,7 @@ router.use(protect);
 router.post('/', authorize(USER_ROLES.CUSTOMER), createBooking);
 router.get('/', authorize(USER_ROLES.CUSTOMER), getBookings);
 router.get('/:id', validateObjectId(), authorize(USER_ROLES.CUSTOMER), getBooking);
+router.post('/:id/details', validateObjectId(), authorize(USER_ROLES.CUSTOMER), createBookingDetailsController);
 router.post('/:id/cancel', validateObjectId(), authorize(USER_ROLES.CUSTOMER), cancelBooking);
 
 // Staff/Admin action to confirm a booking

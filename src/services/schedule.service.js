@@ -17,16 +17,19 @@ export const createSchedule = async (data) => {
     throw new ValidationError('endTime must be greater than startTime');
   }
 
-  // Prevent overlapping schedules for the same studio
-  const overlap = await Schedule.findOne({
+  // Minimum gap between schedules (30 minutes)
+  const MIN_GAP_MS = 30 * 60 * 1000; // 30 minutes in ms
+
+  // Prevent overlapping schedules and enforce minimum gap for the same studio
+  // Conflict if existing.start < (e + buffer) && existing.end > (s - buffer)
+  const conflict = await Schedule.findOne({
     studioId,
-    $or: [
-      { startTime: { $lt: e }, endTime: { $gt: s } },
-    ],
+    startTime: { $lt: new Date(e.getTime() + MIN_GAP_MS) },
+    endTime: { $gt: new Date(s.getTime() - MIN_GAP_MS) },
   });
 
-  if (overlap) {
-    throw new ConflictError('Schedule overlaps with an existing slot');
+  if (conflict) {
+    throw new ConflictError('Schedule overlaps or is too close to an existing slot (minimum gap 30 minutes)');
   }
 
   const schedule = await Schedule.create({
@@ -73,6 +76,19 @@ export const updateSchedule = async (id, updateData) => {
 
   if (schedule.endTime <= schedule.startTime) {
     throw new ValidationError('endTime must be greater than startTime');
+  }
+
+  // Enforce minimum gap when updating
+  const MIN_GAP_MS = 30 * 60 * 1000;
+  const conflict = await Schedule.findOne({
+    _id: { $ne: schedule._id },
+    studioId: schedule.studioId,
+    startTime: { $lt: new Date(schedule.endTime.getTime() + MIN_GAP_MS) },
+    endTime: { $gt: new Date(schedule.startTime.getTime() - MIN_GAP_MS) },
+  });
+
+  if (conflict) {
+    throw new ConflictError('Updated schedule would overlap or be too close to an existing slot (minimum gap 30 minutes)');
   }
 
   await schedule.save();

@@ -342,3 +342,35 @@ export const changePassword = async (userId, oldPassword, newPassword) => {
   return { message: 'Đổi mật khẩu thành công!' };
 };
 // #endregion
+
+// #region Forgot Password (generate new password and send via email)
+export const forgotPassword = async (email) => {
+  const user = await User.findOne({ email });
+
+  if (!user) {
+    throw new NotFoundError('Người dùng không tồn tại!');
+  }
+
+  // Generate a new random password and hash it
+  const newPassword = generateRandomPassword();
+  const newPasswordHash = await hashPassword(newPassword);
+
+  user.passwordHash = newPasswordHash;
+  await user.save();
+
+  // Send email with new credentials (reuse staff credentials template)
+  try {
+    await sendStaffCredentialsEmail(email, {
+      username: user.username,
+      password: newPassword,
+      fullName: user.fullName || user.username,
+      role: user.role || 'customer',
+    });
+  } catch (emailError) {
+    logger.error('Failed to send new password email', emailError);
+    throw new Error('Failed to send email with new password');
+  }
+
+  return { message: 'Mật khẩu mới đã được gửi tới email của bạn.' };
+};
+// #endregion
