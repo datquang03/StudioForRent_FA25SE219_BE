@@ -207,3 +207,5 @@ out
 *.vsssccache
 *.scc
 
+#  Uploaded files
+uploads/

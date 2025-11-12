@@ -1,7 +1,5 @@
 // #region Imports
 import asyncHandler from 'express-async-handler';
-import fs from 'fs';
-import cloudinary from '../config/cloudinary.js';
 import {
   getAllStudios,
   getStudioById,
@@ -11,6 +9,7 @@ import {
   deleteStudio,
   getActiveStudios,
 } from '../services/studio.service.js';
+import { uploadMultipleImages, uploadVideo } from '../services/upload.service.js';
 import { VALIDATION_MESSAGES } from '../utils/constants.js';
 // #endregion
 
@@ -65,49 +64,11 @@ export const getStudio = asyncHandler(async (req, res) => {
 
 // #region Create Studio
 export const createStudioController = asyncHandler(async (req, res) => {
-  const { name, description, area, location, basePricePerHour, capacity } = req.body;
+  const { name, description, area, location, basePricePerHour, capacity, images, video } = req.body;
 
   if (!name || basePricePerHour === undefined) {
     res.status(400);
     throw new Error(VALIDATION_MESSAGES.MISSING_FIELDS);
-  }
-
-  // Handle image uploads
-  let imageUrls = [];
-  if (req.files && req.files.length > 0) {
-    try {
-      // Upload each file to Cloudinary
-      const uploadPromises = req.files.map(async (file) => {
-        const result = await cloudinary.uploader.upload(file.path, {
-          folder: 'studios',
-          width: 800,
-          height: 600,
-          crop: 'fill',
-          quality: 'auto'
-        });
-        return result.secure_url;
-      });
-
-      imageUrls = await Promise.all(uploadPromises);
-
-      // Clean up temp files
-      req.files.forEach(file => {
-        if (fs.existsSync(file.path)) {
-          fs.unlinkSync(file.path);
-        }
-      });
-
-    } catch (error) {
-      // Clean up temp files on error
-      if (req.files) {
-        req.files.forEach(file => {
-          if (fs.existsSync(file.path)) {
-            fs.unlinkSync(file.path);
-          }
-        });
-      }
-      throw new Error('Upload ảnh thất bại: ' + error.message);
-    }
   }
 
   const studio = await createStudio({
@@ -117,7 +78,8 @@ export const createStudioController = asyncHandler(async (req, res) => {
     location,
     basePricePerHour,
     capacity,
-    images: imageUrls,
+    images,
+    video,
   });
 
   res.status(201).json({
@@ -130,7 +92,7 @@ export const createStudioController = asyncHandler(async (req, res) => {
 
 // #region Update Studio
 export const updateStudioController = asyncHandler(async (req, res) => {
-  const { name, description, area, location, basePricePerHour, capacity, images } = req.body;
+  const { name, description, area, location, basePricePerHour, capacity, images, video } = req.body;
 
   const studio = await updateStudio(req.params.id, {
     name,
@@ -140,6 +102,7 @@ export const updateStudioController = asyncHandler(async (req, res) => {
     basePricePerHour,
     capacity,
     images,
+    video,
   });
 
   res.status(200).json({
@@ -189,6 +152,60 @@ export const deleteStudioController = asyncHandler(async (req, res) => {
   res.status(200).json({
     success: true,
     message: result.message,
+  });
+});
+// #endregion
+
+// #region Upload Studio Media
+export const uploadStudioMedia = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const uploadedMedia = {
+    images: [],
+    video: null
+  };
+
+  // Handle images
+  if (req.files.images && req.files.images.length > 0) {
+    const imageResults = await uploadMultipleImages(req.files.images, {
+      folder: `studio-rental/studios/${id}`
+    });
+    uploadedMedia.images = imageResults;
+  }
+
+  // Handle video
+  if (req.files.video && req.files.video.length > 0) {
+    const videoResult = await uploadVideo(req.files.video[0].buffer, {
+      folder: `studio-rental/studios/${id}/videos`
+    });
+    uploadedMedia.video = videoResult;
+  }
+
+  if (uploadedMedia.images.length === 0 && !uploadedMedia.video) {
+    res.status(400);
+    throw new Error('Không có file media nào được cung cấp!');
+  }
+
+  // Update studio with new media URLs
+  const updateData = {};
+  if (uploadedMedia.images.length > 0) {
+    updateData.images = uploadedMedia.images.map(img => img.url);
+  }
+  if (uploadedMedia.video) {
+    updateData.video = uploadedMedia.video.url;
+  }
+
+  const studio = await updateStudio(id, updateData);
+
+  res.status(200).json({
+    success: true,
+    message: 'Upload media studio thành công!',
+    data: {
+      studio,
+      uploadedMedia: {
+        images: uploadedMedia.images.map(img => img.url),
+        video: uploadedMedia.video ? uploadedMedia.video.url : null
+      }
+    }
   });
 });
 // #endregion
