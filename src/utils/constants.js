@@ -132,6 +132,12 @@ export const DISCOUNT_TYPE = {
   FIXED: "fixed",
 };
 
+export const PROMOTION_APPLICABLE_FOR = {
+  ALL: "all",                    // Tất cả khách hàng
+  FIRST_TIME: "first_time",      // Khách hàng mới (chưa có booking nào)
+  RETURN: "return",              // Khách hàng quay lại (đã có booking)
+};
+
 // AI Set Design (Updated workflow)
 export const AI_SET_DESIGN_STATUS = {
   DRAFTING: "drafting", // Khách đang tạo/chọn ảnh AI

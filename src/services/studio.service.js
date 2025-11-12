@@ -64,11 +64,13 @@ export const getStudioById = async (studioId) => {
 
 // #region Create & Update Studios
 export const createStudio = async (studioData) => {
-  const { name, description, basePricePerHour, capacity, images } = studioData;
+  const { name, description, area, location, basePricePerHour, capacity, images } = studioData;
   
   const studio = await Studio.create({
     name,
     description,
+    area,
+    location,
     basePricePerHour,
     capacity,
     images: images || [],

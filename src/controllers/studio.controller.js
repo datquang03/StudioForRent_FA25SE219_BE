@@ -1,5 +1,7 @@
 // #region Imports
 import asyncHandler from 'express-async-handler';
+import fs from 'fs';
+import cloudinary from '../config/cloudinary.js';
 import {
   getAllStudios,
   getStudioById,
@@ -63,19 +65,59 @@ export const getStudio = asyncHandler(async (req, res) => {
 
 // #region Create Studio
 export const createStudioController = asyncHandler(async (req, res) => {
-  const { name, description, basePricePerHour, capacity, images } = req.body;
+  const { name, description, area, location, basePricePerHour, capacity } = req.body;
 
   if (!name || basePricePerHour === undefined) {
     res.status(400);
     throw new Error(VALIDATION_MESSAGES.MISSING_FIELDS);
   }
 
+  // Handle image uploads
+  let imageUrls = [];
+  if (req.files && req.files.length > 0) {
+    try {
+      // Upload each file to Cloudinary
+      const uploadPromises = req.files.map(async (file) => {
+        const result = await cloudinary.uploader.upload(file.path, {
+          folder: 'studios',
+          width: 800,
+          height: 600,
+          crop: 'fill',
+          quality: 'auto'
+        });
+        return result.secure_url;
+      });
+
+      imageUrls = await Promise.all(uploadPromises);
+
+      // Clean up temp files
+      req.files.forEach(file => {
+        if (fs.existsSync(file.path)) {
+          fs.unlinkSync(file.path);
+        }
+      });
+
+    } catch (error) {
+      // Clean up temp files on error
+      if (req.files) {
+        req.files.forEach(file => {
+          if (fs.existsSync(file.path)) {
+            fs.unlinkSync(file.path);
+          }
+        });
+      }
+      throw new Error('Upload ảnh thất bại: ' + error.message);
+    }
+  }
+
   const studio = await createStudio({
     name,
     description,
+    area,
+    location,
     basePricePerHour,
     capacity,
-    images,
+    images: imageUrls,
   });
 
   res.status(201).json({
@@ -88,11 +130,13 @@ export const createStudioController = asyncHandler(async (req, res) => {
 
 // #region Update Studio
 export const updateStudioController = asyncHandler(async (req, res) => {
-  const { name, description, basePricePerHour, capacity, images } = req.body;
+  const { name, description, area, location, basePricePerHour, capacity, images } = req.body;
 
   const studio = await updateStudio(req.params.id, {
     name,
     description,
+    area,
+    location,
     basePricePerHour,
     capacity,
     images,
