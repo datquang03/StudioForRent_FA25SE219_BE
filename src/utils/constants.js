@@ -178,7 +178,7 @@ export const NOTIFICATION_TYPE = {
 export const TIME_CONSTANTS = {
   VERIFICATION_CODE_EXPIRY: 15 * 60 * 1000, // 15 minutes in milliseconds
   VERIFICATION_CODE_EXPIRY_MINUTES: 15,
-  JWT_EXPIRY: "15m", // Access token: 15 minutes
+  JWT_EXPIRY: "1d", // Access token: 15 minutes // Updated to 1 day to test
   REFRESH_TOKEN_EXPIRY: "7d", // Refresh token: 7 days
   REFRESH_TOKEN_EXPIRY_DAYS: 7,
 };
