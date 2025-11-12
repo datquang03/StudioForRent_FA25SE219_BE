@@ -14,6 +14,7 @@ import { protect, authorize } from '../middlewares/auth.js';
 import { USER_ROLES } from '../utils/constants.js';
 import { validateStudioCreation, validateStudioUpdate, validateObjectId, sanitizeInput } from '../middlewares/validate.js';
 import { generalLimiter } from '../middlewares/rateLimiter.js';
+import { upload } from '../middlewares/upload.js';
 
 const router = express.Router();
 
@@ -28,7 +29,7 @@ router.use(protect);
 router.use(authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN));
 
 router.get('/', getStudios);
-router.post('/', validateStudioCreation, createStudioController);
+router.post('/', upload.array('images', 10), createStudioController);
 router.patch('/:id', validateObjectId(), validateStudioUpdate, updateStudioController);
 router.patch('/:id/activate', validateObjectId(), activateStudio);
 router.patch('/:id/deactivate', validateObjectId(), deactivateStudio);

@@ -9,6 +9,7 @@ import adminRoutes from "./src/routes/admin.route.js";
 import studioRoutes from "./src/routes/studio.route.js";
 import equipmentRoutes from "./src/routes/equipment.route.js";
 import serviceRoutes from "./src/routes/service.route.js";
+import promotionRoutes from "./src/routes/promotion.route.js";
 import logger from "./src/utils/logger.js";
 import { errorHandler, notFoundHandler } from "./src/middlewares/errorHandler.js";
 
@@ -41,6 +42,7 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/studios", studioRoutes);
 app.use("/api/equipment", equipmentRoutes);
 app.use("/api/services", serviceRoutes);
+app.use("/api/promotions", promotionRoutes);
 
 app.get("/", (req, res) => {
   res.send("🚀 API is running...");
