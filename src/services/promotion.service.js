@@ -21,6 +21,16 @@ export const getAllPromotions = async (query) => {
     applicableFor,
   } = query;
 
+  // Real-time cleanup: Disable expired promotions
+  const now = new Date();
+  await Promotion.updateMany(
+    { 
+      isActive: true, 
+      endDate: { $lt: now } 
+    },
+    { isActive: false }
+  );
+
   // Sanitize pagination
   const pageNum = Math.max(1, parseInt(page));
   const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
