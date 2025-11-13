@@ -1,6 +1,7 @@
 // #region Imports
 import Studio from '../models/Studio/studio.model.js';
-import { STUDIO_STATUS } from '../utils/constants.js';
+import { createAndSendNotification } from '../services/notification.service.js';
+import { STUDIO_STATUS, NOTIFICATION_TYPE } from '../utils/constants.js';
 import { NotFoundError, ValidationError } from '../utils/errors.js';
 import { escapeRegex } from '../utils/helpers.js';
 // #endregion
@@ -116,7 +117,26 @@ export const changeStudioStatus = async (studioId, newStatus) => {
   
   studio.status = newStatus;
   await studio.save();
-  
+
+  // Notify all staff/admin about studio status change
+  const { User } = await import('../models/index.js');
+  const staff = await User.find({ role: { $in: ['staff', 'admin'] }, isActive: true }).select('_id');
+
+  staff.forEach(async (user) => {
+    try {
+      await createAndSendNotification(
+        user._id,
+        NOTIFICATION_TYPE.CHANGE,
+        'Studio Status Updated',
+        `Studio "${studio.name}" has been changed to status: ${newStatus}.`,
+        false,
+        null
+      );
+    } catch (error) {
+      console.error(`Failed to notify staff ${user._id}:`, error);
+    }
+  });
+
   return studio;
 };
 

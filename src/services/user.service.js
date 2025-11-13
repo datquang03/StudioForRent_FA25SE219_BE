@@ -1,6 +1,7 @@
 // #region Imports
 import { User, CustomerProfile, StaffProfile } from '../models/index.js';
-import { USER_MESSAGES } from '../utils/constants.js';
+import { createAndSendNotification } from '../services/notification.service.js';
+import { USER_MESSAGES, NOTIFICATION_TYPE } from '../utils/constants.js';
 import { NotFoundError } from '../utils/errors.js';
 import { escapeRegex } from '../utils/helpers.js';
 // #endregion
@@ -57,6 +58,16 @@ export const updateCustomerProfile = async (userId, updateData) => {
       { new: true, runValidators: true }
     );
   }
+
+  // Create notification for profile update
+  await createAndSendNotification(
+    userId,
+    NOTIFICATION_TYPE.INFO,
+    'Profile Updated',
+    'Your profile information has been successfully updated.',
+    false,
+    null
+  );
 
   return user;
 };
@@ -132,6 +143,17 @@ export const toggleCustomerActive = async (userId, isActive) => {
   if (!user || user.role !== 'customer') {
     throw new NotFoundError(USER_MESSAGES.USER_NOT_FOUND);
   }
+
+  // Create notification for ban/unban
+  const action = isActive ? 'unbanned' : 'banned';
+  await createAndSendNotification(
+    userId,
+    NOTIFICATION_TYPE.WARNING,
+    `Account ${action}`,
+    `Your account has been ${action} by admin. ${isActive ? 'You can now log in.' : 'Please contact support if you have questions.'}`,
+    false,
+    null
+  );
 
   return user;
 };
@@ -256,6 +278,17 @@ export const toggleStaffActive = async (userId, isActive) => {
     { userId },
     { $set: { isActive } },
     { new: true }
+  );
+
+  // Create notification for ban/unban
+  const action = isActive ? 'unbanned' : 'banned';
+  await createAndSendNotification(
+    userId,
+    NOTIFICATION_TYPE.WARNING,
+    `Account ${action}`,
+    `Your account has been ${action} by admin. ${isActive ? 'You can now log in.' : 'Please contact support if you have questions.'}`,
+    false,
+    null
   );
 
   return user;
