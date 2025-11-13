@@ -22,9 +22,9 @@ router.use(generalLimiter);
 // Public routes
 router.get('/available', getAvailableServiceList);
 
-// Protected routes (Staff & Admin only)
+// Protected routes (Staff only)
 router.use(protect);
-router.use(authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN));
+router.use(authorize(USER_ROLES.STAFF));
 
 // Collection routes
 router.route('/')

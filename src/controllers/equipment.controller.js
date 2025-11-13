@@ -9,6 +9,7 @@ import {
   deleteEquipment,
   setMaintenanceQuantity,
 } from '../services/equipment.service.js';
+import { uploadImage } from '../services/upload.service.js';
 // #endregion
 
 // #region Get Equipment
@@ -136,6 +137,36 @@ export const setMaintenanceQuantityController = asyncHandler(async (req, res) =>
     success: true,
     message: 'Cập nhật số lượng maintenance thành công!',
     data: equipment,
+  });
+});
+// #endregion
+
+// #region Upload Equipment Image
+/**
+ * Upload hình ảnh cho equipment (staff/admin)
+ */
+export const uploadEquipmentImage = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  if (!req.file) {
+    res.status(400);
+    throw new Error('Không có file hình ảnh nào được cung cấp!');
+  }
+
+  const imageUrl = await uploadImage(req.file.buffer, {
+    folder: `studio-rental/equipment/${id}`
+  });
+
+  // Update equipment with new image URL
+  const equipment = await updateEquipment(id, { image: imageUrl.url });
+
+  res.status(200).json({
+    success: true,
+    message: 'Upload hình ảnh equipment thành công!',
+    data: {
+      equipment,
+      imageUrl
+    }
   });
 });
 // #endregion

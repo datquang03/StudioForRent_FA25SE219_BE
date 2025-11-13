@@ -46,69 +46,69 @@ router.post(
 );
 //#endregion
 
-//#region Protected Routes - Admin Only
+//#region Protected Routes - Staff Only
 /**
  * GET /api/promotions
- * Lấy danh sách tất cả promotions (Admin)
+ * Lấy danh sách tất cả promotions (Staff)
  */
 router.get(
   "/",
   generalLimiter,
   protect,
-  authorize(USER_ROLES.ADMIN),
+  authorize(USER_ROLES.STAFF),
   getPromotionList
 );
 
 /**
  * POST /api/promotions
- * Tạo promotion mới (Admin)
+ * Tạo promotion mới (Staff)
  */
 router.post(
   "/",
   sanitizeInput,
   generalLimiter,
   protect,
-  authorize(USER_ROLES.ADMIN),
+  authorize(USER_ROLES.STAFF),
   validatePromotionCreation,
   createPromotionController
 );
 
 /**
  * GET /api/promotions/:id
- * Lấy chi tiết promotion (Admin)
+ * Lấy chi tiết promotion (Staff)
  */
 router.get(
   "/:id",
   generalLimiter,
   protect,
-  authorize(USER_ROLES.ADMIN),
+  authorize(USER_ROLES.STAFF),
   validateObjectId("id"),
   getPromotionDetail
 );
 
 /**
  * GET /api/promotions/:id/stats
- * Lấy thống kê sử dụng promotion (Admin)
+ * Lấy thống kê sử dụng promotion (Staff)
  */
 router.get(
   "/:id/stats",
   generalLimiter,
   protect,
-  authorize(USER_ROLES.ADMIN),
+  authorize(USER_ROLES.STAFF),
   validateObjectId("id"),
   getPromotionUsageStats
 );
 
 /**
  * PUT /api/promotions/:id
- * Cập nhật promotion (Admin)
+ * Cập nhật promotion (Staff)
  */
 router.put(
   "/:id",
   sanitizeInput,
   generalLimiter,
   protect,
-  authorize(USER_ROLES.ADMIN),
+  authorize(USER_ROLES.STAFF),
   validateObjectId("id"),
   validatePromotionUpdate,
   updatePromotionController
@@ -116,13 +116,13 @@ router.put(
 
 /**
  * DELETE /api/promotions/:id
- * Xóa promotion (Admin)
+ * Xóa promotion (Staff)
  */
 router.delete(
   "/:id",
   generalLimiter,
   protect,
-  authorize(USER_ROLES.ADMIN),
+  authorize(USER_ROLES.STAFF),
   validateObjectId("id"),
   deletePromotionController
 );
