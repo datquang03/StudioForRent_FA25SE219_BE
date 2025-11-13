@@ -23,7 +23,6 @@ router.use(generalLimiter);
 
 // PUBLIC ROUTES
 router.get('/available', getAvailableEquipmentList);
-router.get('/', getEquipmentList);
 
 // PROTECTED ROUTES
 router.use(protect);
@@ -31,6 +30,7 @@ router.use(authorize(USER_ROLES.STAFF));
 
 // Collection routes
 router.route('/')
+  .get(getEquipmentList)
   .post(validateEquipmentCreation, createEquipmentController);
 
 // Specific actions (must be before /:id)

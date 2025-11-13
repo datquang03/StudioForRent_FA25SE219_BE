@@ -4,6 +4,8 @@ import cors from "cors";
 import bodyParser from "body-parser";
 import fs from "fs";
 import path from "path";
+import { Server } from "socket.io";
+import { createServer } from "http";
 import { connectDB } from "./src/config/db.js";
 import authRoutes from "./src/routes/auth.route.js";
 import customerRoutes from "./src/routes/customer.route.js";
@@ -14,6 +16,8 @@ import equipmentRoutes from "./src/routes/equipment.route.js";
 import serviceRoutes from "./src/routes/service.route.js";
 import promotionRoutes from "./src/routes/promotion.route.js";
 import uploadRoutes from "./src/routes/upload.route.js";
+import notificationRoutes from "./src/routes/notification.route.js";
+import analyticsRoutes from "./src/routes/analytics.route.js";
 import logger from "./src/utils/logger.js";
 import { errorHandler, notFoundHandler } from "./src/middlewares/errorHandler.js";
 
@@ -30,7 +34,14 @@ if (missingVars.length > 0) {
 }
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const server = createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: process.env.CLIENT_URL || "http://localhost:3000",
+    methods: ["GET", "POST"],
+  },
+});
+const PORT = process.env.PORT || 8000;
 
 app.set('trust proxy', 1);
 
@@ -56,6 +67,40 @@ app.use("/api/equipment", equipmentRoutes);
 app.use("/api/services", serviceRoutes);
 app.use("/api/promotions", promotionRoutes);
 app.use("/api/upload", uploadRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/analytics", analyticsRoutes);
+
+// Socket.io middleware for authentication
+io.use((socket, next) => {
+  const token = socket.handshake.auth.token;
+  if (!token) {
+    return next(new Error("Authentication error"));
+  }
+  // TODO: Verify JWT token and attach user to socket
+  // For now, allow all connections
+  next();
+});
+
+// Socket.io connection
+io.on("connection", (socket) => {
+  logger.info(`User connected: ${socket.id}`);
+
+  // Join user room based on userId (will be set after auth)
+  socket.on("join", (userId) => {
+    socket.join(userId);
+    logger.info(`User ${userId} joined room`);
+  });
+
+  socket.on("disconnect", () => {
+    logger.info(`User disconnected: ${socket.id}`);
+  });
+});
+
+// Attach io to req for controllers
+app.use((req, res, next) => {
+  req.io = io;
+  next();
+});
 
 app.get("/", (req, res) => {
   res.send("🚀 API is running...");
@@ -67,6 +112,6 @@ app.use(notFoundHandler);
 // Global error handler - must be last
 app.use(errorHandler);
 
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   logger.success(`Server is running on http://localhost:${PORT}`);
 });
