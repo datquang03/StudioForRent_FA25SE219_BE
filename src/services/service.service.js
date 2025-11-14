@@ -68,6 +68,25 @@ export const getAvailableServices = async () => {
 };
 
 /**
+ * Get available service detail (public - for customers)
+ */
+export const getAvailableServiceDetail = async (serviceId) => {
+  const service = await Service.findOne({
+    _id: serviceId,
+    status: SERVICE_STATUS.ACTIVE,
+    isAvailable: true,
+  })
+    .select('name description pricePerUse')
+    .lean();
+
+  if (!service) {
+    throw new NotFoundError('Dịch vụ không khả dụng hoặc không tồn tại!');
+  }
+
+  return service;
+};
+
+/**
  * Get service by ID
  */
 export const getServiceById = async (serviceId) => {

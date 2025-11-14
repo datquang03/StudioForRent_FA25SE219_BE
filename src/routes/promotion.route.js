@@ -13,6 +13,7 @@ import {
   getPromotionList,
   getActivePromotionList,
   getPromotionDetail,
+  getActivePromotionDetailController,
   createPromotionController,
   updatePromotionController,
   deletePromotionController,
@@ -30,6 +31,7 @@ const router = express.Router();
  * Lấy danh sách promotions đang hoạt động (Public)
  */
 router.get("/active", generalLimiter, getActivePromotionList);
+router.get("/active/:id", generalLimiter, validateObjectId("id"), getActivePromotionDetailController);
 //#endregion
 
 //#region Protected Routes - Customer
