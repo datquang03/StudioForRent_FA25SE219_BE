@@ -271,7 +271,7 @@ export const logout = async (token, ipAddress) => {
 
 // #region Staff Account Management
 export const createStaffAccount = async (data) => {
-  const { username, email, fullName, phone, position } = data; // Không cần password từ admin
+  const { username, email, fullName, phone, position } = data; // position luôn là 'staff'
 
   const existingEmail = await User.findOne({ email });
   if (existingEmail) {
@@ -286,7 +286,7 @@ export const createStaffAccount = async (data) => {
   // Auto-generate password
   const autoPassword = generateRandomPassword();
   const passwordHash = await hashPassword(autoPassword);
-  const role = position === 'admin' ? USER_ROLES.ADMIN : USER_ROLES.STAFF;
+  const role = USER_ROLES.STAFF; // Luôn là STAFF, không tạo admin qua API này
   
   const user = await User.create({
     username,
@@ -301,7 +301,7 @@ export const createStaffAccount = async (data) => {
 
   await StaffProfile.create({
     userId: user._id,
-    position,
+    position, // 'staff'
     hireDate: new Date(),
     isActive: true,
   });

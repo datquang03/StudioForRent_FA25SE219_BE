@@ -28,9 +28,9 @@ export const createBookingDetailsController = asyncHandler(async (req, res) => {
   const result = await createBookingDetails(bookingId, details);
 
   // Recalculate totals and update booking
-  booking.totalBeforeDiscount = result.total;
+  booking.totalBeforeDiscount += result.total;
   booking.discountAmount = booking.discountAmount || 0;
-  booking.finalAmount = Math.max(0, result.total - booking.discountAmount);
+  booking.finalAmount = Math.max(0, booking.totalBeforeDiscount - booking.discountAmount);
   await booking.save();
 
   res.status(201).json({ success: true, message: 'Booking details added', data: result });

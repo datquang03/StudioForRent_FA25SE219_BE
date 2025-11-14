@@ -131,9 +131,9 @@ export const getMeController = asyncHandler(async (req, res) => {
 
 // #region Staff Account Creation (Admin Only)
 export const createStaffController = asyncHandler(async (req, res) => {
-  const { username, email, fullName, phone, position } = req.body; // Không cần password
+  const { username, email, fullName, phone } = req.body; // Không cần position
 
-  if (!username || !email || !fullName || !position) {
+  if (!username || !email || !fullName) {
     res.status(400);
     throw new Error(VALIDATION_MESSAGES.MISSING_FIELDS);
   }
@@ -143,7 +143,7 @@ export const createStaffController = asyncHandler(async (req, res) => {
     email,
     fullName,
     phone,
-    position,
+    position: 'staff', // Luôn là staff
   });
 
   res.status(201).json({

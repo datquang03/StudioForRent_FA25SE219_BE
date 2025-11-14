@@ -151,11 +151,11 @@ export const validateRegistration = (req, res, next) => {
 };
 
 export const validateStaffRegistration = (req, res, next) => {
-  const { username, email, fullName, position, phone } = req.body;
+  const { username, email, fullName, phone } = req.body;
 
-  if (!isNotEmpty(username) || !isNotEmpty(email) || !isNotEmpty(fullName) || !isNotEmpty(position)) {
+  if (!isNotEmpty(username) || !isNotEmpty(email) || !isNotEmpty(fullName)) {
     return res.status(400).json(
-      createResponse(false, 'Vui lòng nhập đầy đủ thông tin: username, email, fullName, position!')
+      createResponse(false, 'Vui lòng nhập đầy đủ thông tin: username, email, fullName!')
     );
   }
 
@@ -174,12 +174,6 @@ export const validateStaffRegistration = (req, res, next) => {
   if (username.length < 3 || username.length > 30) {
     return res.status(400).json(
       createResponse(false, 'Tên đăng nhập phải từ 3-30 ký tự!')
-    );
-  }
-
-  if (!['staff', 'admin'].includes(position)) {
-    return res.status(400).json(
-      createResponse(false, 'Position phải là "staff" hoặc "admin"!')
     );
   }
 

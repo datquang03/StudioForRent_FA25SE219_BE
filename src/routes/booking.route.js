@@ -5,6 +5,7 @@ import {
   getBooking,
   cancelBooking,
   confirmBooking,
+  updateBooking,
 } from '../controllers/booking.controller.js';
 import { createBookingDetailsController } from '../controllers/bookingDetail.controller.js';
 import { protect, authorize } from '../middlewares/auth.js';
