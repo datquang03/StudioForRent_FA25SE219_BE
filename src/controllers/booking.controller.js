@@ -6,6 +6,7 @@ import {
   getBookings as getBookingsService,
   cancelBooking as cancelBookingService,
   confirmBooking as confirmBookingService,
+  updateBooking as updateBookingService,
 } from '../services/booking.service.js';
 // #endregion
 
@@ -39,6 +40,17 @@ export const cancelBooking = asyncHandler(async (req, res) => {
 export const confirmBooking = asyncHandler(async (req, res) => {
   const booking = await confirmBookingService(req.params.id);
   res.status(200).json({ success: true, message: 'Xác nhận booking thành công!', data: booking });
+});
+
+export const updateBooking = asyncHandler(async (req, res) => {
+  const bookingId = req.params.id;
+  const data = req.body;
+  const actorId = req.user ? req.user._id : null;
+  const actorRole = req.user ? req.user.role : null;
+
+  const updated = await updateBookingService(bookingId, data, actorId, actorRole);
+
+  res.status(200).json({ success: true, message: 'Cập nhật booking thành công!', data: updated });
 });
 
 export default {

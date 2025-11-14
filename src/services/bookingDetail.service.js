@@ -58,6 +58,11 @@ export const createBookingDetails = async (bookingId, detailsArray) => {
         const svc = await Service.findById(extraServiceId);
         if (!svc) throw new NotFoundError('Service not found');
 
+        // Service must be available/active
+        if (!svc.isAvailable) {
+          throw new ValidationError(`Service "${svc.name}" is not available`);
+        }
+
         const pricePerUnit = svc.pricePerUse || 0;
         const subtotal = pricePerUnit * quantity;
 
@@ -107,3 +112,40 @@ export const createBookingDetails = async (bookingId, detailsArray) => {
 export default {
   createBookingDetails,
 };
+
+/**
+ * Remove booking details by IDs for a booking and release equipment
+ * detailIds: array of BookingDetail _id
+ * Returns { removedTotal }
+ */
+export const removeBookingDetails = async (bookingId, detailIds) => {
+  if (!bookingId) throw new ValidationError('Missing bookingId');
+  if (!Array.isArray(detailIds) || detailIds.length === 0) {
+    throw new ValidationError('detailIds must be a non-empty array');
+  }
+
+  const toRemove = await BookingDetail.find({ bookingId, _id: { $in: detailIds } });
+  if (!toRemove || toRemove.length === 0) return { removedTotal: 0 };
+
+  let removedTotal = 0;
+
+  for (const d of toRemove) {
+    // If equipment, release reserved units
+    if (d.detailType === 'equipment' && d.equipmentId) {
+      try {
+        await releaseEquipment(d.equipmentId, d.quantity);
+      } catch (err) {
+        // log and continue
+        // eslint-disable-next-line no-console
+        console.error('Failed to release equipment during removeBookingDetails', err);
+      }
+    }
+    removedTotal += d.subtotal || 0;
+  }
+
+  // Delete the details
+  await BookingDetail.deleteMany({ bookingId, _id: { $in: detailIds } });
+
+  return { removedTotal };
+};
+

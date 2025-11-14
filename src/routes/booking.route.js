@@ -25,6 +25,7 @@ router.post('/', authorize(USER_ROLES.CUSTOMER), createBooking);
 router.get('/', authorize(USER_ROLES.CUSTOMER), getBookings);
 router.get('/:id', validateObjectId(), authorize(USER_ROLES.CUSTOMER), getBooking);
 router.post('/:id/details', validateObjectId(), authorize(USER_ROLES.CUSTOMER), createBookingDetailsController);
+ router.patch('/:id', validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), updateBooking);
 router.post('/:id/cancel', validateObjectId(), authorize(USER_ROLES.CUSTOMER), cancelBooking);
 
 // Staff/Admin action to confirm a booking
