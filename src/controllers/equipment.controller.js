@@ -9,6 +9,7 @@ import {
   updateEquipment,
   deleteEquipment,
   setMaintenanceQuantity,
+  importEquipmentFromExcel,
 } from '../services/equipment.service.js';
 import { uploadImage } from '../services/upload.service.js';
 // #endregion

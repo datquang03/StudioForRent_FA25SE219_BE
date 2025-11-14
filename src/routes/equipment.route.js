@@ -10,6 +10,7 @@ import {
   setMaintenanceQuantityController,
   uploadEquipmentImage,
 } from '../controllers/equipment.controller.js';
+import multer from 'multer';
 import { protect, authorize } from '../middlewares/auth.js';
 import { USER_ROLES } from '../utils/constants.js';
 import { validateEquipmentCreation, validateEquipmentUpdate, validateMaintenanceQuantity, validateObjectId, sanitizeInput } from '../middlewares/validate.js';
@@ -17,6 +18,9 @@ import { generalLimiter } from '../middlewares/rateLimiter.js';
 import { upload, handleMulterError, FILE_SIZE_LIMITS, ALLOWED_FILE_TYPES } from '../middlewares/upload.js';
 
 const router = express.Router();
+
+// multer memory storage for small uploads (xlsx)
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } }); // 5MB
 
 // Global middlewares
 router.use(sanitizeInput);
@@ -34,6 +38,9 @@ router.use(authorize(USER_ROLES.STAFF));
 router.route('/')
   .get(getEquipmentList)
   .post(validateEquipmentCreation, createEquipmentController);
+
+// Import route - staff/admin only
+router.post('/import', upload.single('file'), importEquipmentController);
 
 // Specific actions (must be before /:id)
 router.patch('/:id/set-maintenance-quantity',

@@ -9,6 +9,7 @@ import {
   logout,
   createStaffAccount,
   changePassword,
+  forgotPassword,
 } from '../services/auth.service.js';
 import { AUTH_MESSAGES, VALIDATION_MESSAGES } from '../utils/constants.js';
 import { ValidationError } from '../utils/errors.js';
@@ -185,3 +186,20 @@ export const changePasswordController = asyncHandler(async (req, res) => {
   });
 });
 // #endregion
+
+// Forgot password - generate new password and send to email
+export const forgotPasswordController = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    res.status(400);
+    throw new ValidationError('Vui lòng cung cấp email!');
+  }
+
+  const result = await forgotPassword(email);
+
+  res.status(200).json({
+    success: true,
+    message: result.message,
+  });
+});
