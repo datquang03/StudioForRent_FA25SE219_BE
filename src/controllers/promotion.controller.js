@@ -49,6 +49,20 @@ export const getPromotionDetail = asyncHandler(async (req, res) => {
 });
 //#endregion
 
+//#region Active Promotion Details (Public)
+/**
+ * GET /api/promotions/active/:id
+ * Lấy chi tiết promotion đang hoạt động (Public)
+ */
+export const getActivePromotionDetailController = asyncHandler(async (req, res) => {
+  const promotion = await promotionService.getActivePromotionDetail(req.params.id);
+
+  res.status(200).json(
+    createResponse(true, "Lấy thông tin khuyến mãi thành công!", { promotion })
+  );
+});
+//#endregion
+
 //#region Create Promotion (Admin)
 /**
  * POST /api/promotions

@@ -3,6 +3,7 @@ import {
   getEquipmentList,
   getAvailableEquipmentList,
   getEquipmentDetail,
+  getAvailableEquipmentDetailController,
   createEquipmentController,
   updateEquipmentController,
   deleteEquipmentController,
@@ -23,6 +24,7 @@ router.use(generalLimiter);
 
 // PUBLIC ROUTES
 router.get('/available', getAvailableEquipmentList);
+router.get('/available/:id', validateObjectId(), getAvailableEquipmentDetailController);
 
 // PROTECTED ROUTES
 router.use(protect);

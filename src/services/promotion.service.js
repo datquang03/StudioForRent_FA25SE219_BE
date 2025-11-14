@@ -104,6 +104,34 @@ export const getActivePromotions = async () => {
 
   return promotions;
 };
+
+/**
+ * Lấy chi tiết promotion đang hoạt động (public API)
+ * @param {String} promotionId
+ * @returns {Object} - Active promotion detail
+ */
+export const getActivePromotionDetail = async (promotionId) => {
+  const now = new Date();
+
+  const promotion = await Promotion.findOne({
+    _id: promotionId,
+    isActive: true,
+    startDate: { $lte: now },
+    endDate: { $gte: now },
+    $or: [
+      { usageLimit: null }, // Unlimited
+      { $expr: { $lt: ["$usageCount", "$usageLimit"] } }, // Còn slot
+    ],
+  })
+    .select("name code description discountType discountValue conditions minOrderValue maxDiscount endDate")
+    .lean();
+
+  if (!promotion) {
+    throw new NotFoundError("Promotion không khả dụng hoặc không tồn tại!");
+  }
+
+  return promotion;
+};
 //#endregion
 
 //#region Get Promotion By ID

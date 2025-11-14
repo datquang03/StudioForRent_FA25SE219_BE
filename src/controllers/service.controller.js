@@ -3,6 +3,7 @@ import asyncHandler from 'express-async-handler';
 import {
   getAllServices,
   getAvailableServices,
+  getAvailableServiceDetail,
   getServiceById,
   createService,
   updateService,
@@ -58,6 +59,24 @@ export const getServiceDetail = asyncHandler(async (req, res) => {
 
   res.status(200).json({
     success: true,
+    data: service,
+  });
+});
+
+// #endregion
+
+// #region Available Service Details (Public)
+/**
+ * @desc    Get available service detail
+ * @route   GET /api/services/available/:id
+ * @access  Public
+ */
+export const getAvailableServiceDetailController = asyncHandler(async (req, res) => {
+  const service = await getAvailableServiceDetail(req.params.id);
+
+  res.status(200).json({
+    success: true,
+    message: 'Lấy thông tin dịch vụ thành công!',
     data: service,
   });
 });

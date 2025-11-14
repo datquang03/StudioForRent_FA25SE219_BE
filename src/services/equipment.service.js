@@ -109,6 +109,26 @@ export const getAvailableEquipment = async () => {
 
   return equipment;
 };
+
+/**
+ * Lấy chi tiết equipment available (cho customer xem)
+ */
+export const getAvailableEquipmentDetail = async (equipmentId) => {
+  const equipment = await Equipment.findOne({
+    _id: equipmentId,
+    isDeleted: false,
+    status: EQUIPMENT_STATUS.AVAILABLE,
+    availableQty: { $gt: 0 },
+  })
+    .select('name description pricePerHour availableQty image category')
+    .lean();
+
+  if (!equipment) {
+    throw new NotFoundError('Equipment không khả dụng hoặc không tồn tại!');
+  }
+
+  return equipment;
+};
 // #endregion
 
 // #region Create Equipment
