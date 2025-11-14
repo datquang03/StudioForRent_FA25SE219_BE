@@ -34,6 +34,10 @@ const studioSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    video: {
+      type: String,
+      default: null,
+    },
     status: {
       type: String,
       enum: Object.values(STUDIO_STATUS),

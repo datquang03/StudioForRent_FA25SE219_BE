@@ -10,6 +10,7 @@ import {
   setMaintenanceQuantity,
   importEquipmentFromExcel,
 } from '../services/equipment.service.js';
+import { uploadImage } from '../services/upload.service.js';
 // #endregion
 
 // #region Get Equipment
@@ -141,25 +142,32 @@ export const setMaintenanceQuantityController = asyncHandler(async (req, res) =>
 });
 // #endregion
 
-// #region Import Equipment
+// #region Upload Equipment Image
 /**
- * Import equipment from uploaded Excel file (xlsx)
- * Expected columns: name, description, pricePerHour, totalQty, image
+ * Upload hình ảnh cho equipment (staff/admin)
  */
-export const importEquipmentController = asyncHandler(async (req, res) => {
-  // multer memoryStorage will put buffer at req.file.buffer
-  if (!req.file || !req.file.buffer) {
-    return res.status(400).json({ success: false, message: 'Missing file upload (form field name: file)' });
+export const uploadEquipmentImage = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  if (!req.file) {
+    res.status(400);
+    throw new Error('Không có file hình ảnh nào được cung cấp!');
   }
 
-  const buffer = req.file.buffer;
+  const imageUrl = await uploadImage(req.file.buffer, {
+    folder: `studio-rental/equipment/${id}`
+  });
 
-  const result = await importEquipmentFromExcel(buffer);
+  // Update equipment with new image URL
+  const equipment = await updateEquipment(id, { image: imageUrl.url });
 
   res.status(200).json({
     success: true,
-    message: 'Import equipment completed',
-    data: result,
+    message: 'Upload hình ảnh equipment thành công!',
+    data: {
+      equipment,
+      imageUrl
+    }
   });
 });
 // #endregion

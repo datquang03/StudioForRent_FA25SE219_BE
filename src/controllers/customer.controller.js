@@ -5,6 +5,8 @@ import {
   updateCustomerProfile,
   toggleCustomerActive,
 } from '../services/user.service.js';
+import { uploadImage } from '../services/upload.service.js';
+import User from '../models/User/user.model.js';
 // #endregion
 
 // #region Customer Profile Management
@@ -43,6 +45,37 @@ export const deleteAccount = asyncHandler(async (req, res) => {
   res.status(200).json({
     success: true,
     message: 'Xóa tài khoản thành công!',
+  });
+});
+
+export const uploadAvatar = asyncHandler(async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({
+      success: false,
+      message: 'Không có file avatar được cung cấp!',
+    });
+  }
+
+  const userId = req.user._id;
+  const folder = `studio-rental/users/${userId}/avatar`;
+
+  // Upload avatar to Cloudinary
+  const result = await uploadImage(req.file.buffer, {
+    folder,
+    public_id: `avatar_${Date.now()}`
+  });
+
+  // Update user avatar in database
+  await User.findByIdAndUpdate(userId, {
+    avatar: result.url
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'Upload avatar thành công!',
+    data: {
+      avatar: result.url
+    }
   });
 });
 // #endregion

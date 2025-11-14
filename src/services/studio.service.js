@@ -64,14 +64,17 @@ export const getStudioById = async (studioId) => {
 
 // #region Create & Update Studios
 export const createStudio = async (studioData) => {
-  const { name, description, basePricePerHour, capacity, images } = studioData;
+  const { name, description, area, location, basePricePerHour, capacity, images, video } = studioData;
   
   const studio = await Studio.create({
     name,
     description,
+    area,
+    location,
     basePricePerHour,
     capacity,
     images: images || [],
+    video: video || null,
     status: STUDIO_STATUS.ACTIVE,
   });
   
@@ -85,7 +88,7 @@ export const updateStudio = async (studioId, updateData) => {
     throw new NotFoundError('Studio không tồn tại!');
   }
   
-  const allowedUpdates = ['name', 'description', 'area', 'location', 'basePricePerHour', 'capacity', 'images'];
+  const allowedUpdates = ['name', 'description', 'area', 'location', 'basePricePerHour', 'capacity', 'images', 'video'];
   
   allowedUpdates.forEach((field) => {
     if (updateData[field] !== undefined) {

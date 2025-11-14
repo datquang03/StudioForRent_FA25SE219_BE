@@ -132,6 +132,12 @@ export const DISCOUNT_TYPE = {
   FIXED: "fixed",
 };
 
+export const PROMOTION_APPLICABLE_FOR = {
+  ALL: "all",                    // Tất cả khách hàng
+  FIRST_TIME: "first_time",      // Khách hàng mới (chưa có booking nào)
+  RETURN: "return",              // Khách hàng quay lại (đã có booking)
+};
+
 // AI Set Design (Updated workflow)
 export const AI_SET_DESIGN_STATUS = {
   DRAFTING: "drafting", // Khách đang tạo/chọn ảnh AI
@@ -172,7 +178,7 @@ export const NOTIFICATION_TYPE = {
 export const TIME_CONSTANTS = {
   VERIFICATION_CODE_EXPIRY: 15 * 60 * 1000, // 15 minutes in milliseconds
   VERIFICATION_CODE_EXPIRY_MINUTES: 15,
-  JWT_EXPIRY: "15m", // Access token: 15 minutes
+  JWT_EXPIRY: "1d", // Access token: 15 minutes // Updated to 1 day to test
   REFRESH_TOKEN_EXPIRY: "7d", // Refresh token: 7 days
   REFRESH_TOKEN_EXPIRY_DAYS: 7,
 };
