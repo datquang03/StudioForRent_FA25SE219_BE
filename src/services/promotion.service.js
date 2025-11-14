@@ -1,9 +1,10 @@
 //#region Imports
 import Promotion from "../models/Promotion/promotion.model.js";
 import Booking from "../models/Booking/booking.model.js";
+import { createAndSendNotification } from "../services/notification.service.js";
 import { NotFoundError, ValidationError } from "../utils/errors.js";
 import { escapeRegex } from "../utils/helpers.js";
-import { PROMOTION_APPLICABLE_FOR } from "../utils/constants.js";
+import { PROMOTION_APPLICABLE_FOR, NOTIFICATION_TYPE } from "../utils/constants.js";
 //#endregion
 
 //#region Get All Promotions (Admin)
@@ -103,6 +104,34 @@ export const getActivePromotions = async () => {
 
   return promotions;
 };
+
+/**
+ * Lấy chi tiết promotion đang hoạt động (public API)
+ * @param {String} promotionId
+ * @returns {Object} - Active promotion detail
+ */
+export const getActivePromotionDetail = async (promotionId) => {
+  const now = new Date();
+
+  const promotion = await Promotion.findOne({
+    _id: promotionId,
+    isActive: true,
+    startDate: { $lte: now },
+    endDate: { $gte: now },
+    $or: [
+      { usageLimit: null }, // Unlimited
+      { $expr: { $lt: ["$usageCount", "$usageLimit"] } }, // Còn slot
+    ],
+  })
+    .select("name code description discountType discountValue conditions minOrderValue maxDiscount endDate")
+    .lean();
+
+  if (!promotion) {
+    throw new NotFoundError("Promotion không khả dụng hoặc không tồn tại!");
+  }
+
+  return promotion;
+};
 //#endregion
 
 //#region Get Promotion By ID
@@ -155,6 +184,31 @@ export const createPromotion = async (promotionData) => {
     }
 
     const promotion = await Promotion.create(promotionData);
+
+    // Notify customers about new promotion (if applicable to all)
+    if (promotion.applicableFor === PROMOTION_APPLICABLE_FOR.ALL) {
+      // Import User model
+      const { User } = await import("../models/index.js");
+      const customers = await User.find({ role: "customer", isActive: true }).select("_id");
+
+      // Create notification for each customer (non-blocking)
+      customers.forEach(async (customer) => {
+        try {
+          await createAndSendNotification(
+            customer._id,
+            NOTIFICATION_TYPE.INFO,
+            "New Promotion Available",
+            `Check out our new promotion: ${promotion.name} - ${promotion.description}`,
+            false,
+            null
+          );
+        } catch (error) {
+          // Log but don't fail
+          console.error(`Failed to notify customer ${customer._id}:`, error);
+        }
+      });
+    }
+
     return promotion;
   } catch (error) {
     // Handle duplicate code error

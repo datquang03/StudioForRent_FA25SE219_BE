@@ -4,6 +4,7 @@ import {
   getAllEquipment,
   getEquipmentById,
   getAvailableEquipment,
+  getAvailableEquipmentDetail,
   createEquipment,
   updateEquipment,
   deleteEquipment,
@@ -53,6 +54,21 @@ export const getAvailableEquipmentList = asyncHandler(async (req, res) => {
  */
 export const getEquipmentDetail = asyncHandler(async (req, res) => {
   const equipment = await getEquipmentById(req.params.id);
+
+  res.status(200).json({
+    success: true,
+    message: 'Lấy thông tin equipment thành công!',
+    data: equipment,
+  });
+});
+// #endregion
+
+// #region Available Equipment Details (Public)
+/**
+ * Lấy chi tiết equipment available (cho customer xem)
+ */
+export const getAvailableEquipmentDetailController = asyncHandler(async (req, res) => {
+  const equipment = await getAvailableEquipmentDetail(req.params.id);
 
   res.status(200).json({
     success: true,

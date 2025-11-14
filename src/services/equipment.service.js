@@ -1,7 +1,8 @@
 // #region Imports
 import Equipment from '../models/Equipment/equipment.model.js';
+import { createAndSendNotification } from '../services/notification.service.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
-import { EQUIPMENT_STATUS } from '../utils/constants.js';
+import { EQUIPMENT_STATUS, NOTIFICATION_TYPE } from '../utils/constants.js';
 import { escapeRegex } from '../utils/helpers.js';
 // #endregion
 
@@ -108,6 +109,26 @@ export const getAvailableEquipment = async () => {
 
   return equipment;
 };
+
+/**
+ * Lấy chi tiết equipment available (cho customer xem)
+ */
+export const getAvailableEquipmentDetail = async (equipmentId) => {
+  const equipment = await Equipment.findOne({
+    _id: equipmentId,
+    isDeleted: false,
+    status: EQUIPMENT_STATUS.AVAILABLE,
+    availableQty: { $gt: 0 },
+  })
+    .select('name description pricePerHour availableQty image category')
+    .lean();
+
+  if (!equipment) {
+    throw new NotFoundError('Equipment không khả dụng hoặc không tồn tại!');
+  }
+
+  return equipment;
+};
 // #endregion
 
 // #region Create Equipment
@@ -148,6 +169,25 @@ export const createEquipment = async (equipmentData) => {
     equipment.status = calculateEquipmentStatus(equipment);
 
     await equipment.save();
+
+    // Notify all staff/admin about new equipment
+    const { User } = await import('../models/index.js');
+    const staff = await User.find({ role: { $in: ['staff', 'admin'] }, isActive: true }).select('_id');
+
+    staff.forEach(async (user) => {
+      try {
+        await createAndSendNotification(
+          user._id,
+          NOTIFICATION_TYPE.INFO,
+          'New Equipment Added',
+          `Equipment "${equipment.name}" has been added to the system.`,
+          false,
+          null
+        );
+      } catch (error) {
+        console.error(`Failed to notify staff ${user._id}:`, error);
+      }
+    });
 
     return equipment;
   } catch (error) {
@@ -209,6 +249,25 @@ export const updateEquipment = async (equipmentId, updateData) => {
     equipment.status = calculateEquipmentStatus(equipment);
 
     await equipment.save();
+
+    // Notify all staff/admin about equipment update
+    const { User } = await import('../models/index.js');
+    const staff = await User.find({ role: { $in: ['staff', 'admin'] }, isActive: true }).select('_id');
+
+    staff.forEach(async (user) => {
+      try {
+        await createAndSendNotification(
+          user._id,
+          NOTIFICATION_TYPE.INFO,
+          'Equipment Updated',
+          `Equipment "${equipment.name}" has been updated.`,
+          false,
+          null
+        );
+      } catch (error) {
+        console.error(`Failed to notify staff ${user._id}:`, error);
+      }
+    });
 
     return equipment;
   } catch (error) {

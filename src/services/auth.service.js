@@ -4,7 +4,8 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { User, CustomerProfile, StaffProfile, RefreshToken } from '../models/index.js';
 import { sendVerificationEmail, sendStaffCredentialsEmail } from './email.service.js';
-import { AUTH_MESSAGES, USER_ROLES, TIME_CONSTANTS } from '../utils/constants.js';
+import { createAndSendNotification } from './notification.service.js';
+import { AUTH_MESSAGES, USER_ROLES, TIME_CONSTANTS, NOTIFICATION_TYPE } from '../utils/constants.js';
 import { generateVerificationCode } from '../utils/helpers.js';
 import { NotFoundError, UnauthorizedError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
@@ -171,6 +172,16 @@ export const verifyEmail = async (email, code) => {
   user.verificationCodeExpiry = undefined;
   await user.save();
 
+  // Create notification for email verification
+  await createAndSendNotification(
+    user._id,
+    NOTIFICATION_TYPE.CONFIRMATION,
+    'Email Verified Successfully',
+    'Your account has been verified! Welcome to StudioForRent.',
+    false, // no email, already verified
+    null // no io in service
+  );
+
   const accessToken = generateToken(user._id, user.role);
   const refreshToken = await createRefreshToken(user._id, 'unknown');
   const userObject = user.toObject();
@@ -308,6 +319,16 @@ export const createStaffAccount = async (data) => {
     logger.error('Failed to send staff credentials email', emailError);
   }
 
+  // Create notification for new staff
+  await createAndSendNotification(
+    user._id,
+    NOTIFICATION_TYPE.INFO,
+    'Welcome to StudioForRent',
+    'Your staff account has been created. Please check your email for login credentials.',
+    false,
+    null
+  );
+
   const userObject = user.toObject();
   delete userObject.passwordHash;
 
@@ -338,6 +359,16 @@ export const changePassword = async (userId, oldPassword, newPassword) => {
   // Update password
   user.passwordHash = newPasswordHash;
   await user.save();
+
+  // Create notification for password change
+  await createAndSendNotification(
+    userId,
+    NOTIFICATION_TYPE.WARNING,
+    'Password Changed',
+    'Your password has been changed. If you did not make this change, please contact support immediately.',
+    false,
+    null
+  );
 
   return { message: 'Đổi mật khẩu thành công!' };
 };

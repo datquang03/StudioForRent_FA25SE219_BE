@@ -3,6 +3,7 @@ import {
   getServiceList,
   getAvailableServiceList,
   getServiceDetail,
+  getAvailableServiceDetailController,
   createServiceController,
   updateServiceController,
   deleteServiceController,
@@ -21,6 +22,7 @@ router.use(generalLimiter);
 
 // Public routes
 router.get('/available', getAvailableServiceList);
+router.get('/available/:id', validateObjectId(), getAvailableServiceDetailController);
 
 // Protected routes (Staff only)
 router.use(protect);
