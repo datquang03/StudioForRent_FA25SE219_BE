@@ -8,13 +8,17 @@ import {
   deleteMessageController,
 } from '../controllers/message.controller.js';
 import { protect } from '../middlewares/auth.js';
+import { sanitizeInput, validateObjectId } from '../middlewares/validate.js';
+import { generalLimiter } from '../middlewares/rateLimiter.js';
 // #endregion
 
 const router = express.Router();
 
 // #region Message Routes
 
-// Tất cả routes đều cần authentication
+// Apply middleware to all routes
+router.use(sanitizeInput);
+router.use(generalLimiter);
 router.use(protect);
 
 // Tạo message mới
@@ -27,10 +31,10 @@ router.get('/conversations', getConversationsController);
 router.get('/conversation/:conversationId', getMessagesInConversationController);
 
 // Đánh dấu message đã đọc
-router.put('/:id/read', markMessageAsReadController);
+router.put('/:id/read', validateObjectId(), markMessageAsReadController);
 
 // Xóa message
-router.delete('/:id', deleteMessageController);
+router.delete('/:id', validateObjectId(), deleteMessageController);
 
 // #endregion
 

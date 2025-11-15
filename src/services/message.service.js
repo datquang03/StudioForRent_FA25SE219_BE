@@ -3,6 +3,7 @@ import Message from '../models/Message/message.model.js';
 import { createAndSendNotification } from './notification.service.js';
 import { NOTIFICATION_TYPE } from '../utils/constants.js';
 import logger from '../utils/logger.js';
+import mongoose from 'mongoose';
 // #endregion
 
 // #region Message Service
@@ -18,6 +19,20 @@ import logger from '../utils/logger.js';
  */
 export const createMessage = async (fromUserId, toUserId, content, bookingId = null, io = null) => {
   try {
+    // Validate toUserId
+    if (!toUserId || !mongoose.Types.ObjectId.isValid(toUserId)) {
+      throw new Error('toUserId không hợp lệ');
+    }
+
+    // Validate content
+    if (typeof content !== 'string' || content.trim().length === 0) {
+      throw new Error('Nội dung tin nhắn không được để trống');
+    }
+    const MAX_CONTENT_LENGTH = 5000;
+    if (content.length > MAX_CONTENT_LENGTH) {
+      throw new Error(`Nội dung tin nhắn không được vượt quá ${MAX_CONTENT_LENGTH} ký tự`);
+    }
+
     const message = new Message({
       fromUserId,
       toUserId,
@@ -44,10 +59,15 @@ export const createMessage = async (fromUserId, toUserId, content, bookingId = n
 
     // Emit real-time message
     if (io) {
-      const room = bookingId || `${fromUserId}-${toUserId}`;
+      // Sort userIds to ensure consistent room names (A-B and B-A -> same room)
+      const room = bookingId || [fromUserId, toUserId].sort().join('-');
       io.to(room).emit('message', {
         id: message._id,
-        fromUserId: message.fromUserId,
+        fromUserId: {
+          _id: message.fromUserId?._id,
+          username: message.fromUserId?.username,
+          fullName: message.fromUserId?.fullName,
+        },
         toUserId: message.toUserId,
         content: message.content,
         bookingId: message.bookingId,

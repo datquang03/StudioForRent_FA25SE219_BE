@@ -2,6 +2,7 @@
 import asyncHandler from 'express-async-handler';
 import Message from '../models/Message/message.model.js';
 import User from '../models/User/user.model.js';
+import Booking from '../models/Booking/booking.model.js';
 import {
   createMessage,
   getConversations,
@@ -93,12 +94,26 @@ export const getMessagesInConversationController = asyncHandler(async (req, res)
   const { page, limit } = req.query;
 
   // Check if conversationId is a valid ObjectId (booking conversation)
-  const isBookingConversation = /^[0-9a-fA-F]{24}$/.test(conversationId);
+  const isBookingConversation = mongoose.Types.ObjectId.isValid(conversationId);
 
   let messages, total;
 
   if (isBookingConversation) {
-    // Booking conversation
+    // Booking conversation - verify user is participant in the booking
+    const booking = await Booking.findById(conversationId).select('userId');
+    if (!booking) {
+      const error = new Error('Booking không tồn tại');
+      error.statusCode = 404;
+      throw error;
+    }
+
+    // Check if user is the booking owner
+    if (booking.userId.toString() !== userId) {
+      const error = new Error('Không có quyền truy cập cuộc hội thoại này');
+      error.statusCode = 403;
+      throw error;
+    }
+
     [messages, total] = await Promise.all([
       Message.find({ bookingId: conversationId })
         .sort({ createdAt: -1 })
@@ -112,18 +127,23 @@ export const getMessagesInConversationController = asyncHandler(async (req, res)
     // Direct conversation (format: userId1-userId2)
     const [userId1, userId2] = conversationId.split('-');
     if (!userId1 || !userId2) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid conversation ID format'
-      });
+      const error = new Error('Định dạng conversation ID không hợp lệ');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    // Validate both userIds are valid ObjectIds
+    if (!mongoose.Types.ObjectId.isValid(userId1) || !mongoose.Types.ObjectId.isValid(userId2)) {
+      const error = new Error('User ID không hợp lệ');
+      error.statusCode = 400;
+      throw error;
     }
 
     // Verify user is participant
     if (userId !== userId1 && userId !== userId2) {
-      return res.status(403).json({
-        success: false,
-        message: 'Not authorized to view this conversation'
-      });
+      const error = new Error('Không có quyền xem cuộc hội thoại này');
+      error.statusCode = 403;
+      throw error;
     }
 
     [messages, total] = await Promise.all([
