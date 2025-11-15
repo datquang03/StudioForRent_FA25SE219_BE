@@ -76,25 +76,23 @@ export const sendNotification = async (notification, sendEmailFlag = false, io =
       const allowEmail = await checkUserPreferences(notification.userId);
       if (!allowEmail) {
         logger.info(`Email blocked by user preferences for user ${notification.userId}`);
-        return;
-      }
-
-      // Kiểm tra rate limiting
-      const canSend = checkRateLimit(notification.userId);
-      if (!canSend) {
-        logger.warn(`Email rate limited for user ${notification.userId}`);
-        return;
-      }
-
-      // Gửi email
-      const user = await User.findById(notification.userId).select('email');
-      if (user && user.email) {
-        await sendEmail(user.email, notification.title, notification.message);
-        logger.info(`Email sent for notification: ${notification.title}`);
+      } else {
+        // Kiểm tra rate limiting
+        const canSend = checkRateLimit(notification.userId);
+        if (!canSend) {
+          logger.warn(`Email rate limited for user ${notification.userId}`);
+        } else {
+          // Gửi email
+          const user = await User.findById(notification.userId).select('email');
+          if (user && user.email) {
+            await sendEmail(user.email, notification.title, notification.message);
+            logger.info(`Email sent for notification: ${notification.title}`);
+          }
+        }
       }
     }
 
-    // Emit real-time via Socket.io
+    // Emit real-time via Socket.io (always send regardless of email status)
     if (io) {
       io.to(notification.userId.toString()).emit('notification', {
         id: notification._id,

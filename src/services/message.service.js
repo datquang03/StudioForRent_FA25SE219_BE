@@ -27,12 +27,16 @@ export const createMessage = async (fromUserId, toUserId, content, bookingId = n
 
     await message.save();
 
+    // Fetch sender name for better notification
+    await message.populate('fromUserId', 'username fullName');
+    const senderName = message.fromUserId?.fullName || message.fromUserId?.username || 'Someone';
+
     // Gửi notification đến người nhận
     await createAndSendNotification(
       toUserId,
       NOTIFICATION_TYPE.MESSAGE,
       'Tin nhắn mới',
-      `Bạn có tin nhắn từ ${fromUserId}`, // Có thể fetch tên user
+      `Bạn có tin nhắn từ ${senderName}`,
       false, // Không gửi email
       io,
       message._id

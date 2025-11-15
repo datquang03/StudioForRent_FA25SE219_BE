@@ -1,15 +1,14 @@
 // #region Imports
 import asyncHandler from 'express-async-handler';
 import Message from '../models/Message/message.model.js';
+import User from '../models/User/user.model.js';
 import {
   createMessage,
   getConversations,
-  getMessagesInConversation,
   markMessageAsRead,
   deleteMessage,
 } from '../services/message.service.js';
-import { io } from '../../server.js'; // Import io từ server.js
-import logger from '../utils/logger.js';
+import mongoose from 'mongoose';
 // #endregion
 
 // #region Message Controller
@@ -22,12 +21,44 @@ export const createMessageController = asyncHandler(async (req, res) => {
   const { toUserId, content, bookingId } = req.body;
   const fromUserId = req.user.id;
 
+  // Validation
   if (!toUserId || !content) {
     res.status(400);
     throw new Error('toUserId và content là bắt buộc');
   }
 
-  const message = await createMessage(fromUserId, toUserId, content, bookingId, io);
+  // Validate toUserId is valid ObjectId
+  if (!mongoose.Types.ObjectId.isValid(toUserId)) {
+    res.status(400);
+    throw new Error('toUserId không hợp lệ');
+  }
+
+  // Check user cannot message themselves
+  if (fromUserId === toUserId) {
+    res.status(400);
+    throw new Error('Không thể gửi tin nhắn cho chính mình');
+  }
+
+  // Validate content length
+  if (content.trim().length === 0 || content.length > 5000) {
+    res.status(400);
+    throw new Error('Nội dung tin nhắn phải từ 1-5000 ký tự');
+  }
+
+  // Check toUser exists
+  const toUser = await User.findById(toUserId);
+  if (!toUser) {
+    res.status(404);
+    throw new Error('Người nhận không tồn tại');
+  }
+
+  // Validate bookingId if provided
+  if (bookingId && !mongoose.Types.ObjectId.isValid(bookingId)) {
+    res.status(400);
+    throw new Error('bookingId không hợp lệ');
+  }
+
+  const message = await createMessage(fromUserId, toUserId, content, bookingId, req.io);
 
   res.status(201).json({
     success: true,
@@ -71,7 +102,7 @@ export const getMessagesInConversationController = asyncHandler(async (req, res)
     [messages, total] = await Promise.all([
       Message.find({ bookingId: conversationId })
         .sort({ createdAt: -1 })
-        .skip((parseInt(page) || 1 - 1) * (parseInt(limit) || 20))
+        .skip(((parseInt(page) || 1) - 1) * (parseInt(limit) || 20))
         .limit(parseInt(limit) || 20)
         .populate('fromUserId', 'username fullName')
         .populate('toUserId', 'username fullName'),
@@ -104,7 +135,7 @@ export const getMessagesInConversationController = asyncHandler(async (req, res)
         ]
       })
         .sort({ createdAt: -1 })
-        .skip((parseInt(page) || 1 - 1) * (parseInt(limit) || 20))
+        .skip(((parseInt(page) || 1) - 1) * (parseInt(limit) || 20))
         .limit(parseInt(limit) || 20)
         .populate('fromUserId', 'username fullName')
         .populate('toUserId', 'username fullName'),
