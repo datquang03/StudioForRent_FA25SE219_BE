@@ -1,6 +1,6 @@
 // #region Imports
+import asyncHandler from 'express-async-handler';
 import { getDashboardStats } from '../services/analytics.service.js';
-import { asyncHandler } from '../middlewares/asyncHandler.js';
 import logger from '../utils/logger.js';
 // #endregion
 

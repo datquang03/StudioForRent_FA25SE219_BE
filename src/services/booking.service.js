@@ -6,6 +6,8 @@ import { createSchedule as createScheduleService, markScheduleBooked as markSche
 import { createBookingDetails as createBookingDetailsService } from './bookingDetail.service.js';
 import { Studio, Promotion } from '../models/index.js';
 import { releaseEquipment } from './equipment.service.js';
+import { createAndSendNotification } from './notification.service.js';
+import { NOTIFICATION_TYPE } from '../utils/constants.js';
 // #endregion
 
 export const createBooking = async (data) => {
@@ -144,6 +146,22 @@ export const createBooking = async (data) => {
   booking.discountAmount = Math.round(discountAmount * 100) / 100;
   booking.finalAmount = Math.max(0, booking.totalBeforeDiscount - booking.discountAmount);
   await booking.save();
+
+  // Send notification to customer
+  try {
+    await createAndSendNotification(
+      userId,
+      NOTIFICATION_TYPE.CONFIRMATION,
+      'Booking đã được tạo',
+      `Booking của bạn đã được tạo thành công. Tổng tiền: ${booking.finalAmount.toLocaleString('vi-VN')} VND`,
+      true, // Send email
+      null, // io
+      booking._id
+    );
+  } catch (notifyErr) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to send booking confirmation notification:', notifyErr);
+  }
 
   return booking;
 };
@@ -355,6 +373,23 @@ export const confirmBooking = async (bookingId) => {
   if (!booking) throw new NotFoundError('Booking not found');
   booking.status = BOOKING_STATUS.CONFIRMED;
   await booking.save();
+
+  // Send notification to customer
+  try {
+    await createAndSendNotification(
+      booking.userId,
+      NOTIFICATION_TYPE.CONFIRMATION,
+      'Booking đã được xác nhận',
+      `Booking của bạn đã được xác nhận bởi staff. Vui lòng chuẩn bị đến đúng giờ.`,
+      true, // Send email
+      null, // io
+      booking._id
+    );
+  } catch (notifyErr) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to send confirmation notification:', notifyErr);
+  }
+
   return booking;
 };
 

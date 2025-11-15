@@ -6,7 +6,6 @@ import {
   toggleCustomerActive,
   getAllStaff,
   getStaffById,
-  updateStaffProfile,
   toggleStaffActive,
 } from '../services/user.service.js';
 // #endregion
@@ -84,22 +83,6 @@ export const getStaff = asyncHandler(async (req, res) => {
   res.status(200).json({
     success: true,
     message: 'Lấy thông tin staff thành công!',
-    data: user,
-  });
-});
-
-export const updateStaff = asyncHandler(async (req, res) => {
-  const { fullName, phone, position } = req.body; // Removed salary
-
-  const user = await updateStaffProfile(req.params.id, {
-    fullName,
-    phone,
-    position,
-  });
-
-  res.status(200).json({
-    success: true,
-    message: 'Cập nhật staff thành công!',
     data: user,
   });
 });

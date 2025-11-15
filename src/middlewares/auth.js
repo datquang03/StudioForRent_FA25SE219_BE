@@ -55,7 +55,9 @@ export const protect = asyncHandler(async (req, res, next) => {
  */
 export const authorize = (...roles) => {
   return (req, res, next) => {
-    if (!roles.includes(req.user.role)) {
+    // Flatten roles in case array is passed
+    const allowedRoles = roles.flat();
+    if (!allowedRoles.includes(req.user.role)) {
       return res.status(403).json({
         success: false,
         message: AUTH_MESSAGES.UNAUTHORIZED,

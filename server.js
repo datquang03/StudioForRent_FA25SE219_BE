@@ -18,6 +18,9 @@ import promotionRoutes from "./src/routes/promotion.route.js";
 import uploadRoutes from "./src/routes/upload.route.js";
 import notificationRoutes from "./src/routes/notification.route.js";
 import analyticsRoutes from "./src/routes/analytics.route.js";
+import messageRoutes from "./src/routes/message.route.js";
+import bookingRoutes from "./src/routes/booking.route.js";
+import scheduleRoutes from "./src/routes/schedule.route.js";
 import logger from "./src/utils/logger.js";
 import { errorHandler, notFoundHandler } from "./src/middlewares/errorHandler.js";
 
@@ -69,6 +72,9 @@ app.use("/api/promotions", promotionRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/analytics", analyticsRoutes);
+app.use("/api/messages", messageRoutes);
+app.use("/api/bookings", bookingRoutes);
+app.use("/api/schedules", scheduleRoutes);
 
 // Socket.io middleware for authentication
 io.use((socket, next) => {
@@ -89,6 +95,18 @@ io.on("connection", (socket) => {
   socket.on("join", (userId) => {
     socket.join(userId);
     logger.info(`User ${userId} joined room`);
+  });
+
+  // Join conversation room
+  socket.on("joinConversation", (bookingId) => {
+    socket.join(bookingId);
+    logger.info(`User joined conversation ${bookingId}`);
+  });
+
+  // Leave conversation room
+  socket.on("leaveConversation", (bookingId) => {
+    socket.leave(bookingId);
+    logger.info(`User left conversation ${bookingId}`);
   });
 
   socket.on("disconnect", () => {
@@ -115,3 +133,5 @@ app.use(errorHandler);
 server.listen(PORT, () => {
   logger.success(`Server is running on http://localhost:${PORT}`);
 });
+
+export { io };

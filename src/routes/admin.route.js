@@ -6,7 +6,6 @@ import {
   unbanCustomer,
   getStaffList,
   getStaff,
-  updateStaff,
   deactivateStaff,
   activateStaff,
 } from '../controllers/admin.controller.js';
@@ -31,7 +30,6 @@ router.patch('/customers/:id/unban', validateObjectId(), unbanCustomer);
 
 router.get('/staff', getStaffList);
 router.get('/staff/:id', validateObjectId(), getStaff);
-router.patch('/staff/:id', validateObjectId(), updateStaff);
 router.patch('/staff/:id/deactivate', validateObjectId(), deactivateStaff);
 router.patch('/staff/:id/activate', validateObjectId(), activateStaff);
 
