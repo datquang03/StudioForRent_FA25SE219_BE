@@ -11,7 +11,7 @@ import {
 import { protect, authorize } from '../middlewares/auth.js';
 import { sanitizeInput, validateObjectId } from '../middlewares/validate.js';
 import { validateServiceCreation, validateServiceUpdate } from '../middlewares/validate.js';
-import { generalLimiter } from '../middlewares/rateLimiter.js';
+import { generalLimiter, searchLimiter } from '../middlewares/rateLimiter.js';
 import { USER_ROLES } from '../utils/constants.js';
 
 const router = express.Router();
@@ -21,7 +21,7 @@ router.use(sanitizeInput);
 router.use(generalLimiter);
 
 // Public routes
-router.get('/available', getAvailableServiceList);
+router.get('/available', searchLimiter, getAvailableServiceList);
 router.get('/available/:id', validateObjectId(), getAvailableServiceDetailController);
 
 // Protected routes (Staff only)
@@ -30,7 +30,7 @@ router.use(authorize(USER_ROLES.STAFF));
 
 // Collection routes
 router.route('/')
-  .get(getServiceList)
+  .get(searchLimiter, getServiceList)
   .post(validateServiceCreation, createServiceController);
 
 // Resource routes

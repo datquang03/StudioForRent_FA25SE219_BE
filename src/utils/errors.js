@@ -7,6 +7,9 @@ export class AppError extends Error {
   }
 }
 
+// Alias for backward compatibility
+export const ApiError = AppError;
+
 export class NotFoundError extends AppError {
   constructor(message = 'Resource not found') {
     super(message, 404);

@@ -51,6 +51,61 @@ const bookingSchema = new mongoose.Schema(
       default: BOOKING_STATUS.PENDING,
       required: true,
     },
+
+    // Policy snapshots (immutable copy of policies at booking time)
+    policySnapshots: {
+      cancellation: {
+        type: mongoose.Schema.Types.Mixed, // Full policy object snapshot
+      },
+      noShow: {
+        type: mongoose.Schema.Types.Mixed, // Full policy object snapshot
+      }
+    },
+
+    // Event tracking for policy applications
+    events: [{
+      type: {
+        type: String,
+        enum: ['CANCELLED', 'NO_SHOW', 'REFUND_PROCESSED', 'CHARGE_APPLIED'],
+        required: true
+      },
+      timestamp: {
+        type: Date,
+        default: Date.now,
+        required: true
+      },
+      details: {
+        type: mongoose.Schema.Types.Mixed, // Flexible details object
+      },
+      amount: {
+        type: Number,
+        default: 0
+      }
+    }],
+
+    // Financial tracking for policy applications
+    financials: {
+      originalAmount: {
+        type: Number,
+        default: 0,
+        min: 0
+      },
+      refundAmount: {
+        type: Number,
+        default: 0,
+        min: 0
+      },
+      chargeAmount: {
+        type: Number,
+        default: 0,
+        min: 0
+      },
+      netAmount: {
+        type: Number,
+        default: 0
+      }
+    },
+
     notes: {
       type: String,
     },

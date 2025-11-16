@@ -61,13 +61,14 @@ export const unbanCustomer = asyncHandler(async (req, res) => {
 
 // #region Staff Management
 export const getStaffList = asyncHandler(async (req, res) => {
-  const { page, limit, position, isActive } = req.query;
+  const { page, limit, position, isActive, search } = req.query;
 
   const result = await getAllStaff({
     page: parseInt(page) || 1,
     limit: parseInt(limit) || 10,
     position,
     isActive: isActive === 'true' ? true : isActive === 'false' ? false : undefined,
+    search,
   });
 
   res.status(200).json({

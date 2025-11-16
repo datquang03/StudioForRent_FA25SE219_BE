@@ -21,18 +21,17 @@ import analyticsRoutes from "./src/routes/analytics.route.js";
 import messageRoutes from "./src/routes/message.route.js";
 import bookingRoutes from "./src/routes/booking.route.js";
 import scheduleRoutes from "./src/routes/schedule.route.js";
+import roomPolicyRoutes from "./src/routes/roomPolicy.route.js";
 import logger from "./src/utils/logger.js";
 import { errorHandler, notFoundHandler } from "./src/middlewares/errorHandler.js";
+import { socketAuth, handleSocketConnection } from "./src/middlewares/socket.js";
+import { validateEnvironmentVariables } from "./src/utils/helpers.js";
 
 dotenv.config();
 
 // Validate required environment variables
 const requiredEnvVars = ['JWT_SECRET', 'MONGODB_URI', 'EMAIL_USER', 'EMAIL_PASS'];
-const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
-
-if (missingVars.length > 0) {
-  logger.error(`Missing required environment variables: ${missingVars.join(', ')}`);
-  logger.error('Please create a .env file with these variables');
+if (!validateEnvironmentVariables(requiredEnvVars)) {
   process.exit(1);
 }
 
@@ -75,44 +74,11 @@ app.use("/api/analytics", analyticsRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/schedules", scheduleRoutes);
+app.use("/api/room-policies", roomPolicyRoutes);
 
-// Socket.io middleware for authentication
-io.use((socket, next) => {
-  const token = socket.handshake.auth.token;
-  if (!token) {
-    return next(new Error("Authentication error"));
-  }
-  // TODO: Verify JWT token and attach user to socket
-  // For now, allow all connections
-  next();
-});
-
-// Socket.io connection
-io.on("connection", (socket) => {
-  logger.info(`User connected: ${socket.id}`);
-
-  // Join user room based on userId (will be set after auth)
-  socket.on("join", (userId) => {
-    socket.join(userId);
-    logger.info(`User ${userId} joined room`);
-  });
-
-  // Join conversation room
-  socket.on("joinConversation", (bookingId) => {
-    socket.join(bookingId);
-    logger.info(`User joined conversation ${bookingId}`);
-  });
-
-  // Leave conversation room
-  socket.on("leaveConversation", (bookingId) => {
-    socket.leave(bookingId);
-    logger.info(`User left conversation ${bookingId}`);
-  });
-
-  socket.on("disconnect", () => {
-    logger.info(`User disconnected: ${socket.id}`);
-  });
-});
+// Setup Socket.io with authentication
+io.use(socketAuth);
+handleSocketConnection(io);
 
 // Attach io to req for controllers
 app.use((req, res, next) => {

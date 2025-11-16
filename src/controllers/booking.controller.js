@@ -5,6 +5,7 @@ import {
   getBookingById as getBookingByIdService,
   getBookings as getBookingsService,
   cancelBooking as cancelBookingService,
+  markAsNoShow as markAsNoShowService,
   confirmBooking as confirmBookingService,
   updateBooking as updateBookingService,
 } from '../services/booking.service.js';
@@ -35,6 +36,12 @@ export const getBooking = asyncHandler(async (req, res) => {
 export const cancelBooking = asyncHandler(async (req, res) => {
   const booking = await cancelBookingService(req.params.id);
   res.status(200).json({ success: true, message: 'Hủy booking thành công!', data: booking });
+});
+
+export const markAsNoShow = asyncHandler(async (req, res) => {
+  const { checkInTime } = req.body;
+  const booking = await markAsNoShowService(req.params.id, checkInTime);
+  res.status(200).json({ success: true, message: 'Đánh dấu no-show thành công!', data: booking });
 });
 
 export const confirmBooking = asyncHandler(async (req, res) => {

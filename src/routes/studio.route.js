@@ -14,7 +14,7 @@ import {
 import { protect, authorize } from '../middlewares/auth.js';
 import { USER_ROLES } from '../utils/constants.js';
 import { validateStudioCreation, validateStudioUpdate, validateObjectId, sanitizeInput } from '../middlewares/validate.js';
-import { generalLimiter } from '../middlewares/rateLimiter.js';
+import { generalLimiter, searchLimiter } from '../middlewares/rateLimiter.js';
 import { upload, handleMulterError, FILE_SIZE_LIMITS, ALLOWED_FILE_TYPES } from '../middlewares/upload.js';
 
 const router = express.Router();
@@ -23,13 +23,14 @@ const router = express.Router();
 router.use(sanitizeInput);
 router.use(generalLimiter);
 
-router.get('/active', getActiveStudiosController);
+// Search routes with stricter rate limiting
+router.get('/active', searchLimiter, getActiveStudiosController);
 router.get('/:id', validateObjectId(), getStudio);
 
 router.use(protect);
 router.use(authorize(USER_ROLES.STAFF));
 
-router.get('/', getStudios);
+router.get('/', searchLimiter, getStudios);
 router.post('/', validateStudioCreation, createStudioController);
 router.patch('/:id', validateObjectId(), validateStudioUpdate, updateStudioController);
 router.patch('/:id/activate', validateObjectId(), activateStudio);

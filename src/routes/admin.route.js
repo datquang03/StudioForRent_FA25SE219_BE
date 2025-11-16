@@ -12,7 +12,7 @@ import {
 import { protect, authorize } from '../middlewares/auth.js';
 import { USER_ROLES } from '../utils/constants.js';
 import { validateObjectId, sanitizeInput } from '../middlewares/validate.js';
-import { adminLimiter } from '../middlewares/rateLimiter.js';
+import { adminLimiter, searchLimiter } from '../middlewares/rateLimiter.js';
 
 const router = express.Router();
 
@@ -23,12 +23,12 @@ router.use(adminLimiter);
 router.use(protect);
 router.use(authorize(USER_ROLES.ADMIN));
 
-router.get('/customers', getCustomers);
+router.get('/customers', searchLimiter, getCustomers);
 router.get('/customers/:id', validateObjectId(), getCustomer);
 router.patch('/customers/:id/ban', validateObjectId(), banCustomer);
 router.patch('/customers/:id/unban', validateObjectId(), unbanCustomer);
 
-router.get('/staff', getStaffList);
+router.get('/staff', searchLimiter, getStaffList);
 router.get('/staff/:id', validateObjectId(), getStaff);
 router.patch('/staff/:id/deactivate', validateObjectId(), deactivateStaff);
 router.patch('/staff/:id/activate', validateObjectId(), activateStaff);

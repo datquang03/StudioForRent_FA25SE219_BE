@@ -8,6 +8,7 @@ import { Studio, Promotion } from '../models/index.js';
 import { releaseEquipment } from './equipment.service.js';
 import { createAndSendNotification } from './notification.service.js';
 import { NOTIFICATION_TYPE } from '../utils/constants.js';
+import RoomPolicyService from './roomPolicy.service.js';
 // #endregion
 
 export const createBooking = async (data) => {
@@ -118,6 +119,61 @@ export const createBooking = async (data) => {
     }
     throw new NotFoundError('Studio not found for schedule');
   }
+
+  // Get global default policies (company-wide policies)
+  const defaultCancellationPolicy = await RoomPolicy.findOne({
+    type: 'CANCELLATION',
+    category: 'STANDARD',
+    isActive: true
+  });
+
+  const defaultNoShowPolicy = await RoomPolicy.findOne({
+    type: 'NO_SHOW',
+    category: 'STANDARD',
+    isActive: true
+  });
+
+  if (!defaultCancellationPolicy || !defaultNoShowPolicy) {
+    // rollback created resources
+    await Booking.findByIdAndDelete(booking._id);
+    try {
+      await freeScheduleService(schedule._id);
+    } catch (freeErr) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to free schedule during policy validation', freeErr);
+    }
+    throw new ValidationError('Default policies not configured. Please run seedPolicies.js first.');
+  }
+
+  // Create policy snapshots (immutable copy of global policies at booking time)
+  booking.policySnapshots = {
+    cancellation: {
+      _id: defaultCancellationPolicy._id,
+      name: defaultCancellationPolicy.name,
+      type: defaultCancellationPolicy.type,
+      category: defaultCancellationPolicy.category,
+      refundTiers: defaultCancellationPolicy.refundTiers,
+      isActive: defaultCancellationPolicy.isActive,
+      createdAt: defaultCancellationPolicy.createdAt
+    },
+    noShow: {
+      _id: defaultNoShowPolicy._id,
+      name: defaultNoShowPolicy.name,
+      type: defaultNoShowPolicy.type,
+      category: defaultNoShowPolicy.category,
+      noShowRules: defaultNoShowPolicy.noShowRules,
+      isActive: defaultNoShowPolicy.isActive,
+      createdAt: defaultNoShowPolicy.createdAt
+    }
+  };
+
+  // Initialize financials
+  booking.financials = {
+    originalAmount: 0,
+    refundAmount: 0,
+    chargeAmount: 0,
+    netAmount: 0
+  };
 
   const durationMs = new Date(schedule.endTime).getTime() - new Date(schedule.startTime).getTime();
   const hours = Math.round((durationMs / (1000 * 60 * 60)) * 100) / 100; // rounded to 2 decimals
@@ -328,11 +384,45 @@ export const updateBooking = async (bookingId, updateData, actorId, actorRole) =
 };
 
 export const cancelBooking = async (bookingId) => {
-  const booking = await Booking.findById(bookingId);
+  const booking = await Booking.findById(bookingId).populate('scheduleId');
   if (!booking) throw new NotFoundError('Booking not found');
 
   if ([BOOKING_STATUS.CANCELLED, BOOKING_STATUS.COMPLETED].includes(booking.status)) {
     throw new ConflictError('Booking cannot be cancelled');
+  }
+
+  // Calculate refund using policy snapshot
+  let refundResult = null;
+  if (booking.policySnapshots?.cancellation && booking.scheduleId) {
+    try {
+      refundResult = RoomPolicyService.calculateRefund(
+        booking.policySnapshots.cancellation,
+        new Date(booking.scheduleId.startTime),
+        new Date(), // cancellation time = now
+        booking.finalAmount
+      );
+
+      // Update financials
+      booking.financials.originalAmount = booking.finalAmount;
+      booking.financials.refundAmount = refundResult.refundAmount;
+      booking.financials.netAmount = booking.finalAmount - refundResult.refundAmount;
+
+      // Add cancellation event
+      booking.events.push({
+        type: 'CANCELLED',
+        timestamp: new Date(),
+        details: {
+          refundPercentage: refundResult.refundPercentage,
+          tier: refundResult.tier,
+          hoursBeforeBooking: refundResult.hoursBeforeBooking
+        },
+        amount: refundResult.refundAmount
+      });
+
+    } catch (policyError) {
+      // Log policy calculation error but don't block cancellation
+      console.error('Failed to calculate refund:', policyError);
+    }
   }
 
   booking.status = BOOKING_STATUS.CANCELLED;
@@ -368,6 +458,84 @@ export const cancelBooking = async (bookingId) => {
   return booking;
 };
 
+export const markAsNoShow = async (bookingId, checkInTime = null) => {
+  const booking = await Booking.findById(bookingId).populate('scheduleId');
+  if (!booking) throw new NotFoundError('Booking not found');
+
+  if (booking.status !== BOOKING_STATUS.CONFIRMED) {
+    throw new ConflictError('Only confirmed bookings can be marked as no-show');
+  }
+
+  // Calculate no-show charge using policy snapshot
+  let chargeResult = null;
+  if (booking.policySnapshots?.noShow && booking.scheduleId) {
+    try {
+      // Count previous no-shows for this user (simplified - in real app might need more complex logic)
+      const previousNoShows = await Booking.countDocuments({
+        userId: booking.userId,
+        'events.type': 'NO_SHOW',
+        _id: { $ne: booking._id }
+      });
+
+      chargeResult = RoomPolicyService.calculateNoShowCharge(
+        booking.policySnapshots.noShow,
+        new Date(booking.scheduleId.startTime),
+        checkInTime ? new Date(checkInTime) : null,
+        booking.finalAmount,
+        previousNoShows
+      );
+
+      // Update financials
+      booking.financials.originalAmount = booking.finalAmount;
+      booking.financials.chargeAmount = chargeResult.chargeAmount;
+      booking.financials.netAmount = chargeResult.chargeAmount; // Amount to charge
+
+      // Add no-show event
+      booking.events.push({
+        type: 'NO_SHOW',
+        timestamp: new Date(),
+        details: {
+          chargeType: chargeResult.chargeType,
+          chargePercentage: chargeResult.chargePercentage,
+          minutesLate: chargeResult.minutesLate,
+          previousNoShowCount: chargeResult.previousNoShowCount,
+          forgiven: chargeResult.forgiven,
+          isNoShow: chargeResult.isNoShow
+        },
+        amount: chargeResult.chargeAmount
+      });
+
+    } catch (policyError) {
+      // Log policy calculation error but don't block no-show marking
+      console.error('Failed to calculate no-show charge:', policyError);
+    }
+  }
+
+  booking.status = BOOKING_STATUS.COMPLETED; // Mark as completed with no-show
+  await booking.save();
+
+  // Send notification about no-show
+  try {
+    const chargeText = chargeResult?.chargeAmount > 0
+      ? `Bạn sẽ bị tính phí ${chargeResult.chargeAmount.toLocaleString('vi-VN')} VND do no-show.`
+      : 'Không có phí no-show được áp dụng.';
+
+    await createAndSendNotification(
+      booking.userId,
+      NOTIFICATION_TYPE.WARNING,
+      'No-show được ghi nhận',
+      `Booking của bạn đã được đánh dấu là no-show. ${chargeText}`,
+      true, // Send email
+      null, // io
+      booking._id
+    );
+  } catch (notifyErr) {
+    console.error('Failed to send no-show notification:', notifyErr);
+  }
+
+  return booking;
+};
+
 export const confirmBooking = async (bookingId) => {
   const booking = await Booking.findById(bookingId);
   if (!booking) throw new NotFoundError('Booking not found');
@@ -398,5 +566,6 @@ export default {
   getBookingById,
   getBookings,
   cancelBooking,
+  markAsNoShow,
   confirmBooking,
 };
