@@ -160,15 +160,28 @@ export const toggleCustomerActive = async (userId, isActive) => {
 // #endregion
 
 // #region Staff Management (Admin)
-export const getAllStaff = async ({ page = 1, limit = 10, position, isActive }) => {
+export const getAllStaff = async ({ page = 1, limit = 10, position, isActive, search }) => {
   // Validate and sanitize pagination
   const safePage = Math.max(parseInt(page) || 1, 1);
   const safeLimit = Math.min(Math.max(parseInt(limit) || 10, 1), 100);
-  
+
+  // Validate and sanitize search (prevent ReDoS)
+  const safeSearch = search && search.length > 100 ? search.substring(0, 100) : search;
+
   const query = { role: { $in: ['staff', 'admin'] } };
 
   if (isActive !== undefined) {
     query.isActive = isActive;
+  }
+
+  // Search by username, email, or fullName (escape regex để tránh injection)
+  if (safeSearch) {
+    const escapedSearch = escapeRegex(safeSearch);
+    query.$or = [
+      { username: { $regex: escapedSearch, $options: 'i' } },
+      { email: { $regex: escapedSearch, $options: 'i' } },
+      { fullName: { $regex: escapedSearch, $options: 'i' } },
+    ];
   }
 
   const skip = (safePage - 1) * safeLimit;

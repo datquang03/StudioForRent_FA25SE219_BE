@@ -13,7 +13,7 @@ import {
 import { protect, authorize } from '../middlewares/auth.js';
 import { USER_ROLES } from '../utils/constants.js';
 import { validateEquipmentCreation, validateEquipmentUpdate, validateMaintenanceQuantity, validateObjectId, sanitizeInput } from '../middlewares/validate.js';
-import { generalLimiter } from '../middlewares/rateLimiter.js';
+import { generalLimiter, searchLimiter } from '../middlewares/rateLimiter.js';
 import { upload, handleMulterError, FILE_SIZE_LIMITS, ALLOWED_FILE_TYPES } from '../middlewares/upload.js';
 
 const router = express.Router();
@@ -23,7 +23,7 @@ router.use(sanitizeInput);
 router.use(generalLimiter);
 
 // PUBLIC ROUTES
-router.get('/available', getAvailableEquipmentList);
+router.get('/available', searchLimiter, getAvailableEquipmentList);
 router.get('/available/:id', validateObjectId(), getAvailableEquipmentDetailController);
 
 // PROTECTED ROUTES
@@ -32,7 +32,7 @@ router.use(authorize(USER_ROLES.STAFF));
 
 // Collection routes
 router.route('/')
-  .get(getEquipmentList)
+  .get(searchLimiter, getEquipmentList)
   .post(validateEquipmentCreation, createEquipmentController);
 
 // Specific actions (must be before /:id)

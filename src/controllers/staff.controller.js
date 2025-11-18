@@ -43,7 +43,7 @@ export const uploadAvatar = asyncHandler(async (req, res) => {
   }
 
   const userId = req.user._id;
-  const result = await uploadImage(req.file.buffer, {
+  const result = await uploadImage(req.file, {
     folder: `studio-rental/users/${userId}/avatar`,
     public_id: `avatar_${Date.now()}`
   });

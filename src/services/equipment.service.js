@@ -334,7 +334,7 @@ export const checkEquipmentAvailability = async (equipmentId, requiredQty) => {
  * Reserve equipment (giảm availableQty, tăng inUseQty khi tạo booking)
  * Uses atomic operation to prevent race conditions
  */
-export const reserveEquipment = async (equipmentId, quantity) => {
+export const reserveEquipment = async (equipmentId, quantity, session = null) => {
   // Atomic operation: check and update in single query
   const equipment = await Equipment.findOneAndUpdate(
     {
@@ -347,7 +347,7 @@ export const reserveEquipment = async (equipmentId, quantity) => {
         inUseQty: quantity,
       },
     },
-    { new: true, runValidators: true }
+    { new: true, runValidators: true, session }
   );
 
   if (!equipment) {
@@ -372,7 +372,7 @@ export const reserveEquipment = async (equipmentId, quantity) => {
  * Release equipment (tăng availableQty, giảm inUseQty khi hủy booking hoặc hoàn thành)
  * Uses atomic operation to prevent race conditions
  */
-export const releaseEquipment = async (equipmentId, quantity) => {
+export const releaseEquipment = async (equipmentId, quantity, session = null) => {
   // Atomic operation: check and update in single query
   const equipment = await Equipment.findOneAndUpdate(
     {
@@ -385,7 +385,7 @@ export const releaseEquipment = async (equipmentId, quantity) => {
         inUseQty: -quantity,
       },
     },
-    { new: true, runValidators: true }
+    { new: true, runValidators: true, session }
   );
 
   if (!equipment) {

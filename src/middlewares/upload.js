@@ -1,5 +1,6 @@
 import multer from 'multer';
 import path from 'path';
+import fs from 'fs';
 import { ValidationError } from '../utils/errors.js';
 
 // File size limits (in bytes)
@@ -18,8 +19,23 @@ export const ALLOWED_FILE_TYPES = {
   VIDEOS: ['video/mp4', 'video/avi', 'video/mov', 'video/quicktime']
 };
 
-// Configure multer storage (memory storage for Cloudinary)
-const storage = multer.memoryStorage();
+// Configure multer storage (disk storage to avoid large memory usage)
+const uploadTempDir = path.join(process.cwd(), 'uploads', 'temp');
+// Ensure directory exists
+if (!fs.existsSync(uploadTempDir)) {
+  fs.mkdirSync(uploadTempDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadTempDir);
+  },
+  filename: function (req, file, cb) {
+    const ext = path.extname(file.originalname);
+    const baseName = path.basename(file.originalname, ext).replace(/\s+/g, '_');
+    cb(null, `${baseName}_${Date.now()}${ext}`);
+  }
+});
 
 // File filter function
 const createFileFilter = (allowedTypes, maxSize) => {

@@ -12,7 +12,7 @@ import {
   forgotPasswordController,
 } from '../controllers/auth.controller.js';
 import { protect, authorize } from '../middlewares/auth.js';
-import { authLimiter, strictLoginLimiter, verificationLimiter, passwordResetLimiter } from '../middlewares/rateLimiter.js';
+import { authLimiter, strictLoginLimiter, verificationLimiter, passwordResetLimiter, userLimiter } from '../middlewares/rateLimiter.js';
 import { 
   validateRegistration,
   validateStaffRegistration,
@@ -38,8 +38,8 @@ router.post('/logout', validateRefreshToken, logoutController);
 router.post('/forgot-password', passwordResetLimiter, forgotPasswordController);
 
 // Protected routes
-router.get('/me', protect, getMeController);
-router.post('/change-password', protect, passwordResetLimiter, changePasswordController);
-router.post('/register/staff', protect, authorize(USER_ROLES.ADMIN), validateStaffRegistration, createStaffController);
+router.get('/me', protect, userLimiter, getMeController);
+router.post('/change-password', protect, userLimiter, passwordResetLimiter, changePasswordController);
+router.post('/register/staff', protect, authorize(USER_ROLES.ADMIN), userLimiter, adminLimiter, validateStaffRegistration, createStaffController);
 
 export default router;

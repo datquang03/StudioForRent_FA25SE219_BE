@@ -174,7 +174,7 @@ export const uploadStudioMedia = asyncHandler(async (req, res) => {
 
   // Handle video
   if (req.files.video && req.files.video.length > 0) {
-    const videoResult = await uploadVideo(req.files.video[0].buffer, {
+    const videoResult = await uploadVideo(req.files.video[0], {
       folder: `studio-rental/studios/${id}/videos`
     });
     uploadedMedia.video = videoResult;

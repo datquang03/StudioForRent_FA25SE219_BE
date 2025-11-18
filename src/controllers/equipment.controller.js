@@ -169,7 +169,7 @@ export const uploadEquipmentImage = asyncHandler(async (req, res) => {
     throw new Error('Không có file hình ảnh nào được cung cấp!');
   }
 
-  const imageUrl = await uploadImage(req.file.buffer, {
+  const imageUrl = await uploadImage(req.file, {
     folder: `studio-rental/equipment/${id}`
   });
 

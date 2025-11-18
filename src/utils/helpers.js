@@ -1,4 +1,5 @@
 import { TIME_CONSTANTS } from "./constants.js";
+import logger from "./logger.js";
 
 /**
  * Sinh mã xác thực ngẫu nhiên
@@ -154,3 +155,43 @@ export const groupBy = (array, key) => {
 export const escapeRegex = (string) => {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 };
+
+//#endregion
+
+//#region Environment Utilities
+/**
+ * ============================================
+ * ENVIRONMENT VALIDATION UTILITIES
+ * Validate required environment variables
+ * ============================================
+ */
+
+/**
+ * Validate required environment variables
+ * @param {string[]} requiredVars - Array of required environment variable names
+ * @returns {boolean} - true if all variables are present
+ */
+export const validateEnvironmentVariables = (requiredVars) => {
+  const missingVars = requiredVars.filter(varName => !process.env[varName]);
+
+  if (missingVars.length > 0) {
+    logger.error(`Missing required environment variables: ${missingVars.join(', ')}`);
+    logger.error('Please create a .env file with these variables');
+    return false;
+  }
+
+  logger.info('Environment variables validation passed');
+  return true;
+};
+
+/**
+ * Get environment variable with fallback
+ * @param {string} key - Environment variable key
+ * @param {*} fallback - Fallback value
+ * @returns {*} - Environment variable value or fallback
+ */
+export const getEnvVar = (key, fallback = null) => {
+  return process.env[key] || fallback;
+};
+
+//#endregion

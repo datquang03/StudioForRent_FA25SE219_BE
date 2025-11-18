@@ -9,7 +9,7 @@ import {
 } from '../controllers/message.controller.js';
 import { protect } from '../middlewares/auth.js';
 import { sanitizeInput, validateObjectId } from '../middlewares/validate.js';
-import { generalLimiter } from '../middlewares/rateLimiter.js';
+import { generalLimiter, userLimiter, messageLimiter } from '../middlewares/rateLimiter.js';
 // #endregion
 
 const router = express.Router();
