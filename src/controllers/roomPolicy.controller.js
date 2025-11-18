@@ -54,6 +54,18 @@ class RoomPolicyController {
   });
 
   /**
+   * Get all active policies grouped by type
+   */
+  getAllActivePolicies = asyncHandler(async (req, res) => {
+    const grouped = await RoomPolicyService.getAllActivePolicies();
+
+    res.json({
+      success: true,
+      data: grouped,
+    });
+  });
+
+  /**
    * Get all policies with pagination and search
    */
   getAllPolicies = asyncHandler(async (req, res) => {

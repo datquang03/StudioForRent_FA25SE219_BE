@@ -34,12 +34,17 @@ export const createSchedule = async (data, session = null) => {
 
     let schedule;
     if (session) {
-      const [doc] = await Schedule.create([{
-        studioId,
-        startTime: s,
-        endTime: e,
-        status: data.status || SCHEDULE_STATUS.AVAILABLE,
-      }], { session });
+      const [doc] = await Schedule.create(
+        [
+          {
+            studioId,
+            startTime: s,
+            endTime: e,
+            status: data.status || SCHEDULE_STATUS.AVAILABLE,
+          },
+        ],
+        { session },
+      );
       schedule = doc;
     } else {
       schedule = await Schedule.create({
@@ -49,11 +54,6 @@ export const createSchedule = async (data, session = null) => {
         status: data.status || SCHEDULE_STATUS.AVAILABLE,
       });
     }
-    studioId,
-    startTime: s,
-    endTime: e,
-    status: data.status || SCHEDULE_STATUS.AVAILABLE,
-  });
 
   return schedule;
 };

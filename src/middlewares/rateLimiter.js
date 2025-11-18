@@ -1,7 +1,6 @@
 //#region Imports
-import rateLimit from "express-rate-limit";
-import logger from "../utils/logger.js";
-import { USER_ROLES } from "../utils/constants.js";
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import logger from '../utils/logger.js';
 //#endregion
 
 /**
@@ -18,6 +17,7 @@ import { USER_ROLES } from "../utils/constants.js";
 const createRateLimiter = (options) => {
   return rateLimit({
     ...options,
+    keyGenerator: ipKeyGenerator, // Use the ipKeyGenerator to handle IPv6 addresses correctly
     handler: (req, res) => {
       const userId = req.user?._id || 'anonymous';
       const userRole = req.user?.role || 'guest';
@@ -40,9 +40,9 @@ const createRateLimiter = (options) => {
 const createPerUserLimiter = (options) => {
   return rateLimit({
     ...options,
-    keyGenerator: (req) => {
+    keyGenerator: (req, res) => {
       const userId = req.user?._id?.toString() || 'anonymous';
-      const ip = req.ip || req.connection.remoteAddress;
+      const ip = ipKeyGenerator(req, res); // Use ipKeyGenerator to handle IPv6 addresses correctly
       return `${userId}:${ip}`; // Combine user ID + IP
     },
     handler: (req, res) => {
@@ -209,17 +209,3 @@ export const searchLimiter = createPerUserLimiter({
   legacyHeaders: false,
 });
 //#endregion
-
-export default {
-  authLimiter,
-  verificationLimiter,
-  generalLimiter,
-  passwordResetLimiter,
-  adminLimiter,
-  strictLoginLimiter,
-  userLimiter,
-  uploadLimiter,
-  bookingLimiter,
-  messageLimiter,
-  searchLimiter,
-};

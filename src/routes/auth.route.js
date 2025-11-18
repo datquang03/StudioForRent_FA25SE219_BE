@@ -12,7 +12,7 @@ import {
   forgotPasswordController,
 } from '../controllers/auth.controller.js';
 import { protect, authorize } from '../middlewares/auth.js';
-import { authLimiter, strictLoginLimiter, verificationLimiter, passwordResetLimiter, userLimiter } from '../middlewares/rateLimiter.js';
+import { authLimiter, strictLoginLimiter, verificationLimiter, passwordResetLimiter, userLimiter, adminLimiter } from '../middlewares/rateLimiter.js';
 import { 
   validateRegistration,
   validateStaffRegistration,

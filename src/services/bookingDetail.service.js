@@ -40,25 +40,20 @@ export const createBookingDetails = async (bookingId, detailsArray, session = nu
         const pricePerUnit = equipment.pricePerHour || 0;
         const subtotal = pricePerUnit * quantity;
 
-        const [detail] = await BookingDetail.create([
-          {
-            bookingId,
-            detailType,
-            equipmentId,
-            description: equipment.name,
-            quantity,
-            pricePerUnit,
-            subtotal,
-          }
-        ], { session });
-          bookingId,
-          detailType,
-          equipmentId,
-          description: equipment.name,
-          quantity,
-          pricePerUnit,
-          subtotal,
-        });
+        const [detail] = await BookingDetail.create(
+          [
+            {
+              bookingId,
+              detailType,
+              equipmentId,
+              description: equipment.name,
+              quantity,
+              pricePerUnit,
+              subtotal,
+            },
+          ],
+          { session },
+        );
 
         created.push(detail);
         total += subtotal;
@@ -76,25 +71,20 @@ export const createBookingDetails = async (bookingId, detailsArray, session = nu
         const pricePerUnit = svc.pricePerUse || 0;
         const subtotal = pricePerUnit * quantity;
 
-        const [detail] = await BookingDetail.create([
-          {
-            bookingId,
-            detailType,
-            extraServiceId,
-            description: svc.name,
-            quantity,
-            pricePerUnit,
-            subtotal,
-          }
-        ], { session });
-          bookingId,
-          detailType,
-          extraServiceId,
-          description: svc.name,
-          quantity,
-          pricePerUnit,
-          subtotal,
-        });
+        const [detail] = await BookingDetail.create(
+          [
+            {
+              bookingId,
+              detailType,
+              extraServiceId,
+              description: svc.name,
+              quantity,
+              pricePerUnit,
+              subtotal,
+            },
+          ],
+          { session },
+        );
 
         created.push(detail);
         total += subtotal;
@@ -133,15 +123,6 @@ export const createBookingDetails = async (bookingId, detailsArray, session = nu
   }
 };
 
-export default {
-  createBookingDetails,
-};
-
-/**
- * Remove booking details by IDs for a booking and release equipment
- * detailIds: array of BookingDetail _id
- * Returns { removedTotal }
- */
 export const removeBookingDetails = async (bookingId, detailIds, session = null) => {
   if (!bookingId) throw new ValidationError('Missing bookingId');
   if (!Array.isArray(detailIds) || detailIds.length === 0) {
@@ -177,5 +158,10 @@ export const removeBookingDetails = async (bookingId, detailIds, session = null)
   }
 
   return { removedTotal };
+};
+
+export default {
+  createBookingDetails,
+  removeBookingDetails,
 };
 

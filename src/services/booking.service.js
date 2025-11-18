@@ -31,11 +31,6 @@ export const createBooking = async (data) => {
           throw new ConflictError('Schedule is not available');
         }
       } else {
-    if (!schedule) throw new NotFoundError('Schedule not found');
-    if (![SCHEDULE_STATUS.AVAILABLE, BOOKING_STATUS.PENDING].includes(schedule.status)) {
-      throw new ConflictError('Schedule is not available');
-    }
-  } else {
     // Expect schedule details: studioId, startTime, endTime
     const { studioId, startTime, endTime } = data;
     if (!studioId || !startTime || !endTime) {
@@ -494,78 +489,87 @@ export const updateBooking = async (bookingId, updateData, actorId, actorRole) =
 };
 
 export const cancelBooking = async (bookingId) => {
-  const booking = await Booking.findById(bookingId).populate('scheduleId');
-  if (!booking) throw new NotFoundError('Booking not found');
+  const session = await mongoose.startSession();
+  try {
+    return await session.withTransaction(async () => {
+      const booking = await Booking.findById(bookingId).session(session);
+      if (!booking) throw new NotFoundError('Booking not found');
 
-  if ([BOOKING_STATUS.CANCELLED, BOOKING_STATUS.COMPLETED].includes(booking.status)) {
-    throw new ConflictError('Booking cannot be cancelled');
-  }
+      if ([BOOKING_STATUS.CANCELLED, BOOKING_STATUS.COMPLETED].includes(booking.status)) {
+        throw new ConflictError('Booking cannot be cancelled');
+      }
 
-  // Calculate refund using policy snapshot
-  let refundResult = null;
-  if (booking.policySnapshots?.cancellation && booking.scheduleId) {
-    try {
-      refundResult = RoomPolicyService.calculateRefund(
-        booking.policySnapshots.cancellation,
-        new Date(booking.scheduleId.startTime),
-        new Date(), // cancellation time = now
-        booking.finalAmount
-      );
-
-      // Update financials
-      booking.financials.originalAmount = booking.finalAmount;
-      booking.financials.refundAmount = refundResult.refundAmount;
-      booking.financials.netAmount = booking.finalAmount - refundResult.refundAmount;
-
-      // Add cancellation event
-      booking.events.push({
-        type: 'CANCELLED',
-        timestamp: new Date(),
-        details: {
-          refundPercentage: refundResult.refundPercentage,
-          tier: refundResult.tier,
-          hoursBeforeBooking: refundResult.hoursBeforeBooking
-        },
-        amount: refundResult.refundAmount
-      });
-
-    } catch (policyError) {
-      // Log policy calculation error but don't block cancellation
-      console.error('Failed to calculate refund:', policyError);
-    }
-  }
-
-  booking.status = BOOKING_STATUS.CANCELLED;
-  await booking.save();
-
-  // free schedule if linked
-  if (booking.scheduleId) {
-    const schedule = await Schedule.findById(booking.scheduleId);
-    if (schedule) {
-      schedule.status = 'available';
-      schedule.bookingId = null;
-      await schedule.save();
-    }
-
-    // Release reserved equipment from booking details (if any)
-    try {
-      const details = await BookingDetail.find({ bookingId: booking._id, detailType: 'equipment' });
-      for (const d of details) {
+      // Calculate refund using policy snapshot
+      let refundResult = null;
+      if (booking.policySnapshots?.cancellation && booking.scheduleId) {
         try {
-          await releaseEquipment(d.equipmentId, d.quantity);
-        } catch (releaseErr) {
-          // Log and continue; do not block cancellation if release fails
-          // eslint-disable-next-line no-console
-          console.error('Failed to release equipment on cancellation', releaseErr);
+          const schedule = await Schedule.findById(booking.scheduleId).session(session);
+          refundResult = RoomPolicyService.calculateRefund(
+            booking.policySnapshots.cancellation,
+            new Date(schedule.startTime),
+            new Date(), // cancellation time = now
+            booking.finalAmount
+          );
+
+          // Update financials
+          booking.financials.originalAmount = booking.finalAmount;
+          booking.financials.refundAmount = refundResult.refundAmount;
+          booking.financials.netAmount = booking.finalAmount - refundResult.refundAmount;
+
+          // Add cancellation event
+          booking.events.push({
+            type: 'CANCELLED',
+            timestamp: new Date(),
+            details: {
+              refundPercentage: refundResult.refundPercentage,
+              tier: refundResult.tier,
+              hoursBeforeBooking: refundResult.hoursBeforeBooking
+            },
+            amount: refundResult.refundAmount
+          });
+
+        } catch (policyError) {
+          // Log policy calculation error but don't block cancellation
+          console.error('Failed to calculate refund:', policyError);
         }
       }
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to query booking details for release', err);
-    }
-  }
 
-  return booking;
+      booking.status = BOOKING_STATUS.CANCELLED;
+      await booking.save({ session });
+
+      // free schedule if linked
+      if (booking.scheduleId) {
+        try {
+          await freeScheduleService(booking.scheduleId, session);
+        } catch (freeErr) {
+          // eslint-disable-next-line no-console
+          console.error('Failed to free schedule on cancellation', freeErr);
+          throw freeErr;
+        }
+
+        // Release reserved equipment from booking details (if any)
+        try {
+          const details = await BookingDetail.find({ bookingId: booking._id, detailType: 'equipment' }).session(session);
+          for (const d of details) {
+            try {
+              await releaseEquipment(d.equipmentId, d.quantity, session);
+            } catch (releaseErr) {
+              // Log and continue; do not block cancellation if release fails
+              // eslint-disable-next-line no-console
+              console.error('Failed to release equipment on cancellation', releaseErr);
+            }
+          }
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error('Failed to query booking details for release', err);
+        }
+      }
+
+      return booking;
+    });
+  } finally {
+    session.endSession();
+  }
 };
 
 export const markAsNoShow = async (bookingId, checkInTime = null) => {
@@ -675,6 +679,7 @@ export default {
   createBooking,
   getBookingById,
   getBookings,
+  updateBooking,
   cancelBooking,
   markAsNoShow,
   confirmBooking,
