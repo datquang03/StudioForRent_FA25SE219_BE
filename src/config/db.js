@@ -14,6 +14,11 @@ export const connectDB = async () => {
         maxPoolSize: 10, // Connection pool
         serverSelectionTimeoutMS: 5000,
         socketTimeoutMS: 45000,
+        // Stronger write/read concerns for majority durability in replica sets
+        // This ensures that writes are acknowledged by the majority of voting nodes
+        // and read operations use a majority-stable view.
+        writeConcern: { w: 'majority', wtimeout: 10000 },
+        readConcern: { level: 'majority' },
       });
 
       logger.success("Database connected successfully");

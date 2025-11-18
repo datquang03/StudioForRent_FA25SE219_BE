@@ -4,7 +4,7 @@ import { NotFoundError, ValidationError, ConflictError } from '../utils/errors.j
 import { SCHEDULE_STATUS } from '../utils/constants.js';
 // #endregion
 
-export const createSchedule = async (data) => {
+export const createSchedule = async (data, session = null) => {
   const { studioId, startTime, endTime } = data;
 
   if (!studioId || !startTime || !endTime) {
@@ -32,7 +32,23 @@ export const createSchedule = async (data) => {
     throw new ConflictError('Schedule overlaps or is too close to an existing slot (minimum gap 30 minutes)');
   }
 
-  const schedule = await Schedule.create({
+    let schedule;
+    if (session) {
+      const [doc] = await Schedule.create([{
+        studioId,
+        startTime: s,
+        endTime: e,
+        status: data.status || SCHEDULE_STATUS.AVAILABLE,
+      }], { session });
+      schedule = doc;
+    } else {
+      schedule = await Schedule.create({
+        studioId,
+        startTime: s,
+        endTime: e,
+        status: data.status || SCHEDULE_STATUS.AVAILABLE,
+      });
+    }
     studioId,
     startTime: s,
     endTime: e,
@@ -65,8 +81,10 @@ export const getSchedules = async ({ studioId, status, page = 1, limit = 20 } = 
   return { items, total, page: safePage, pages: Math.ceil(total / safeLimit) };
 };
 
-export const updateSchedule = async (id, updateData) => {
-  const schedule = await Schedule.findById(id);
+export const updateSchedule = async (id, updateData, session = null) => {
+  const query = Schedule.findById(id);
+  if (session) query.session(session);
+  const schedule = await query;
   if (!schedule) throw new NotFoundError('Schedule not found');
 
   const allowed = ['startTime', 'endTime', 'status'];
@@ -80,18 +98,20 @@ export const updateSchedule = async (id, updateData) => {
 
   // Enforce minimum gap when updating
   const MIN_GAP_MS = 30 * 60 * 1000;
-  const conflict = await Schedule.findOne({
+  const conflictQuery = Schedule.findOne({
     _id: { $ne: schedule._id },
     studioId: schedule.studioId,
     startTime: { $lt: new Date(schedule.endTime.getTime() + MIN_GAP_MS) },
     endTime: { $gt: new Date(schedule.startTime.getTime() - MIN_GAP_MS) },
   });
+  if (session) conflictQuery.session(session);
+  const conflict = await conflictQuery;
 
   if (conflict) {
     throw new ConflictError('Updated schedule would overlap or be too close to an existing slot (minimum gap 30 minutes)');
   }
 
-  await schedule.save();
+  await schedule.save({ session });
   return schedule;
 };
 
@@ -101,24 +121,28 @@ export const deleteSchedule = async (id) => {
   return schedule;
 };
 
-export const markScheduleBooked = async (scheduleId, bookingId) => {
-  const schedule = await Schedule.findById(scheduleId);
+export const markScheduleBooked = async (scheduleId, bookingId, session = null) => {
+  const query = Schedule.findById(scheduleId);
+  if (session) query.session(session);
+  const schedule = await query;
   if (!schedule) throw new NotFoundError('Schedule not found');
   if (schedule.status !== SCHEDULE_STATUS.AVAILABLE) {
     throw new ConflictError('Schedule is not available');
   }
   schedule.status = SCHEDULE_STATUS.BOOKED;
   schedule.bookingId = bookingId;
-  await schedule.save();
+  await schedule.save({ session });
   return schedule;
 };
 
-export const freeSchedule = async (scheduleId) => {
-  const schedule = await Schedule.findById(scheduleId);
+export const freeSchedule = async (scheduleId, session = null) => {
+  const query = Schedule.findById(scheduleId);
+  if (session) query.session(session);
+  const schedule = await query;
   if (!schedule) throw new NotFoundError('Schedule not found');
   schedule.status = SCHEDULE_STATUS.AVAILABLE;
   schedule.bookingId = null;
-  await schedule.save();
+  await schedule.save({ session });
   return schedule;
 };
 

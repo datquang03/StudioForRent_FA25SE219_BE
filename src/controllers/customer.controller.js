@@ -60,7 +60,7 @@ export const uploadAvatar = asyncHandler(async (req, res) => {
   const folder = `studio-rental/users/${userId}/avatar`;
 
   // Upload avatar to Cloudinary
-  const result = await uploadImage(req.file.buffer, {
+  const result = await uploadImage(req.file, {
     folder,
     public_id: `avatar_${Date.now()}`
   });

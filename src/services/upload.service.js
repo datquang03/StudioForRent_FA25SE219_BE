@@ -1,9 +1,10 @@
 import cloudinary from '../config/cloudinary.js';
 import { ValidationError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
+import fs from 'fs/promises';
 
 // Upload single image to Cloudinary
-export const uploadImage = async (fileBuffer, options = {}) => {
+export const uploadImage = async (fileOrBuffer, options = {}) => {
   try {
     const {
       folder = 'studio-rental',
@@ -25,15 +26,24 @@ export const uploadImage = async (fileBuffer, options = {}) => {
       uploadOptions.public_id = public_id;
     }
 
-    const result = await new Promise((resolve, reject) => {
-      cloudinary.uploader.upload_stream(
-        uploadOptions,
-        (error, result) => {
-          if (error) reject(error);
-          else resolve(result);
-        }
-      ).end(fileBuffer);
-    });
+    let result;
+    if (fileOrBuffer && fileOrBuffer.path) {
+      // Disk file path
+      result = await cloudinary.uploader.upload(fileOrBuffer.path, uploadOptions);
+      // Clean up temp file
+      try { await fs.unlink(fileOrBuffer.path); } catch (err) { logger.warn(`Failed to delete temp file: ${fileOrBuffer.path}`); }
+    } else {
+      const fileBuffer = fileOrBuffer;
+      result = await new Promise((resolve, reject) => {
+        cloudinary.uploader.upload_stream(
+          uploadOptions,
+          (error, result) => {
+            if (error) reject(error);
+            else resolve(result);
+          }
+        ).end(fileBuffer);
+      });
+    }
 
     logger.info(`Image uploaded successfully: ${result.public_id}`);
     return {
@@ -51,7 +61,7 @@ export const uploadImage = async (fileBuffer, options = {}) => {
 };
 
 // Upload video to Cloudinary
-export const uploadVideo = async (fileBuffer, options = {}) => {
+export const uploadVideo = async (fileOrBuffer, options = {}) => {
   try {
     const {
       folder = 'studio-rental/videos',
@@ -73,15 +83,22 @@ export const uploadVideo = async (fileBuffer, options = {}) => {
       uploadOptions.public_id = public_id;
     }
 
-    const result = await new Promise((resolve, reject) => {
-      cloudinary.uploader.upload_stream(
-        uploadOptions,
-        (error, result) => {
-          if (error) reject(error);
-          else resolve(result);
-        }
-      ).end(fileBuffer);
-    });
+    let result;
+    if (fileOrBuffer && fileOrBuffer.path) {
+      result = await cloudinary.uploader.upload(fileOrBuffer.path, uploadOptions);
+      try { await fs.unlink(fileOrBuffer.path); } catch (err) { logger.warn(`Failed to delete temp file: ${fileOrBuffer.path}`); }
+    } else {
+      const fileBuffer = fileOrBuffer;
+      result = await new Promise((resolve, reject) => {
+        cloudinary.uploader.upload_stream(
+          uploadOptions,
+          (error, result) => {
+            if (error) reject(error);
+            else resolve(result);
+          }
+        ).end(fileBuffer);
+      });
+    }
 
     // Check video duration (should be under 30 seconds)
     if (result.duration && result.duration > 30) {
@@ -110,7 +127,7 @@ export const uploadVideo = async (fileBuffer, options = {}) => {
 export const uploadMultipleImages = async (files, options = {}) => {
   try {
     const uploadPromises = files.map(file =>
-      uploadImage(file.buffer, options)
+      uploadImage(file, options)
     );
 
     const results = await Promise.all(uploadPromises);

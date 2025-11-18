@@ -10,7 +10,7 @@ import { reserveEquipment, releaseEquipment } from './equipment.service.js';
  * detailsArray: [{ detailType, equipmentId?, extraServiceId?, quantity }]
  * Returns { details: [BookingDetail], total }
  */
-export const createBookingDetails = async (bookingId, detailsArray) => {
+export const createBookingDetails = async (bookingId, detailsArray, session = null) => {
   if (!bookingId) throw new ValidationError('Missing bookingId');
   if (!Array.isArray(detailsArray) || detailsArray.length === 0) {
     throw new ValidationError('detailsArray must be a non-empty array');
@@ -34,13 +34,23 @@ export const createBookingDetails = async (bookingId, detailsArray) => {
         if (!equipment) throw new NotFoundError('Equipment not found');
 
         // Reserve equipment (atomic)
-        await reserveEquipment(equipmentId, quantity);
+        await reserveEquipment(equipmentId, quantity, session);
         reserved.push({ equipmentId, quantity });
 
         const pricePerUnit = equipment.pricePerHour || 0;
         const subtotal = pricePerUnit * quantity;
 
-        const detail = await BookingDetail.create({
+        const [detail] = await BookingDetail.create([
+          {
+            bookingId,
+            detailType,
+            equipmentId,
+            description: equipment.name,
+            quantity,
+            pricePerUnit,
+            subtotal,
+          }
+        ], { session });
           bookingId,
           detailType,
           equipmentId,
@@ -66,7 +76,17 @@ export const createBookingDetails = async (bookingId, detailsArray) => {
         const pricePerUnit = svc.pricePerUse || 0;
         const subtotal = pricePerUnit * quantity;
 
-        const detail = await BookingDetail.create({
+        const [detail] = await BookingDetail.create([
+          {
+            bookingId,
+            detailType,
+            extraServiceId,
+            description: svc.name,
+            quantity,
+            pricePerUnit,
+            subtotal,
+          }
+        ], { session });
           bookingId,
           detailType,
           extraServiceId,
@@ -88,8 +108,12 @@ export const createBookingDetails = async (bookingId, detailsArray) => {
     // Rollback: delete created details and release reserved equipment
     try {
       if (created.length > 0) {
-        const ids = created.map((d) => d._id);
-        await BookingDetail.deleteMany({ _id: { $in: ids } });
+          const ids = created.map((d) => d._id);
+          if (session) {
+            await BookingDetail.deleteMany({ _id: { $in: ids } }).session(session);
+          } else {
+            await BookingDetail.deleteMany({ _id: { $in: ids } });
+          }
       }
       for (const r of reserved) {
         try {
@@ -118,13 +142,15 @@ export default {
  * detailIds: array of BookingDetail _id
  * Returns { removedTotal }
  */
-export const removeBookingDetails = async (bookingId, detailIds) => {
+export const removeBookingDetails = async (bookingId, detailIds, session = null) => {
   if (!bookingId) throw new ValidationError('Missing bookingId');
   if (!Array.isArray(detailIds) || detailIds.length === 0) {
     throw new ValidationError('detailIds must be a non-empty array');
   }
 
-  const toRemove = await BookingDetail.find({ bookingId, _id: { $in: detailIds } });
+  const query = BookingDetail.find({ bookingId, _id: { $in: detailIds } });
+  if (session) query.session(session);
+  const toRemove = await query.lean();
   if (!toRemove || toRemove.length === 0) return { removedTotal: 0 };
 
   let removedTotal = 0;
@@ -133,7 +159,7 @@ export const removeBookingDetails = async (bookingId, detailIds) => {
     // If equipment, release reserved units
     if (d.detailType === 'equipment' && d.equipmentId) {
       try {
-        await releaseEquipment(d.equipmentId, d.quantity);
+        await releaseEquipment(d.equipmentId, d.quantity, session);
       } catch (err) {
         // log and continue
         // eslint-disable-next-line no-console
@@ -144,7 +170,11 @@ export const removeBookingDetails = async (bookingId, detailIds) => {
   }
 
   // Delete the details
-  await BookingDetail.deleteMany({ bookingId, _id: { $in: detailIds } });
+  if (session) {
+    await BookingDetail.deleteMany({ bookingId, _id: { $in: detailIds } }).session(session);
+  } else {
+    await BookingDetail.deleteMany({ bookingId, _id: { $in: detailIds } });
+  }
 
   return { removedTotal };
 };

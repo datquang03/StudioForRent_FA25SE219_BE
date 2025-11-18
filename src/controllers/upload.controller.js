@@ -21,7 +21,7 @@ export const uploadAvatarController = async (req, res) => {
     const userId = req.user.id;
     const folder = `studio-rental/users/${userId}/avatar`;
 
-    const result = await uploadImage(req.file.buffer, {
+    const result = await uploadImage(req.file, {
       folder,
       public_id: `avatar_${Date.now()}`
     });
@@ -51,7 +51,7 @@ export const uploadImageController = async (req, res) => {
 
     const { folder = 'studio-rental/general' } = req.body;
 
-    const result = await uploadImage(req.file.buffer, { folder });
+    const result = await uploadImage(req.file, { folder });
 
     res.status(200).json({
       success: true,
@@ -78,7 +78,7 @@ export const uploadVideoController = async (req, res) => {
 
     const { folder = 'studio-rental/videos' } = req.body;
 
-    const result = await uploadVideo(req.file.buffer, { folder });
+    const result = await uploadVideo(req.file, { folder });
 
     res.status(200).json({
       success: true,
@@ -142,7 +142,7 @@ export const uploadStudioMediaController = async (req, res) => {
 
     // Handle video
     if (req.files.video && req.files.video.length > 0) {
-      const videoResult = await uploadVideo(req.files.video[0].buffer, {
+      const videoResult = await uploadVideo(req.files.video[0], {
         folder: 'studio-rental/studios/videos'
       });
       uploadedMedia.video = videoResult;
@@ -176,7 +176,7 @@ export const uploadEquipmentImageController = async (req, res) => {
     const { equipmentId } = req.params;
     const folder = `studio-rental/equipment/${equipmentId}`;
 
-    const result = await uploadImage(req.file.buffer, {
+    const result = await uploadImage(req.file, {
       folder,
       public_id: `equipment_${equipmentId}_${Date.now()}`
     });
