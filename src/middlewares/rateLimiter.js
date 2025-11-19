@@ -1,5 +1,5 @@
 //#region Imports
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import logger from "../utils/logger.js";
 import { USER_ROLES } from "../utils/constants.js";
 //#endregion
@@ -42,7 +42,7 @@ const createPerUserLimiter = (options) => {
     ...options,
     keyGenerator: (req) => {
       const userId = req.user?._id?.toString() || 'anonymous';
-      const ip = req.ip || req.connection.remoteAddress;
+      const ip = ipKeyGenerator(req); // Use IPv6-safe IP key generator
       return `${userId}:${ip}`; // Combine user ID + IP
     },
     handler: (req, res) => {
@@ -208,6 +208,19 @@ export const searchLimiter = createPerUserLimiter({
   standardHeaders: true,
   legacyHeaders: false,
 });
+
+/**
+ * Rate limiter cho AI operations (setDesign)
+ * Giới hạn: 5 AI requests / 15 phút / user
+ * Rất chặt để kiểm soát chi phí AI API
+ */
+export const aiLimiter = createPerUserLimiter({
+  windowMs: 15 * 60 * 1000, // 15 phút
+  max: 5, // Tối đa 5 AI requests per user per 15 minutes
+  message: "Quá nhiều yêu cầu AI. Vui lòng thử lại sau 15 phút!",
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 //#endregion
 
 export default {
@@ -222,4 +235,5 @@ export default {
   bookingLimiter,
   messageLimiter,
   searchLimiter,
+  aiLimiter,
 };

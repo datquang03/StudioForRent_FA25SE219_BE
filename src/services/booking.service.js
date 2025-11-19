@@ -22,7 +22,7 @@ export const createBooking = async (data) => {
     return await session.withTransaction(async () => {
       // Begin transactional scope
 
-  // If scheduleId provided, use existing schedule
+      // If scheduleId provided, use existing schedule
       if (data.scheduleId) {
         schedule = await Schedule.findById(data.scheduleId).session(session);
       
@@ -31,53 +31,48 @@ export const createBooking = async (data) => {
           throw new ConflictError('Schedule is not available');
         }
       } else {
-    if (!schedule) throw new NotFoundError('Schedule not found');
-    if (![SCHEDULE_STATUS.AVAILABLE, BOOKING_STATUS.PENDING].includes(schedule.status)) {
-      throw new ConflictError('Schedule is not available');
-    }
-  } else {
-    // Expect schedule details: studioId, startTime, endTime
-    const { studioId, startTime, endTime } = data;
-    if (!studioId || !startTime || !endTime) {
-      throw new ValidationError('Missing schedule info: studioId, startTime, endTime');
-    }
+        // Expect schedule details: studioId, startTime, endTime
+        const { studioId, startTime, endTime } = data;
+        if (!studioId || !startTime || !endTime) {
+          throw new ValidationError('Missing schedule info: studioId, startTime, endTime');
+        }
 
-    const s = new Date(startTime);
-    const e = new Date(endTime);
-    if (!(e > s)) throw new ValidationError('endTime must be greater than startTime');
-    // Pre-check for exact duplicate or overlapping schedules (respecting minimum gap)
-    const MIN_GAP_MS = 30 * 60 * 1000;
+        const s = new Date(startTime);
+        const e = new Date(endTime);
+        if (!(e > s)) throw new ValidationError('endTime must be greater than startTime');
+        // Pre-check for exact duplicate or overlapping schedules (respecting minimum gap)
+        const MIN_GAP_MS = 30 * 60 * 1000;
 
-    // Exact match
-      const exact = await Schedule.findOne({ studioId, startTime: s, endTime: e }).session(session);
-    if (exact) {
-      if (exact.status !== SCHEDULE_STATUS.AVAILABLE) {
-        throw new ConflictError('A schedule with the same time already exists and is not available');
+        // Exact match
+        const exact = await Schedule.findOne({ studioId, startTime: s, endTime: e }).session(session);
+        if (exact) {
+          if (exact.status !== SCHEDULE_STATUS.AVAILABLE) {
+            throw new ConflictError('A schedule with the same time already exists and is not available');
+          }
+          schedule = exact;
+        } else {
+          // Check overlapping or too-close schedules
+          const overlapping = await Schedule.findOne({
+            studioId,
+            startTime: { $lt: new Date(e.getTime() + MIN_GAP_MS) },
+            endTime: { $gt: new Date(s.getTime() - MIN_GAP_MS) },
+          }).session(session);
+
+          if (overlapping) {
+            // If overlapping schedule exists (even if status available) we must reject to keep MIN_GAP
+            throw new ConflictError('Another schedule exists that overlaps or is within 30 minutes of the requested time');
+          }
+
+          // No conflicts — create a new schedule
+          schedule = await createScheduleService({ studioId, startTime: s, endTime: e, status: SCHEDULE_STATUS.AVAILABLE }, session);
+        }
       }
-      schedule = exact;
-    } else {
-      // Check overlapping or too-close schedules
-        const overlapping = await Schedule.findOne({
-        studioId,
-        startTime: { $lt: new Date(e.getTime() + MIN_GAP_MS) },
-        endTime: { $gt: new Date(s.getTime() - MIN_GAP_MS) },
-        }).session(session);
 
-      if (overlapping) {
-        // If overlapping schedule exists (even if status available) we must reject to keep MIN_GAP
-        throw new ConflictError('Another schedule exists that overlaps or is within 30 minutes of the requested time');
-      }
-
-      // No conflicts — create a new schedule
-        schedule = await createScheduleService({ studioId, startTime: s, endTime: e, status: SCHEDULE_STATUS.AVAILABLE }, session);
-    }
-  }
-
-  // Create booking
-  const bookingData = {
-    userId,
-    scheduleId: schedule._id,
-    totalBeforeDiscount: data.totalBeforeDiscount || 0,
+      // Create booking
+      const bookingData = {
+        userId,
+        scheduleId: schedule._id,
+        totalBeforeDiscount: data.totalBeforeDiscount || 0,
     discountAmount: data.discountAmount || 0,
     finalAmount: data.finalAmount || 0,
     promoId: data.promoId,

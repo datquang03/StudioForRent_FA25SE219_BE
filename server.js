@@ -22,6 +22,7 @@ import messageRoutes from "./src/routes/message.route.js";
 import bookingRoutes from "./src/routes/booking.route.js";
 import scheduleRoutes from "./src/routes/schedule.route.js";
 import roomPolicyRoutes from "./src/routes/roomPolicy.route.js";
+import setDesignRoutes from "./src/routes/setDesign.route.js";
 import logger from "./src/utils/logger.js";
 import { errorHandler, notFoundHandler } from "./src/middlewares/errorHandler.js";
 import { socketAuth, handleSocketConnection } from "./src/middlewares/socket.js";
@@ -74,6 +75,7 @@ app.use("/api/analytics", analyticsRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/schedules", scheduleRoutes);
+app.use("/api/set-designs", setDesignRoutes);
 app.use("/api/room-policies", roomPolicyRoutes);
 
 // Setup Socket.io with authentication
