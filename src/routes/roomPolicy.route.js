@@ -12,7 +12,6 @@ router.use(authorize(['ADMIN']));
 // Policy CRUD routes
 router.get("/", searchLimiter, RoomPolicyController.getAllPolicies);
 router.post("/", RoomPolicyController.createPolicy);
-router.get("/all", RoomPolicyController.getAllActivePolicies);
 router.get("/type/:type", RoomPolicyController.getPoliciesByType);
 router.get("/:policyId", RoomPolicyController.getPolicyById);
 router.put("/:policyId", RoomPolicyController.updatePolicy);

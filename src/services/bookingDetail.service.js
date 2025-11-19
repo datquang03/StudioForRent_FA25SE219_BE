@@ -51,14 +51,6 @@ export const createBookingDetails = async (bookingId, detailsArray, session = nu
             subtotal,
           }
         ], { session });
-          bookingId,
-          detailType,
-          equipmentId,
-          description: equipment.name,
-          quantity,
-          pricePerUnit,
-          subtotal,
-        });
 
         created.push(detail);
         total += subtotal;
@@ -87,14 +79,6 @@ export const createBookingDetails = async (bookingId, detailsArray, session = nu
             subtotal,
           }
         ], { session });
-          bookingId,
-          detailType,
-          extraServiceId,
-          description: svc.name,
-          quantity,
-          pricePerUnit,
-          subtotal,
-        });
 
         created.push(detail);
         total += subtotal;

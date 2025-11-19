@@ -3,8 +3,11 @@ import { AI_SET_DESIGN_STATUS } from "../../utils/constants.js";
 
 /**
  * AI SET DESIGN MODEL
- * Theo PostgreSQL schema: booking_set_requests (updated workflow)
- * Lưu lịch sử AI iterations và staff implementation
+ * Chat-based AI design workflow:
+ * 1. Customer chats with AI about their photoshoot vision
+ * 2. AI generates design suggestions based on conversation
+ * 3. Customer selects and confirms a design
+ * 4. Staff receives confirmed design and implements it
  */
 const setDesignSchema = new mongoose.Schema(
   {
@@ -15,12 +18,38 @@ const setDesignSchema = new mongoose.Schema(
       unique: true,
     },
     
+    // === CUSTOMER-AI CHAT HISTORY ===
+    chatHistory: {
+      type: [{
+        role: {
+          type: String,
+          enum: ['customer', 'ai'],
+          required: true,
+        },
+        message: {
+          type: String,
+          required: true,
+        },
+        timestamp: {
+          type: Date,
+          default: Date.now,
+        },
+      }],
+      default: [],
+    },
+    
     // === AI GENERATION PHASE ===
-    // Lưu tất cả lần thử AI (prompt + image URL)
+    // Lưu tất cả design iterations AI tạo trong cuộc trò chuyện
     aiIterations: {
       type: [{
-        prompt: String,
-        imageUrl: String,
+        title: String,
+        description: String,
+        colorScheme: [String],
+        lighting: String,
+        mood: String,
+        cameraAngles: [String],
+        specialEffects: [String],
+        imageUrl: String, // Optional: Generated image from Imagen
         generatedAt: {
           type: Date,
           default: Date.now,
@@ -29,12 +58,20 @@ const setDesignSchema = new mongoose.Schema(
       default: [],
     },
     
-    // Ảnh cuối cùng khách hàng chọn
-    finalAiPrompt: {
-      type: String,
-    },
-    finalAiImageUrl: {
-      type: String,
+    // === CUSTOMER CONFIRMATION ===
+    // Design cuối cùng khách hàng chọn và xác nhận
+    finalDesign: {
+      type: {
+        title: String,
+        description: String,
+        colorScheme: [String],
+        lighting: String,
+        mood: String,
+        cameraAngles: [String],
+        specialEffects: [String],
+        imageUrl: String,
+        confirmedAt: Date,
+      },
     },
     
     // Danh sách props/dụng cụ cần thiết cho set design

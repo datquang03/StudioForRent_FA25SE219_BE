@@ -49,16 +49,11 @@ export const createSchedule = async (data, session = null) => {
         status: data.status || SCHEDULE_STATUS.AVAILABLE,
       });
     }
-    studioId,
-    startTime: s,
-    endTime: e,
-    status: data.status || SCHEDULE_STATUS.AVAILABLE,
-  });
 
-  return schedule;
-};
+    return schedule;
+  };
 
-export const getScheduleById = async (id) => {
+  export const getScheduleById = async (id) => {
   const schedule = await Schedule.findById(id).lean();
   if (!schedule) throw new NotFoundError('Schedule not found');
   return schedule;
