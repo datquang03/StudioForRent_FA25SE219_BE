@@ -71,6 +71,7 @@ export const createBookingDetails = async (bookingId, detailsArray, session = nu
         const pricePerUnit = svc.pricePerUse || 0;
         const subtotal = pricePerUnit * quantity;
 
+<<<<<<< HEAD
         const [detail] = await BookingDetail.create(
           [
             {

@@ -42,7 +42,11 @@ const createPerUserLimiter = (options) => {
     ...options,
     keyGenerator: (req, res) => {
       const userId = req.user?._id?.toString() || 'anonymous';
+<<<<<<< HEAD
       const ip = ipKeyGenerator(req, res); // Use ipKeyGenerator to handle IPv6 addresses correctly
+=======
+      const ip = ipKeyGenerator(req); // Use IPv6-safe IP key generator
+>>>>>>> origin/main
       return `${userId}:${ip}`; // Combine user ID + IP
     },
     handler: (req, res) => {
@@ -208,4 +212,35 @@ export const searchLimiter = createPerUserLimiter({
   standardHeaders: true,
   legacyHeaders: false,
 });
+
+/**
+ * Rate limiter cho AI operations (setDesign)
+ * Giới hạn: 5 AI requests / 15 phút / user
+ * Rất chặt để kiểm soát chi phí AI API
+ */
+export const aiLimiter = createPerUserLimiter({
+  windowMs: 15 * 60 * 1000, // 15 phút
+  max: 5, // Tối đa 5 AI requests per user per 15 minutes
+  message: "Quá nhiều yêu cầu AI. Vui lòng thử lại sau 15 phút!",
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 //#endregion
+<<<<<<< HEAD
+=======
+
+export default {
+  authLimiter,
+  verificationLimiter,
+  generalLimiter,
+  passwordResetLimiter,
+  adminLimiter,
+  strictLoginLimiter,
+  userLimiter,
+  uploadLimiter,
+  bookingLimiter,
+  messageLimiter,
+  searchLimiter,
+  aiLimiter,
+};
+>>>>>>> origin/main

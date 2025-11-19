@@ -40,6 +40,6 @@ router.post('/forgot-password', passwordResetLimiter, forgotPasswordController);
 // Protected routes
 router.get('/me', protect, userLimiter, getMeController);
 router.post('/change-password', protect, userLimiter, passwordResetLimiter, changePasswordController);
-router.post('/register/staff', protect, authorize(USER_ROLES.ADMIN), userLimiter, adminLimiter, validateStaffRegistration, createStaffController);
+router.post('/register/staff', protect, authorize(USER_ROLES.ADMIN), userLimiter, validateStaffRegistration, createStaffController);
 
 export default router;

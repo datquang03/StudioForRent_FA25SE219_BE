@@ -55,10 +55,10 @@ export const createSchedule = async (data, session = null) => {
       });
     }
 
-  return schedule;
-};
+    return schedule;
+  };
 
-export const getScheduleById = async (id) => {
+  export const getScheduleById = async (id) => {
   const schedule = await Schedule.findById(id).lean();
   if (!schedule) throw new NotFoundError('Schedule not found');
   return schedule;
