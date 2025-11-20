@@ -153,9 +153,16 @@ export const selectFinalDesign = async (setDesignId, iterationIndex) => {
 
     const selectedIteration = setDesign.aiIterations[iterationIndex];
 
-        setDesign.finalDesign = {
-      prompt: selectedIteration.prompt,
+    setDesign.finalDesign = {
+      title: selectedIteration.title,
+      description: selectedIteration.description,
+      colorScheme: selectedIteration.colorScheme,
+      lighting: selectedIteration.lighting,
+      mood: selectedIteration.mood,
+      cameraAngles: selectedIteration.cameraAngles,
+      specialEffects: selectedIteration.specialEffects,
       imageUrl: selectedIteration.imageUrl,
+      confirmedAt: new Date()
     };
     setDesign.status = AI_SET_DESIGN_STATUS.DESIGN_APPROVED;
 
