@@ -7,7 +7,27 @@ import { AI_SET_DESIGN_STATUS } from "../../utils/constants.js";
  * 1. Customer chats with AI about their photoshoot vision
  * 2. AI generates design suggestions based on conversation
  * 3. Customer selects and confirms a design
- * 4. Staff receives confirmed design and implements it
+  * 4. Staff receives confirmed design and implements it
+ *
+ * BREAKING CHANGE (v2): Legacy fields `finalAiPrompt` and `finalAiImageUrl` have been removed.
+ *   - Previously, the final AI-generated prompt and image URL were stored separately.
+ *   - Now, the confirmed design is stored in the `finalDesign` object, which includes:
+ *       - title, description, colorScheme, lighting, mood, cameraAngles, specialEffects, imageUrl, confirmedAt
+ *   - This change allows for richer, structured data and better tracking of customer confirmation.
+ *
+ *   Service layer code referencing the old fields must be updated to use `finalDesign`.
+ *
+ * Schema fields:
+ *   - bookingId: Reference to Booking
+ *   - chatHistory: Array of customer/AI messages
+ *   - aiIterations: Array of AI-generated design suggestions
+ *   - finalDesign: The design confirmed by the customer (see above)
+ *   - requiredProps: List of props/items needed for the set design
+ *   - staffInChargeId: Staff member responsible for execution
+ *   - staffFinalSetupImages: Images of the final setup
+ *   - staffNotes: Staff notes/comments
+ *   - finalPrice: Price for the set design
+ *   - status: Workflow status
  */
 const setDesignSchema = new mongoose.Schema(
   {
