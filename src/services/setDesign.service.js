@@ -36,11 +36,9 @@ const model = genAI.getGenerativeModel({
   },
 });
 
-// Initialize Imagen 4.0 for image generation (uses same API key as Gemini)
-// Imagen 4.0 variants: imagen-4.0-generate-001 (standard), imagen-4.0-ultra-generate-001 (ultra), imagen-4.0-fast-generate-001 (fast)
-const imagenModel = process.env.GOOGLE_GEMINI_API_KEY 
-  ? genAI.getGenerativeModel({ model: 'imagen-4.0-generate-001' })
-  : null;
+// Imagen 4.0 image generation is NOT accessible via @google/generative-ai SDK's getGenerativeModel.
+// To use Imagen 4.0, you must use the appropriate API endpoint or SDK provided by Google for image generation.
+// Remove or replace this block with the correct integration when available.
 
 // #region Set Design Service
 
@@ -155,8 +153,10 @@ export const selectFinalDesign = async (setDesignId, iterationIndex) => {
 
     const selectedIteration = setDesign.aiIterations[iterationIndex];
 
-    setDesign.finalAiPrompt = selectedIteration.prompt;
-    setDesign.finalAiImageUrl = selectedIteration.imageUrl;
+        setDesign.finalDesign = {
+      prompt: selectedIteration.prompt,
+      imageUrl: selectedIteration.imageUrl,
+    };
     setDesign.status = AI_SET_DESIGN_STATUS.DESIGN_APPROVED;
 
     await setDesign.save();
@@ -555,11 +555,19 @@ Return ONLY valid JSON array with no markdown formatting:
       throw new Error('AI did not generate valid design suggestions');
     }
 
-    // Store the generated suggestions as iterations
-    setDesign.aiIterations = suggestions.map(suggestion => ({
-      ...suggestion,
-      generatedAt: new Date()
-    }));
+    // Validate and map AI suggestions to expected schema
+    function mapSuggestion(suggestion) {
+      // Define expected fields and types
+      return {
+        title: typeof suggestion.title === 'string' ? suggestion.title : '',
+        description: typeof suggestion.description === 'string' ? suggestion.description : '',
+        colorScheme: typeof suggestion.colorScheme === 'string' ? suggestion.colorScheme : '',
+        style: typeof suggestion.style === 'string' ? suggestion.style : '',
+        elements: Array.isArray(suggestion.elements) ? suggestion.elements : [],
+        generatedAt: new Date()
+      };
+    }
+    setDesign.aiIterations = suggestions.map(mapSuggestion);
 
     // Store the full conversation as final prompt context
     setDesign.finalAiPrompt = conversationSummary;
