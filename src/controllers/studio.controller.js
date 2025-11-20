@@ -8,6 +8,11 @@ import {
   changeStudioStatus,
   deleteStudio,
   getActiveStudios,
+  getStudioAvailability,
+  getStudiosAvailability,
+  checkTimeSlotAvailability,
+  getStudioBookedSchedules,
+  getStudiosBookedSchedules,
 } from '../services/studio.service.js';
 import { uploadMultipleImages, uploadVideo } from '../services/upload.service.js';
 import { VALIDATION_MESSAGES } from '../utils/constants.js';
@@ -208,4 +213,133 @@ export const uploadStudioMedia = asyncHandler(async (req, res) => {
     }
   });
 });
+// #endregion
+
+// #region Studio Availability
+
+/**
+ * Get availability for a specific studio
+ * GET /api/studios/:id/availability
+ */
+export const getStudioAvailabilityController = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { startDate, endDate, page, limit } = req.query;
+
+  const result = await getStudioAvailability(id, {
+    startDate,
+    endDate,
+    page: parseInt(page) || 1,
+    limit: parseInt(limit) || 20
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'Lấy thông tin availability của studio thành công!',
+    data: result,
+  });
+});
+
+/**
+ * Get availability summary for multiple studios
+ * GET /api/studios/availability
+ */
+export const getStudiosAvailabilityController = asyncHandler(async (req, res) => {
+  const { startDate, endDate, page, limit } = req.query;
+
+  const result = await getStudiosAvailability({
+    startDate,
+    endDate,
+    page: parseInt(page) || 1,
+    limit: parseInt(limit) || 10
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'Lấy thông tin availability của các studios thành công!',
+    data: result,
+  });
+});
+
+/**
+ * Check if a specific time slot is available
+ * POST /api/studios/:id/check-availability
+ */
+export const checkTimeSlotAvailabilityController = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { startTime, endTime } = req.body;
+
+  if (!startTime || !endTime) {
+    res.status(400);
+    throw new Error('startTime và endTime là bắt buộc');
+  }
+
+  const start = new Date(startTime);
+  const end = new Date(endTime);
+
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+    res.status(400);
+    throw new Error('startTime và endTime phải là ngày hợp lệ');
+  }
+
+  if (end <= start) {
+    res.status(400);
+    throw new Error('endTime phải sau startTime');
+  }
+
+  const result = await checkTimeSlotAvailability(id, start, end);
+
+  res.status(200).json({
+    success: true,
+    message: 'Kiểm tra availability thành công!',
+    data: result,
+  });
+});
+
+// #endregion
+
+// #region Studio Booked Schedules
+
+/**
+ * Get booked schedules for a specific studio
+ * GET /api/studios/:id/booked-schedules
+ */
+export const getStudioBookedSchedulesController = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { startDate, endDate, page, limit } = req.query;
+
+  const result = await getStudioBookedSchedules(id, {
+    startDate,
+    endDate,
+    page: parseInt(page) || 1,
+    limit: parseInt(limit) || 20
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'Lấy thông tin booked schedules của studio thành công!',
+    data: result,
+  });
+});
+
+/**
+ * Get booked schedules summary for multiple studios
+ * GET /api/studios/booked-schedules
+ */
+export const getStudiosBookedSchedulesController = asyncHandler(async (req, res) => {
+  const { startDate, endDate, page, limit } = req.query;
+
+  const result = await getStudiosBookedSchedules({
+    startDate,
+    endDate,
+    page: parseInt(page) || 1,
+    limit: parseInt(limit) || 10
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'Lấy thông tin booked schedules của các studios thành công!',
+    data: result,
+  });
+});
+
 // #endregion
