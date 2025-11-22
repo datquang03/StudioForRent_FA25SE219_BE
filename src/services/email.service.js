@@ -177,6 +177,30 @@ const createStaffCredentialsTemplate = (staffInfo) => {
     </div>
   </div>`;
 };
+
+/**
+ * Tạo HTML template cho email báo no-show
+ * @param {Object} details - { bookingId, date, time, chargeAmount }
+ */
+const createNoShowTemplate = (details) => {
+  return `
+  <div style="font-family: Arial, sans-serif; background: #f4f6f8; padding: 30px;">
+    <div style="max-width: 500px; margin: auto; background: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+      <div style="background: linear-gradient(135deg,#6a11cb 0%,#2575fc 100%); padding: 20px; text-align: center; color: white;">
+        <h1 style="margin: 0; font-size: 22px; font-weight: bold; color: white;">Studio Management</h1>
+      </div>
+      <div style="padding: 30px; color: #333;">
+        <h2 style="margin-bottom: 10px; text-align: center;">No-show được ghi nhận</h2>
+        <p style="margin-bottom: 10px;">Booking <strong>${details.bookingId}</strong> của bạn đã được ghi nhận là <strong>no-show</strong>.</p>
+        ${details.chargeAmount ? `<p>Mức phí áp dụng: <strong>${details.chargeAmount.toLocaleString('vi-VN')} VND</strong></p>` : ''}
+        <p style="margin-top: 20px; color: #777;">Nếu bạn cho rằng có sai sót, xin vui lòng liên hệ quản trị viên để giải quyết.</p>
+      </div>
+      <div style="background: #f9fafb; padding: 15px; text-align: center; font-size: 12px; color: #aaa;">
+        &copy; ${new Date().getFullYear()} StudioManagement. All rights reserved.
+      </div>
+    </div>
+  </div>`;
+};
 // #endregion
 
 // #region Email Sending Services
@@ -257,6 +281,28 @@ export const sendStaffCredentialsEmail = async (to, staffInfo) => {
     logger.success(`Staff credentials email sent to ${to}`);
   } catch (error) {
     logger.error(`Failed to send staff credentials email to ${to}`, error);
+    throw new Error(`EMAIL_SEND_FAILED: ${error.message}`);
+  }
+};
+
+/**
+ * Gửi email no-show
+ * @param {string} to - Email người nhận
+ * @param {Object} details - { bookingId, date, time, chargeAmount }
+ */
+export const sendNoShowEmail = async (to, details = {}) => {
+  try {
+    const subject = `Thông báo No-show cho booking ${details.bookingId}`;
+    const html = createNoShowTemplate(details);
+    await transporter.sendMail({
+      from: `"Studio Management" <${EMAIL_CONFIG.USER}>`,
+      to,
+      subject,
+      html,
+    });
+    logger.success(`No-show email sent to ${to}`);
+  } catch (error) {
+    logger.error(`Failed to send no-show email to ${to}`, error);
     throw new Error(`EMAIL_SEND_FAILED: ${error.message}`);
   }
 };

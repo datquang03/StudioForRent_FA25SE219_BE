@@ -1,8 +1,8 @@
 // #region Imports
-import { Booking, Schedule, BookingDetail, RoomPolicy } from '../models/index.js';
+import { Booking, Schedule, BookingDetail, RoomPolicy, Payment } from '../models/index.js';
 import mongoose from 'mongoose';
 import { NotFoundError, ValidationError, ConflictError, UnauthorizedError } from '../utils/errors.js';
-import { BOOKING_STATUS, SCHEDULE_STATUS, USER_ROLES } from '../utils/constants.js';
+import { BOOKING_STATUS, SCHEDULE_STATUS, USER_ROLES, PAYMENT_STATUS } from '../utils/constants.js';
 import { createSchedule as createScheduleService, markScheduleBooked as markScheduleBookedService, freeSchedule as freeScheduleService } from './schedule.service.js';
 import { createBookingDetails as createBookingDetailsService } from './bookingDetail.service.js';
 import { Studio, Promotion } from '../models/index.js';
@@ -572,7 +572,9 @@ export const cancelBooking = async (bookingId) => {
   }
 };
 
-export const markAsNoShow = async (bookingId, checkInTime = null) => {
+import { sendNoShowEmail } from './email.service.js';
+
+export const markAsNoShow = async (bookingId, checkInTime = null, io = null) => {
   const booking = await Booking.findById(bookingId).populate('scheduleId');
   if (!booking) throw new NotFoundError('Booking not found');
 
@@ -628,7 +630,7 @@ export const markAsNoShow = async (bookingId, checkInTime = null) => {
   booking.status = BOOKING_STATUS.COMPLETED; // Mark as completed with no-show
   await booking.save();
 
-  // Send notification about no-show
+  // Send notification about no-show (in-app + email + realtime if io provided)
   try {
     const chargeText = chargeResult?.chargeAmount > 0
       ? `Bạn sẽ bị tính phí ${chargeResult.chargeAmount.toLocaleString('vi-VN')} VND do no-show.`
@@ -640,9 +642,26 @@ export const markAsNoShow = async (bookingId, checkInTime = null) => {
       'No-show được ghi nhận',
       `Booking của bạn đã được đánh dấu là no-show. ${chargeText}`,
       true, // Send email
-      null, // io
+      io, // io for real-time
       booking._id
     );
+
+    // Send dedicated no-show email template (best-effort)
+    try {
+      const user = await (await import('../models/index.js')).User.findById(booking.userId).select('email name');
+      if (user && user.email) {
+        await sendNoShowEmail(user.email, {
+          bookingId: booking._id,
+          date: booking.scheduleId?.startTime ? new Date(booking.scheduleId.startTime).toLocaleDateString('vi-VN') : undefined,
+          time: booking.scheduleId?.startTime ? new Date(booking.scheduleId.startTime).toLocaleTimeString('vi-VN') : undefined,
+          chargeAmount: chargeResult?.chargeAmount || 0
+        });
+      }
+    } catch (emailErr) {
+      // log and continue
+      // eslint-disable-next-line no-console
+      console.error('Failed to send dedicated no-show email:', emailErr);
+    }
   } catch (notifyErr) {
     console.error('Failed to send no-show notification:', notifyErr);
   }
@@ -673,6 +692,157 @@ export const confirmBooking = async (bookingId) => {
   }
 
   return booking;
+};
+
+/**
+ * Check-in booking (only staff should call controller-layer)
+ * Preconditions:
+ * - Booking must exist
+ * - At least 30% of finalAmount must be completed (paid)
+ * - Idempotent: if already checked-in, return booking
+ */
+export const checkInBooking = async (bookingId, actorId = null) => {
+  const session = await mongoose.startSession();
+  try {
+    return await session.withTransaction(async () => {
+      const booking = await Booking.findById(bookingId).session(session);
+      if (!booking) throw new NotFoundError('Booking not found');
+
+      // If already checked-in, return
+      if (booking.checkInAt) {
+        return booking;
+      }
+
+      // Ensure sufficient payment (>=30%)
+      const paidSummary = await Payment.aggregate([
+        { $match: { bookingId: booking._id, status: PAYMENT_STATUS.PAID } },
+        { $group: { _id: null, totalPaid: { $sum: '$amount' } } }
+      ]).session(session);
+
+      const totalPaid = paidSummary[0]?.totalPaid || 0;
+      const required = Math.round(booking.finalAmount * 0.3);
+      if (totalPaid < required) {
+        throw new ValidationError('Deposit 30% is required before check-in');
+      }
+
+      // Update booking status and checkInAt
+      booking.checkInAt = new Date();
+      booking.status = BOOKING_STATUS.CHECKED_IN;
+      // record event
+      booking.events = booking.events || [];
+      booking.events.push({ type: 'CHECK_IN', timestamp: new Date(), actorId });
+
+      await booking.save({ session });
+
+      // Optionally mark schedule as in-use (delegated to schedule service if exists)
+      try {
+        const { markScheduleInUse } = await import('./schedule.service.js');
+        if (typeof markScheduleInUse === 'function') {
+          await markScheduleInUse(booking.scheduleId, session);
+        }
+      } catch (e) {
+        // ignore if schedule service doesn't support it
+      }
+
+      // Send notification (best-effort)
+      try {
+        await (await import('./notification.service.js')).createAndSendNotification(
+          booking.userId,
+          'CHECKIN',
+          'Bạn đã được check-in',
+          `Booking ${booking._id} đã được check-in lúc ${booking.checkInAt}`,
+          true,
+          null,
+          booking._id
+        );
+      } catch (notifyErr) {
+        // log + continue
+        // eslint-disable-next-line no-console
+        console.error('Failed to send check-in notification', notifyErr);
+      }
+
+      return booking;
+    });
+  } finally {
+    session.endSession();
+  }
+};
+
+/**
+ * Check-out booking (only staff should call controller-layer)
+ * Preconditions:
+ * - Booking must exist
+ * - If already checked-out, idempotent return
+ * - On checkout, release equipment and mark schedule free/completed
+ */
+export const checkOutBooking = async (bookingId, actorId = null) => {
+  const session = await mongoose.startSession();
+  try {
+    return await session.withTransaction(async () => {
+      const booking = await Booking.findById(bookingId).session(session);
+      if (!booking) throw new NotFoundError('Booking not found');
+
+      if (booking.checkOutAt) {
+        return booking;
+      }
+
+      booking.checkOutAt = new Date();
+
+      // If wasn't confirmed, mark as completed
+      booking.status = BOOKING_STATUS.COMPLETED;
+      booking.events = booking.events || [];
+      booking.events.push({ type: 'CHECK_OUT', timestamp: new Date(), actorId });
+
+      await booking.save({ session });
+
+      // Release equipment reserved in booking details
+      try {
+        const BookingDetail = (await import('../models/Booking/bookingDetail.model.js')).default;
+        const details = await BookingDetail.find({ bookingId: booking._id, detailType: 'equipment' }).session(session);
+        for (const d of details) {
+          try {
+            await (await import('./equipment.service.js')).releaseEquipment(d.equipmentId, d.quantity, session);
+          } catch (releaseErr) {
+            // log and continue
+            // eslint-disable-next-line no-console
+            console.error('Failed to release equipment on checkout', releaseErr);
+          }
+        }
+      } catch (e) {
+        // ignore if model/service shape differs
+      }
+
+      // Optionally free schedule (delegate)
+      try {
+        const { freeSchedule } = await import('./schedule.service.js');
+        if (typeof freeSchedule === 'function') {
+          await freeSchedule(booking.scheduleId, session);
+        }
+      } catch (e) {
+        // ignore
+      }
+
+      // Send notification (best-effort)
+      try {
+        await (await import('./notification.service.js')).createAndSendNotification(
+          booking.userId,
+          'CHECKOUT',
+          'Bạn đã checkout',
+          `Booking ${booking._id} đã checkout lúc ${booking.checkOutAt}`,
+          true,
+          null,
+          booking._id
+        );
+      } catch (notifyErr) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to send check-out notification', notifyErr);
+      }
+
+      return booking;
+    });
+  } finally {
+    session.endSession();
+  }
 };
 
 export default {

@@ -42,11 +42,7 @@ const createPerUserLimiter = (options) => {
     ...options,
     keyGenerator: (req, res) => {
       const userId = req.user?._id?.toString() || 'anonymous';
-<<<<<<< HEAD
-      const ip = ipKeyGenerator(req, res); // Use ipKeyGenerator to handle IPv6 addresses correctly
-=======
       const ip = ipKeyGenerator(req); // Use IPv6-safe IP key generator
->>>>>>> origin/main
       return `${userId}:${ip}`; // Combine user ID + IP
     },
     handler: (req, res) => {
@@ -226,8 +222,6 @@ export const aiLimiter = createPerUserLimiter({
   legacyHeaders: false,
 });
 //#endregion
-<<<<<<< HEAD
-=======
 
 export default {
   authLimiter,
@@ -243,4 +237,3 @@ export default {
   searchLimiter,
   aiLimiter,
 };
->>>>>>> origin/main

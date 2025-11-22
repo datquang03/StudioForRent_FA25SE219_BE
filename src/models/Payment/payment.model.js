@@ -47,6 +47,9 @@ const paymentSchema = new mongoose.Schema(
     qrCodeUrl: {
       type: String,
     },
+    expiresAt: {
+      type: Date,
+    },
     paidAt: {
       type: Date,
     },

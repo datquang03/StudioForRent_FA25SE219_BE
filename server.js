@@ -21,8 +21,9 @@ import analyticsRoutes from "./src/routes/analytics.route.js";
 import messageRoutes from "./src/routes/message.route.js";
 import bookingRoutes from "./src/routes/booking.route.js";
 import scheduleRoutes from "./src/routes/schedule.route.js";
-import roomPolicyRoutes from "./src/routes/roomPolicy.route.js";
+import paymentRoutes from "./src/routes/payment.route.js";
 import setDesignRoutes from "./src/routes/setDesign.route.js";
+import roomPolicyRoutes from "./src/routes/roomPolicy.route.js";
 import logger from "./src/utils/logger.js";
 import { errorHandler, notFoundHandler } from "./src/middlewares/errorHandler.js";
 import { socketAuth, handleSocketConnection } from "./src/middlewares/socket.js";
@@ -77,6 +78,7 @@ app.use("/api/bookings", bookingRoutes);
 app.use("/api/schedules", scheduleRoutes);
 app.use("/api/set-designs", setDesignRoutes);
 app.use("/api/room-policies", roomPolicyRoutes);
+app.use("/api/payments", paymentRoutes);
 
 // Setup Socket.io with authentication
 io.use(socketAuth);
@@ -87,6 +89,8 @@ app.use((req, res, next) => {
   req.io = io;
   next();
 });
+
+// No-show job temporarily disabled (consider Redis-based queue later)
 
 app.get("/", (req, res) => {
   res.send("🚀 API is running...");

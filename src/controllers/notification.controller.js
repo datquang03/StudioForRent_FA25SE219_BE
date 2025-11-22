@@ -74,13 +74,13 @@ export const sendManualNotificationController = asyncHandler(async (req, res) =>
   }
 
   const notification = await createAndSendNotification(
-    data.userId,
-    data.type || NOTIFICATION_TYPE.INFO,
-    data.title,
-    data.message,
-    data.sendEmail,
+    userId,
+    type || 'INFO',
+    title,
+    message,
+    sendEmail,
     req.io, // pass io for real-time
-    data.relatedId
+    relatedId
   );
 
   res.status(201).json({
