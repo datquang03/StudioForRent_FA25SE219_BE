@@ -363,7 +363,7 @@ export const reserveEquipment = async (equipmentId, quantity, session = null) =>
 
   // Calculate và set status dựa trên quantities (Service layer logic)
   equipment.status = calculateEquipmentStatus(equipment);
-  await equipment.save();
+  await equipment.save({ session });
 
   return equipment;
 };
@@ -401,7 +401,7 @@ export const releaseEquipment = async (equipmentId, quantity, session = null) =>
 
   // Calculate và set status dựa trên quantities (Service layer logic)
   equipment.status = calculateEquipmentStatus(equipment);
-  await equipment.save();
+  await equipment.save({ session });
 
   return equipment;
 };
