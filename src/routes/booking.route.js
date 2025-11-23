@@ -7,6 +7,8 @@ import {
   markAsNoShow,
   confirmBooking,
   updateBooking,
+  checkIn,
+  checkOut,
 } from '../controllers/booking.controller.js';
 import { createBookingDetailsController } from '../controllers/bookingDetail.controller.js';
 import { protect, authorize } from '../middlewares/auth.js';
@@ -34,5 +36,8 @@ router.post('/:id/cancel', validateObjectId(), authorize(USER_ROLES.CUSTOMER), c
 router.patch('/:id', validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), updateBooking);
 router.post('/:id/confirm', validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), confirmBooking);
 router.post('/:id/no-show', validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), markAsNoShow);
+// Check-in / Check-out (only staff allowed)
+router.post('/:id/checkin', validateObjectId(), authorize(USER_ROLES.STAFF), checkIn);
+router.post('/:id/checkout', validateObjectId(), authorize(USER_ROLES.STAFF), checkOut);
 
 export default router;
