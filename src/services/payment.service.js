@@ -8,6 +8,7 @@ import payos from '../config/payos.js';
 import { PAYMENT_STATUS, PAY_TYPE, BOOKING_STATUS } from '../utils/constants.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
+import { claimIdempotencyKey, isRedisAvailable } from '../utils/redisHelpers.js';
 //#endregion
 
 // PayOS description maximum length (PayOS validation)
@@ -76,7 +77,7 @@ export const createPaymentOptions = async (bookingId) => {
     // Check if payment options already exist
     const existingPayments = await Payment.find({
       bookingId,
-      status: { $in: [PAYMENT_STATUS.PENDING, PAYMENT_STATUS.COMPLETED] }
+      status: { $in: [PAYMENT_STATUS.PENDING, PAYMENT_STATUS.PAID] }
     }).session(session);
 
     if (existingPayments.length > 0) {
@@ -266,7 +267,7 @@ export const handlePaymentWebhook = async (webhookPayload) => {
         verifiedData = payos.verifyPaymentWebhookData(body);
       } else {
         // Fallback simple verification using checksum key (HMAC-SHA256)
-        const headerSig = headers['x-payos-signature'] || headers['x-payos-signature'] || headers['x-payos-sign'] || null;
+        const headerSig = headers['x-payos-signature'] || headers['x-payos-sign'] || null;
         const signature = headerSig || body.signature || body.sign || body.data?.signature;
         const checksumKey = process.env.PAYOS_CHECKSUM_KEY;
         if (!checksumKey) {
@@ -296,6 +297,23 @@ export const handlePaymentWebhook = async (webhookPayload) => {
     const code = verifiedData.code; // "00" = success
     const desc = verifiedData.desc;
 
+    // Idempotency: try to claim a short-lived key in Redis to avoid duplicate webhook processing
+    const idempotencyKey = `payos:webhook:${orderCode}`;
+    let claimed = null;
+    try {
+      claimed = await claimIdempotencyKey(idempotencyKey, 30);
+    } catch (err) {
+      logger.warn('claimIdempotencyKey threw, continuing without redis claim', { error: err?.message || err });
+      claimed = null;
+    }
+
+    if (claimed === false) {
+      // Another worker already processed this webhook recently
+      await session.commitTransaction();
+      logger.info(`Duplicate webhook skipped by redis key for orderCode=${orderCode}`);
+      return { success: true, message: 'Duplicate webhook skipped' };
+    }
+
     logger.info('Webhook verified', { orderCode, code, desc });
 
     // Find payment by transaction ID (orderCode)
@@ -310,7 +328,7 @@ export const handlePaymentWebhook = async (webhookPayload) => {
     }
 
     // Check if already processed to prevent duplicate processing
-    if (payment.status === PAYMENT_STATUS.COMPLETED) {
+    if (payment.status === PAYMENT_STATUS.PAID) {
       await session.commitTransaction();
       logger.info(`Payment already processed: ${payment._id}`);
       return { success: true, message: 'Payment already processed' };
@@ -320,11 +338,12 @@ export const handlePaymentWebhook = async (webhookPayload) => {
     const isPaid = code === '00'; // PayOS success code
 
     if (isPaid) {
-      payment.status = PAYMENT_STATUS.COMPLETED;
+      payment.status = PAYMENT_STATUS.PAID;
       payment.paidAt = new Date();
       payment.gatewayResponse = {
         ...payment.gatewayResponse,
         webhookData: verifiedData,
+        webhookAmount: amount,
         completedAt: new Date()
       };
       await payment.save({ session });
@@ -340,7 +359,7 @@ export const handlePaymentWebhook = async (webhookPayload) => {
           {
             $match: {
               bookingId: booking._id,
-              status: PAYMENT_STATUS.COMPLETED
+              status: PAYMENT_STATUS.PAID
             }
           },
           {

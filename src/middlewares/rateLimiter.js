@@ -40,7 +40,7 @@ const createRateLimiter = (options) => {
 const createPerUserLimiter = (options) => {
   return rateLimit({
     ...options,
-    keyGenerator: (req, res) => {
+    keyGenerator: (req) => {
       const userId = req.user?._id?.toString() || 'anonymous';
       const ip = ipKeyGenerator(req); // Use IPv6-safe IP key generator
       return `${userId}:${ip}`; // Combine user ID + IP
