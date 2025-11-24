@@ -1,7 +1,6 @@
 //#region Imports
-import rateLimit, { ipKeyGenerator } from "express-rate-limit";
-import logger from "../utils/logger.js";
-import { USER_ROLES } from "../utils/constants.js";
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import logger from '../utils/logger.js';
 //#endregion
 
 /**
@@ -18,6 +17,7 @@ import { USER_ROLES } from "../utils/constants.js";
 const createRateLimiter = (options) => {
   return rateLimit({
     ...options,
+    keyGenerator: ipKeyGenerator, // Use the ipKeyGenerator to handle IPv6 addresses correctly
     handler: (req, res) => {
       const userId = req.user?._id || 'anonymous';
       const userRole = req.user?.role || 'guest';

@@ -13,6 +13,7 @@
   "description": "",
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "@payos/node": "^2.0.3",
     "axios": "^1.13.2",
     "bcryptjs": "^3.0.2",
     "body-parser": "^2.2.0",
@@ -30,5 +31,9 @@
     "nodemon": "^3.1.10",
     "openai": "^6.9.1",
     "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "node-fetch": "^3.3.2",
+    "socket.io-client": "^4.8.1"
   }
 }
