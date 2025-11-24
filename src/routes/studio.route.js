@@ -10,10 +10,12 @@ import {
   setMaintenanceStudio,
   deleteStudioController,
   uploadStudioMedia,
-  getStudioAvailabilityController,
+  getStudioScheduleController,
+  getStudioScheduleByDateController,
+  getStudiosScheduleController,
+  getStudiosScheduleByDateController,
   getStudiosAvailabilityController,
-  checkTimeSlotAvailabilityController,
-  getStudioBookedSchedulesController,
+  getStudioBookedHistoryController,
   getStudiosBookedSchedulesController,
 } from '../controllers/studio.controller.js';
 import { protect, authorize } from '../middlewares/auth.js';
@@ -28,14 +30,18 @@ const router = express.Router();
 router.use(sanitizeInput);
 router.use(generalLimiter);
 
+// Public schedule routes (no auth required)
+router.get('/schedule', searchLimiter, getStudiosScheduleController);
+router.get('/schedule/date/:date', searchLimiter, getStudiosScheduleByDateController);
+router.get('/:id/schedule', validateObjectId(), searchLimiter, getStudioScheduleController);
+router.get('/:id/schedule/date/:date', validateObjectId(), searchLimiter, getStudioScheduleByDateController);
+
 // Public availability routes (no auth required)
 router.get('/availability', searchLimiter, getStudiosAvailabilityController);
-router.get('/:id/availability', validateObjectId(), searchLimiter, getStudioAvailabilityController);
-router.post('/:id/check-availability', validateObjectId(), generalLimiter, checkTimeSlotAvailabilityController);
 
-// Protected booked schedules routes (require auth)
+// Protected booked history routes (require auth)
 router.get('/booked-schedules', protect, authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), searchLimiter, getStudiosBookedSchedulesController);
-router.get('/:id/booked-schedules', validateObjectId(), protect, authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), searchLimiter, getStudioBookedSchedulesController);
+router.get('/:id/booked-history', validateObjectId(), protect, authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), searchLimiter, getStudioBookedHistoryController);
 
 // Search routes with stricter rate limiting
 router.get('/active', searchLimiter, getActiveStudiosController);

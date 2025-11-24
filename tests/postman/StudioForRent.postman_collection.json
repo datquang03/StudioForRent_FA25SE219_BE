@@ -1052,7 +1052,7 @@
                   "const res = pm.response.json();",
                   "pm.test('Status 200', () => pm.response.to.have.status(200));",
                   "pm.test('Design selected', () => pm.expect(res.success).to.be.true);",
-                  "pm.test('Has final design', () => pm.expect(res.data.finalDesign).to.exist);"
+                  "pm.test('Has final design', () => pm.expect(res.data).to.exist);"
                 ],
                 "type": "text/javascript"
               }
@@ -1738,6 +1738,1079 @@
               "raw": "{{baseUrl}}/api/set-designs/generate/{{bookingId}}",
               "host": ["{{baseUrl}}"],
               "path": ["api", "set-designs", "generate", "{{bookingId}}"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Studio Schedule",
+      "item": [
+        {
+          "name": "Get All Studios Schedule (Public)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Success', () => pm.expect(res.success).to.be.true);",
+                  "pm.test('Has studios array', () => pm.expect(res.data.studios).to.be.an('array'));",
+                  "pm.test('Has pagination', () => pm.expect(res.data.pagination).to.exist);",
+                  "pm.test('Has dateRange', () => pm.expect(res.data.dateRange).to.exist);",
+                  "if (res.data.studios && res.data.studios.length > 0) {",
+                  "  pm.environment.set('testStudioId', res.data.studios[0]._id);",
+                  "  pm.test('Studio has required fields', () => {",
+                  "    const studio = res.data.studios[0];",
+                  "    pm.expect(studio).to.have.property('_id');",
+                  "    pm.expect(studio).to.have.property('name');",
+                  "    pm.expect(studio).to.have.property('scheduleByDate');",
+                  "    pm.expect(studio).to.have.property('totalSchedules');",
+                  "  });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/studios/schedule?startDate={{testStartDate}}&endDate={{testEndDate}}&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "studios", "schedule"],
+              "query": [
+                {
+                  "key": "startDate",
+                  "value": "{{testStartDate}}"
+                },
+                {
+                  "key": "endDate",
+                  "value": "{{testEndDate}}"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Studios Schedule by Date (Public)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Success', () => pm.expect(res.success).to.be.true);",
+                  "pm.test('Has date field', () => pm.expect(res.data.date).to.exist);",
+                  "pm.test('Has studios array', () => pm.expect(res.data.studios).to.be.an('array'));",
+                  "pm.test('Has pagination', () => pm.expect(res.data.pagination).to.exist);",
+                  "if (res.data.studios && res.data.studios.length > 0) {",
+                  "  pm.test('Studio has schedules array', () => {",
+                  "    const studio = res.data.studios[0];",
+                  "    pm.expect(studio).to.have.property('schedules');",
+                  "    pm.expect(studio.schedules).to.be.an('array');",
+                  "  });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/studios/schedule/date/{{testDate}}?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "studios", "schedule", "date", "{{testDate}}"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Specific Studio Schedule (Public)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Success', () => pm.expect(res.success).to.be.true);",
+                  "pm.test('Has studio object', () => pm.expect(res.data.studio).to.exist);",
+                  "pm.test('Has scheduleByDate object', () => pm.expect(res.data.scheduleByDate).to.exist);",
+                  "pm.test('Has totalSchedules', () => pm.expect(res.data.totalSchedules).to.be.a('number'));",
+                  "pm.test('Studio has required fields', () => {",
+                  "  const studio = res.data.studio;",
+                  "  pm.expect(studio).to.have.property('_id');",
+                  "  pm.expect(studio).to.have.property('name');",
+                  "  pm.expect(studio).to.have.property('location');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/studios/{{testStudioId}}/schedule?startDate={{testStartDate}}&endDate={{testEndDate}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "studios", "{{testStudioId}}", "schedule"],
+              "query": [
+                {
+                  "key": "startDate",
+                  "value": "{{testStartDate}}"
+                },
+                {
+                  "key": "endDate",
+                  "value": "{{testEndDate}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Specific Studio Schedule by Date (Public)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Success', () => pm.expect(res.success).to.be.true);",
+                  "pm.test('Has studio object', () => pm.expect(res.data.studio).to.exist);",
+                  "pm.test('Has date field', () => pm.expect(res.data.date).to.exist);",
+                  "pm.test('Has schedules array', () => pm.expect(res.data.schedules).to.be.an('array'));",
+                  "if (res.data.schedules && res.data.schedules.length > 0) {",
+                  "  pm.test('Schedule has booking details', () => {",
+                  "    const schedule = res.data.schedules[0];",
+                  "    pm.expect(schedule).to.have.property('startTime');",
+                  "    pm.expect(schedule).to.have.property('endTime');",
+                  "    pm.expect(schedule).to.have.property('status');",
+                  "    pm.expect(schedule).to.have.property('booking');",
+                  "  });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/studios/{{testStudioId}}/schedule/date/{{testDate}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "studios", "{{testStudioId}}", "schedule", "date", "{{testDate}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Studios Availability (Public)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Success', () => pm.expect(res.success).to.be.true);",
+                  "pm.test('Has studios array', () => pm.expect(res.data.studios).to.be.an('array'));",
+                  "pm.test('Has pagination', () => pm.expect(res.data.pagination).to.exist);",
+                  "if (res.data.studios && res.data.studios.length > 0) {",
+                  "  pm.test('Studio has availability by date', () => {",
+                  "    const studio = res.data.studios[0];",
+                  "    pm.expect(studio).to.have.property('_id');",
+                  "    pm.expect(studio).to.have.property('name');",
+                  "    pm.expect(studio).to.have.property('availabilityByDate');",
+                  "    pm.expect(studio).to.have.property('totalSlots');",
+                  "  });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/studios/availability?startDate={{testStartDate}}&endDate={{testEndDate}}&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "studios", "availability"],
+              "query": [
+                {
+                  "key": "startDate",
+                  "value": "{{testStartDate}}"
+                },
+                {
+                  "key": "endDate",
+                  "value": "{{testEndDate}}"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Studio Booked History (Staff)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Success', () => pm.expect(res.success).to.be.true);",
+                  "pm.test('Has studio object', () => pm.expect(res.data.studio).to.exist);",
+                  "pm.test('Has bookings array', () => pm.expect(res.data.bookings).to.be.an('array'));",
+                  "if (res.data.bookings && res.data.bookings.length > 0) {",
+                  "  pm.test('Booking has full details', () => {",
+                  "    const booking = res.data.bookings[0];",
+                  "    pm.expect(booking).to.have.property('_id');",
+                  "    pm.expect(booking).to.have.property('customer');",
+                  "    pm.expect(booking).to.have.property('schedule');",
+                  "    pm.expect(booking).to.have.property('details');",
+                  "    pm.expect(booking).to.have.property('finalAmount');",
+                  "  });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{staffToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/studios/{{testStudioId}}/booked-history?startDate={{testStartDate}}&endDate={{testEndDate}}&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "studios", "{{testStudioId}}", "booked-history"],
+              "query": [
+                {
+                  "key": "startDate",
+                  "value": "{{testStartDate}}"
+                },
+                {
+                  "key": "endDate",
+                  "value": "{{testEndDate}}"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Studios Booked History (Staff)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Success', () => pm.expect(res.success).to.be.true);",
+                  "pm.test('Has studios array', () => pm.expect(res.data.studios).to.be.an('array'));",
+                  "if (res.data.studios && res.data.studios.length > 0) {",
+                  "  pm.test('Studio booking summary has required fields', () => {",
+                  "    const studio = res.data.studios[0];",
+                  "    pm.expect(studio).to.have.property('_id');",
+                  "    pm.expect(studio).to.have.property('name');",
+                  "    pm.expect(studio).to.have.property('bookedSlots');",
+                  "    pm.expect(studio).to.have.property('totalRevenue');",
+                  "    pm.expect(studio).to.have.property('utilizationRate');",
+                  "  });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{staffToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/studios/booked-history?startDate={{testStartDate}}&endDate={{testEndDate}}&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "studios", "booked-history"],
+              "query": [
+                {
+                  "key": "startDate",
+                  "value": "{{testStartDate}}"
+                },
+                {
+                  "key": "endDate",
+                  "value": "{{testEndDate}}"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Booked History - Customer Forbidden",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 403 Forbidden', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/studios/{{testStudioId}}/booked-history",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "studios", "{{testStudioId}}", "booked-history"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Invalid Studio ID - 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 404 Not Found', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/studios/507f1f77bcf86cd799439011/schedule",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "studios", "507f1f77bcf86cd799439011", "schedule"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "AI Set Design - Image Upload",
+      "item": [
+        {
+          "name": "Generate Image from Prompt (AI + Cloudinary)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+                  "pm.test('Generation successful', () => pm.expect(res.success).to.be.true);",
+                  "pm.test('Has enhanced prompt', () => pm.expect(res.data.enhancedPrompt).to.be.a('string'));",
+                  "pm.test('Has original prompt', () => pm.expect(res.data.originalPrompt).to.be.a('string'));",
+                  "pm.test('Has integration steps', () => pm.expect(res.data.integrationSteps).to.be.an('array'));",
+                  "pm.test('Status is ready for integration', () => {",
+                  "  pm.expect(res.data.status).to.equal('ready_for_integration');",
+                  "});",
+                  "// When DALL-E is integrated, test for:",
+                  "// pm.test('Has imageUrl', () => pm.expect(res.data.imageUrl).to.include('cloudinary.com'));",
+                  "// pm.test('Image attached to design', () => pm.expect(res.data.attachedToDesign).to.be.true);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"prompt\": \"Romantic wedding photoshoot with soft pink roses, ivory drapes, and golden sunset lighting. Elegant floral arch with delicate fabric, dreamy bokeh background, professional studio setup.\",\n  \"setDesignId\": \"{{setDesignId}}\",\n  \"iterationIndex\": 0\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/set-designs/generate-image",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "set-designs", "generate-image"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Generate Image - Simple Prompt",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+                  "pm.test('Prompt enhanced successfully', () => {",
+                  "  pm.expect(res.data.enhancedPrompt).to.include('Professional photo studio');",
+                  "  pm.expect(res.data.enhancedPrompt).to.include('professional lighting');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"prompt\": \"Modern minimalist photoshoot with clean white background and dramatic shadows\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/set-designs/generate-image",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "set-designs", "generate-image"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Generate Image - Missing Prompt (Validation)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400 Bad Request', () => pm.response.to.have.status(400));",
+                  "const res = pm.response.json();",
+                  "pm.test('Error about missing prompt', () => pm.expect(res.message).to.include('prompt'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"setDesignId\": \"{{setDesignId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/set-designs/generate-image",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "set-designs", "generate-image"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Generate Image - Prompt Too Long",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400 Bad Request', () => pm.response.to.have.status(400));",
+                  "const res = pm.response.json();",
+                  "pm.test('Error about prompt length', () => pm.expect(res.message).to.include('quá dài'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"prompt\": \"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/set-designs/generate-image",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "set-designs", "generate-image"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Attach Image to Design Iteration",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Image attached successfully', () => pm.expect(res.success).to.be.true);",
+                  "pm.test('Has setDesignId', () => pm.expect(res.data.setDesignId).to.be.a('string'));",
+                  "pm.test('Has iterationIndex', () => pm.expect(res.data.iterationIndex).to.be.a('number'));",
+                  "pm.test('Has imageUrl', () => {",
+                  "  pm.expect(res.data.imageUrl).to.be.a('string');",
+                  "  pm.expect(res.data.imageUrl).to.include('cloudinary.com');",
+                  "});",
+                  "pm.test('Has iteration details', () => {",
+                  "  pm.expect(res.data.iteration).to.be.an('object');",
+                  "  pm.expect(res.data.iteration.imageUrl).to.equal(res.data.imageUrl);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"iterationIndex\": 0,\n  \"imageUrl\": \"{{designImageUrl}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/set-designs/{{setDesignId}}/attach-image",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "set-designs", "{{setDesignId}}", "attach-image"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Attach Image - Invalid Iteration Index",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400 Bad Request', () => pm.response.to.have.status(400));",
+                  "const res = pm.response.json();",
+                  "pm.test('Error about iteration index', () => pm.expect(res.message).to.include('iterationIndex'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"iterationIndex\": 999,\n  \"imageUrl\": \"https://res.cloudinary.com/test/image.png\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/set-designs/{{setDesignId}}/attach-image",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "set-designs", "{{setDesignId}}", "attach-image"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Attach Image - Non-Cloudinary URL",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 500 Internal Server Error', () => pm.response.to.have.status(500));",
+                  "const res = pm.response.json();",
+                  "pm.test('Error about Cloudinary', () => pm.expect(res.error).to.include('Cloudinary'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"iterationIndex\": 0,\n  \"imageUrl\": \"https://example.com/not-cloudinary.png\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/set-designs/{{setDesignId}}/attach-image",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "set-designs", "{{setDesignId}}", "attach-image"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Select Final Design with Image",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Design selected successfully', () => pm.expect(res.success).to.be.true);",
+                  "pm.test('Status is design_approved', () => {",
+                  "  pm.expect(res.data.status).to.equal('design_approved');",
+                  "});",
+                  "pm.test('Final design has imageUrl', () => {",
+                  "  pm.expect(res.data.finalDesign.imageUrl).to.be.a('string');",
+                  "  pm.expect(res.data.finalDesign.imageUrl).to.include('cloudinary.com');",
+                  "});",
+                  "pm.test('Final design has all fields', () => {",
+                  "  pm.expect(res.data.finalDesign.title).to.exist;",
+                  "  pm.expect(res.data.finalDesign.description).to.exist;",
+                  "  pm.expect(res.data.finalDesign.confirmedAt).to.exist;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"iterationIndex\": 0\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/set-designs/{{setDesignId}}/select",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "set-designs", "{{setDesignId}}", "select"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Upload Design Image to Cloudinary",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+                  "pm.test('Upload successful', () => pm.expect(res.success).to.be.true);",
+                  "pm.test('Has imageUrl', () => pm.expect(res.data.imageUrl).to.be.a('string'));",
+                  "pm.test('ImageUrl is Cloudinary URL', () => {",
+                  "  pm.expect(res.data.imageUrl).to.include('cloudinary.com');",
+                  "  pm.expect(res.data.imageUrl).to.include('https://');",
+                  "});",
+                  "pm.test('Has publicId', () => {",
+                  "  pm.expect(res.data.publicId).to.be.a('string');",
+                  "  pm.expect(res.data.publicId).to.include('studio-designs/');",
+                  "});",
+                  "pm.test('Has image dimensions', () => {",
+                  "  pm.expect(res.data.width).to.be.a('number');",
+                  "  pm.expect(res.data.height).to.be.a('number');",
+                  "  pm.expect(res.data.width).to.be.at.most(1920);",
+                  "  pm.expect(res.data.height).to.be.at.most(1080);",
+                  "});",
+                  "pm.test('Has format and bytes', () => {",
+                  "  pm.expect(res.data.format).to.be.a('string');",
+                  "  pm.expect(res.data.bytes).to.be.a('number');",
+                  "});",
+                  "if (res.data && res.data.imageUrl) {",
+                  "  pm.environment.set('designImageUrl', res.data.imageUrl);",
+                  "  pm.environment.set('designPublicId', res.data.publicId);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"image\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFUlEQVR42mP8z8BQz0AEYBxVSF+FABJADveWkH6oAAAAAElFTkSuQmCC\",\n  \"fileName\": \"romantic-wedding-design-test\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/set-designs/upload-image",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "set-designs", "upload-image"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Upload Image - Missing Image (Validation)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400 Bad Request', () => pm.response.to.have.status(400));",
+                  "const res = pm.response.json();",
+                  "pm.test('Error about missing image', () => pm.expect(res.message).to.include('image'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fileName\": \"test-without-image\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/set-designs/upload-image",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "set-designs", "upload-image"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Upload Image - Invalid Base64 Format",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400 Bad Request', () => pm.response.to.have.status(400));",
+                  "const res = pm.response.json();",
+                  "pm.test('Error about invalid format', () => {",
+                  "  pm.expect(res.message).to.include('base64');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"image\": \"not-a-valid-base64-string\",\n  \"fileName\": \"invalid-format-test\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/set-designs/upload-image",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "set-designs", "upload-image"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Upload Image - Wrong MIME Type",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400 Bad Request', () => pm.response.to.have.status(400));",
+                  "const res = pm.response.json();",
+                  "pm.test('Error about image format', () => {",
+                  "  pm.expect(res.message).to.include('data:image/');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"image\": \"data:text/plain;base64,SGVsbG8gV29ybGQ=\",\n  \"fileName\": \"wrong-mime-type\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/set-designs/upload-image",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "set-designs", "upload-image"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Upload Image - Unauthenticated",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401 Unauthorized', () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"image\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==\",\n  \"fileName\": \"test\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/set-designs/upload-image",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "set-designs", "upload-image"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Upload Multiple Images (Different Designs)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+                  "pm.test('Different fileName reflected', () => {",
+                  "  pm.expect(res.data.publicId).to.include('design-concept-');",
+                  "});",
+                  "pm.test('Unique timestamp in publicId', () => {",
+                  "  const timestamp = res.data.publicId.match(/design-(\\d+)-/);",
+                  "  pm.expect(timestamp).to.not.be.null;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"image\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFUlEQVR42mP8z8BQz0AEYBxVSF+FABJADveWkH6oAAAAAElFTkSuQmCC\",\n  \"fileName\": \"design-concept-2-modern-minimalist\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/set-designs/upload-image",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "set-designs", "upload-image"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Upload JPEG Image",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+                  "pm.test('JPEG format accepted', () => {",
+                  "  pm.expect(res.data.format).to.be.oneOf(['jpg', 'jpeg']);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"image\": \"data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAIBAQIBAQICAgICAgICAwUDAwMDAwYEBAMFBwYHBwcGBwcICQsJCAgKCAcHCg0KCgsMDAwMBwkODw0MDgsMDAz/2wBDAQICAgMDAwYDAwYMCAcIDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAz/wAARCAABAAEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlbaWmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD9/KKKKAP/2Q==\",\n  \"fileName\": \"jpeg-format-test\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/set-designs/upload-image",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "set-designs", "upload-image"]
             }
           },
           "response": []

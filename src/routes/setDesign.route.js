@@ -1,16 +1,25 @@
 // #region Imports
 import express from 'express';
 import {
-  generateAiDesignController,
-  getAiIterationsController,
-  selectFinalDesignController,
-  generatePropsRecommendationsController,
-  getSetDesignController,
-  updateSetDesignStatusController,
-  getSetDesignByBookingController,
-  chatWithAiController,
-  getChatHistoryController,
-  generateFromChatController
+  getSetDesignsController,
+  getSetDesignByIdController,
+  createSetDesignController,
+  updateSetDesignController,
+  deleteSetDesignController,
+  addReviewController,
+  addCommentController,
+  replyToCommentController,
+  uploadDesignImageController,
+  getSetDesignsByCategoryController,
+  getActiveSetDesignsController,
+  createCustomDesignRequestController,
+  getCustomDesignRequestsController,
+  getCustomDesignRequestByIdController,
+  updateCustomDesignRequestStatusController,
+  convertRequestToSetDesignController,
+  generateImageFromTextController,
+  chatWithDesignAIController,
+  generateCompleteDesignController
 } from '../controllers/setDesign.controller.js';
 import { protect } from '../middlewares/auth.js';
 import { authorize } from '../middlewares/auth.js';
@@ -21,32 +30,53 @@ import { USER_ROLES } from '../utils/constants.js';
 
 const router = express.Router();
 
-// #region Set Design Routes
+// #region Set Design Routes - Product Catalog
 
 // Apply middleware to all routes
 router.use(sanitizeInput);
 router.use(generalLimiter);
+
+// Public routes (no authentication required)
+router.get('/active', getActiveSetDesignsController);
+router.get('/category/:category', getSetDesignsByCategoryController);
+router.get('/', getSetDesignsController);
+router.get('/:id', validateObjectId(), getSetDesignByIdController);
+
+// Custom design request - Public route for customers to submit requests
+router.post('/custom-request', aiLimiter, createCustomDesignRequestController);
+
+// AI Image Generation from Text using Gemini Imagen 3 - Public route with rate limiting
+router.post('/generate-from-text', aiLimiter, generateImageFromTextController);
+
+// AI Design Consultation Chat - Public route with rate limiting
+router.post('/ai-chat', aiLimiter, chatWithDesignAIController);
+
+// AI Complete Design Generation (Chat → Summary → Image) - Public route with rate limiting
+router.post('/ai-generate-design', aiLimiter, generateCompleteDesignController);
+
+// Protected routes (authentication required)
 router.use(protect);
 
-// Chat-based design workflow (NEW - Customer only)
-router.post('/chat/:bookingId', aiLimiter, authorize(USER_ROLES.CUSTOMER), chatWithAiController);
-router.get('/:bookingId/chat-history', authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), getChatHistoryController);
-router.post('/generate-from-chat/:bookingId', aiLimiter, authorize(USER_ROLES.CUSTOMER), generateFromChatController);
+// Customer routes
+router.post('/:id/reviews', validateObjectId(), authorize(USER_ROLES.CUSTOMER), addReviewController);
+router.post('/:id/comments', validateObjectId(), authorize(USER_ROLES.CUSTOMER), addCommentController);
 
-// Customer routes (Legacy one-shot approach - still supported)
-router.post('/generate/:bookingId', aiLimiter, authorize(USER_ROLES.CUSTOMER), generateAiDesignController);
-router.get('/booking/:bookingId', authorize(USER_ROLES.CUSTOMER), getSetDesignByBookingController);
+// Staff routes
+router.post('/:id/comments/:commentIndex/reply', validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), replyToCommentController);
 
-// Customer-only routes (AI generation and modification)
-router.post('/:setDesignId/select', validateObjectId(), authorize(USER_ROLES.CUSTOMER), selectFinalDesignController);
-router.post('/:setDesignId/props', validateObjectId(), authorize(USER_ROLES.CUSTOMER), generatePropsRecommendationsController);
+// Custom design requests management (Staff/Admin)
+router.get('/custom-requests', authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), getCustomDesignRequestsController);
+router.get('/custom-requests/:id', validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), getCustomDesignRequestByIdController);
+router.patch('/custom-requests/:id/status', validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), updateCustomDesignRequestStatusController);
 
-// Shared view routes (customers and staff can view)
-router.get('/:setDesignId', validateObjectId(), authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), getSetDesignController);
-router.get('/:setDesignId/iterations', validateObjectId(), authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), getAiIterationsController);
+// Image upload (Customer and Staff)
+router.post('/upload-image', authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), uploadDesignImageController);
 
-// Staff-only routes
-router.patch('/:setDesignId/status', validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), updateSetDesignStatusController);
+// Admin-only routes
+router.post('/', authorize(USER_ROLES.ADMIN), createSetDesignController);
+router.put('/:id', validateObjectId(), authorize(USER_ROLES.ADMIN), updateSetDesignController);
+router.delete('/:id', validateObjectId(), authorize(USER_ROLES.ADMIN), deleteSetDesignController);
+router.post('/custom-requests/:id/convert', validateObjectId(), authorize(USER_ROLES.ADMIN), convertRequestToSetDesignController);
 
 // #endregion
 
