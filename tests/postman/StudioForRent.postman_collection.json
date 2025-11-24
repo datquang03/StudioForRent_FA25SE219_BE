@@ -7,6 +7,87 @@
   },
   "item": [
     {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "Create Payment Options (30/50/100)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/payments/options/{{bookingId}}", "host": ["{{baseUrl}}"], "path": ["api","payments","options","{{bookingId}}"] }
+          },
+          "event": [ { "listen": "test", "script": { "exec": [ "pm.test('Status 200', () => pm.response.to.have.status(200));", "const res = pm.response.json(); if(res.data && res.data.length>0){ pm.environment.set('paymentOrderCode', res.data[0].orderCode || ''); pm.environment.set('paymentId', res.data[0].paymentId || ''); }" ], "type": "text/javascript" } } ]
+        },
+        {
+          "name": "Create Single Payment",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{customerToken}}" } ],
+            "body": { "mode": "raw", "raw": "{ \"percentage\": 30 }" },
+            "url": { "raw": "{{baseUrl}}/api/payments/create/{{bookingId}}", "host": ["{{baseUrl}}"], "path": ["api","payments","create","{{bookingId}}"] }
+          },
+          "event": [ { "listen": "test", "script": { "exec": [ "pm.test('Status 200', () => pm.response.to.have.status(200));", "const res = pm.response.json(); if(res.data && res.data.transactionId){ pm.environment.set('paymentOrderCode', res.data.transactionId); pm.environment.set('paymentId', res.data._id || res.data.paymentId || ''); }" ], "type": "text/javascript" } } ]
+        },
+        {
+          "name": "Create Remaining Payment",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{customerToken}}" } ],
+            "url": { "raw": "{{baseUrl}}/api/payments/remaining/{{bookingId}}", "host": ["{{baseUrl}}"], "path": ["api","payments","remaining","{{bookingId}}"] }
+          },
+          "event": [ { "listen": "test", "script": { "exec": [ "pm.test('Status 200', () => pm.response.to.have.status(200));", "const res = pm.response.json(); if(res.data){ pm.environment.set('paymentId', res.data._id || res.data.paymentId || ''); pm.environment.set('paymentOrderCode', res.data.transactionId || res.data.orderCode || ''); }" ], "type": "text/javascript" } } ]
+        },
+        {
+          "name": "Payment Webhook (simulate PayOS)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{ \"orderCode\": \"{{paymentOrderCode}}\", \"amount\": {{paymentAmount}}, \"code\": \"00\", \"desc\": \"OK\" }" },
+            "url": { "raw": "{{baseUrl}}/api/payments/webhook", "host": ["{{baseUrl}}"], "path": ["api","payments","webhook"] }
+          },
+          "event": [
+            { "listen": "prerequest", "script": { "exec": [ "// compute HMAC-SHA256 signature for PayOS webhook", "const key = pm.environment.get('PAYOS_CHECKSUM_KEY') || ''; const body = pm.request.body ? JSON.parse(pm.request.body.raw) : {}; const dataToSign = (body.code||'') + (body.desc||''); const signature = CryptoJS.HmacSHA256(dataToSign, key).toString(CryptoJS.enc.Hex); pm.request.headers.add({ key:'x-payos-signature', value: signature });" ], "type": "text/javascript" } },
+            { "listen": "test", "script": { "exec": [ "pm.test('Status 200', () => pm.response.to.have.status(200));" ], "type": "text/javascript" } }
+          ]
+        },
+        {
+          "name": "Get Payment Status",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{customerToken}}" } ],
+            "url": { "raw": "{{baseUrl}}/api/payments/{{paymentId}}", "host": ["{{baseUrl}}"], "path": ["api","payments","{{paymentId}}"] }
+          },
+          "event": [ { "listen": "test", "script": { "exec": [ "pm.test('Status 200', () => pm.response.to.have.status(200));" ], "type": "text/javascript" } } ]
+        }
+      ]
+    },
+    {
+      "name": "Booking - Checkin/Checkout",
+      "item": [
+        {
+          "name": "Check-in (staff)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{staffToken}}" } ],
+            "url": { "raw": "{{baseUrl}}/api/bookings/{{bookingId}}/checkin", "host": ["{{baseUrl}}"], "path": ["api","bookings","{{bookingId}}","checkin"] }
+          },
+          "event": [ { "listen": "test", "script": { "exec": [ "pm.test('Status 200', () => pm.response.to.have.status(200));" ], "type": "text/javascript" } } ]
+        },
+        {
+          "name": "Check-out (staff)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{staffToken}}" } ],
+            "url": { "raw": "{{baseUrl}}/api/bookings/{{bookingId}}/checkout", "host": ["{{baseUrl}}"], "path": ["api","bookings","{{bookingId}}","checkout"] }
+          },
+          "event": [ { "listen": "test", "script": { "exec": [ "pm.test('Status 200', () => pm.response.to.have.status(200));" ], "type": "text/javascript" } } ]
+        }
+      ]
+    },
+    {
       "name": "Auth",
       "item": [
         {
@@ -87,6 +168,48 @@
               "raw": "{{baseUrl}}/api/auth/login",
               "host": ["{{baseUrl}}"],
               "path": ["api", "auth", "login"]
+            }
+          },
+          "response": []
+        }
+        ,
+        {
+          "name": "Login with Google",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Login with Google successful', () => pm.expect(res.success).to.be.true);",
+                  "if (res.data && res.data.accessToken) {",
+                  "  pm.environment.set('customerToken', res.data.accessToken);",
+                  "}",
+                  "if (res.data && res.data.user && res.data.user._id) {",
+                  "  pm.environment.set('customerId', res.data.user._id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idToken\": \"{{googleIdToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login/google",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login", "google"]
             }
           },
           "response": []

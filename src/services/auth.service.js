@@ -2,6 +2,7 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import { OAuth2Client } from 'google-auth-library';
 import { User, CustomerProfile, StaffProfile, RefreshToken } from '../models/index.js';
 import { sendVerificationEmail, sendStaffCredentialsEmail } from './email.service.js';
 import { createAndSendNotification } from './notification.service.js';
@@ -246,6 +247,91 @@ export const login = async (data, ipAddress) => {
 
   return { user: userObject, accessToken, refreshToken };
 };
+
+// #region Social Login - Google
+export const loginWithGoogle = async (idToken, ipAddress) => {
+  if (!idToken) {
+    throw new Error('ID token is required');
+  }
+
+  // Verify token with google-auth-library (local signature verification)
+  try {
+    const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+    const ticket = await client.verifyIdToken({ idToken, audience: process.env.GOOGLE_CLIENT_ID });
+    const payload = ticket.getPayload();
+
+    // map payload
+    var email = payload.email;
+    var emailVerified = payload.email_verified === true || payload.email_verified === 'true';
+    var name = payload.name || '';
+    var picture = payload.picture || '';
+    var sub = payload.sub || '';
+  } catch (err) {
+    throw new Error('Invalid Google ID token');
+  }
+
+  if (!email) {
+    throw new Error('Google token did not provide email');
+  }
+
+  let user = await User.findOne({ email });
+
+  if (user) {
+    if (!user.isActive) {
+      throw new Error(AUTH_MESSAGES.ACCOUNT_INACTIVE);
+    }
+    // mark verified if email verified by Google
+    if (user.role === USER_ROLES.CUSTOMER && !user.isVerified && emailVerified) {
+      user.isVerified = true;
+    }
+    user.lastLogin = new Date();
+    await user.save();
+  } else {
+    // Create a new customer user from Google profile
+    // Ensure unique username
+    let baseUsername = email.split('@')[0].replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 20) || `googleuser`;
+    let username = baseUsername;
+    let counter = 0;
+    while (await User.findOne({ username })) {
+      counter += 1;
+      username = `${baseUsername}${counter}`;
+    }
+
+    // generate random password and hash it (user can reset later)
+    const randomPass = generateRandomPassword();
+    const passwordHash = await hashPassword(randomPass);
+
+    user = await User.create({
+      username,
+      email,
+      passwordHash,
+      role: USER_ROLES.CUSTOMER,
+      fullName: name || username,
+      avatar: picture,
+      isVerified: true,
+      isActive: true,
+    });
+
+    // Create customer profile
+    try {
+      await CustomerProfile.create({ userId: user._id, loyaltyPoints: 0 });
+    } catch (err) {
+      // non-fatal
+      logger.error('Failed to create CustomerProfile for Google user', err);
+    }
+  }
+
+  const accessToken = generateToken(user._id, user.role);
+  const refreshToken = await createRefreshToken(user._id, ipAddress);
+
+  const userObject = user.toObject();
+  delete userObject.passwordHash;
+  delete userObject.verificationCode;
+  delete userObject.verificationCodeExpiry;
+
+  return { user: userObject, accessToken, refreshToken };
+};
+// #endregion
 
 export const refreshAccessToken = async (token, ipAddress) => {
   const refreshToken = await verifyRefreshToken(token);

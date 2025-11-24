@@ -2,8 +2,12 @@
 import Notification from '../models/Notification/notification.model.js';
 import User from '../models/User/user.model.js';
 import { sendEmail } from './email.service.js';
-import { NOTIFICATION_TYPE } from '../utils/constants.js';
 import logger from '../utils/logger.js';
+import Schedule from '../models/Schedule/schedule.model.js';
+import Booking from '../models/Booking/booking.model.js';
+import Payment from '../models/Payment/payment.model.js';
+import cron from 'node-cron';
+import { BOOKING_STATUS, PAYMENT_STATUS, NOTIFICATION_TYPE } from '../utils/constants.js';
 
 // Rate limiting cache (in-memory, should use Redis in production)
 const emailRateLimit = new Map();
@@ -226,8 +230,88 @@ export const sendManualNotification = async (data, io = null) => {
  * Sử dụng node-cron để chạy định kỳ
  */
 export const scheduleReminders = () => {
-  // Placeholder: Implement khi có booking module
-  logger.info('Reminder scheduler initialized (placeholder)');
+  // Run every 10 minutes for faster testing
+  cron.schedule('*/10 * * * *', async () => {
+    logger.info('Running scheduled reminders job');
+
+    try {
+      const now = new Date();
+      const startWindow = new Date(now.getTime() + 24 * 60 * 60 * 1000); // +24h
+      const endWindow = new Date(now.getTime() + 25 * 60 * 60 * 1000); // +25h
+
+      // Find schedules booked that start in ~24-25 hours and have a booking
+      const schedules = await Schedule.find({
+        bookingId: { $exists: true, $ne: null },
+        startTime: { $gte: startWindow, $lt: endWindow }
+      }).lean();
+
+      for (const sched of schedules) {
+        try {
+          const booking = await Booking.findById(sched.bookingId).lean();
+          if (!booking) continue;
+          // Skip completed or cancelled bookings
+          if (booking.status === BOOKING_STATUS.COMPLETED || booking.status === BOOKING_STATUS.CANCELLED) continue;
+
+          // Calculate total paid for this booking
+          const paidSummary = await Payment.aggregate([
+            { $match: { bookingId: booking._id, status: PAYMENT_STATUS.PAID } },
+            { $group: { _id: null, totalPaid: { $sum: '$amount' } } }
+          ]);
+
+          const totalPaid = paidSummary[0]?.totalPaid || 0;
+          const remaining = booking.finalAmount - totalPaid;
+          if (remaining <= 0) continue; // nothing to remind
+
+          // Avoid duplicate reminders: check notifications for this booking in last 48 hours
+          const twoDaysAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+          const existing = await Notification.findOne({
+            userId: booking.userId,
+            type: NOTIFICATION_TYPE.REMINDER,
+            relatedId: booking._id,
+            createdAt: { $gte: twoDaysAgo }
+          }).lean();
+
+          if (existing) continue;
+
+          // Create in-app notification (don't send email here via that helper)
+          const userId = booking.userId;
+          const title = 'Nhắc thanh toán phần còn lại';
+          const message = `Bạn còn ${remaining} VND cần thanh toán cho booking #${booking._id.toString().slice(-8)} trước khi sử dụng dịch vụ vào ${new Date(sched.startTime).toLocaleString('vi-VN')}. Vui lòng thanh toán để tránh ảnh hưởng.`;
+
+          await createAndSendNotification(userId, NOTIFICATION_TYPE.REMINDER, title, message, false, null, booking._id);
+
+          // Also send an email to customer and CC all staff/admin emails (best-effort)
+          try {
+            // Fetch staff/admin emails
+            const staffUsers = await User.find({ role: { $in: ['staff', 'admin'] }, email: { $exists: true, $ne: null } }).select('email').lean();
+            const ccList = staffUsers.map(u => u.email).filter(Boolean);
+
+            // Build simple HTML for email
+            const html = `
+              <p>Xin chào,</p>
+              <p>${message}</p>
+              <p>Link thanh toán sẽ được gửi qua ứng dụng hoặc bạn có thể liên hệ nhân viên để được hỗ trợ.</p>
+              <p>Trân trọng,<br/>StudioForRent Team</p>
+            `;
+
+            // sendEmail imported above; ccList may be empty
+            await sendEmail((await User.findById(userId).select('email').lean()).email, title, html, ccList.length ? ccList : null);
+            logger.info('Sent remaining payment reminder email with CC to staff', { bookingId: booking._id, userId, ccCount: ccList.length });
+          } catch (emailErr) {
+            logger.warn('Failed to send reminder email with CC', { bookingId: booking._id, error: emailErr?.message || emailErr });
+          }
+
+        } catch (innerErr) {
+          logger.error('Error processing scheduled reminder for schedule', { scheduleId: sched._id, error: innerErr.message });
+        }
+      }
+
+    } catch (err) {
+      logger.error('Scheduled reminders job failed:', err.message || err);
+    }
+  });
+
+  logger.info('Reminder scheduler initialized');
 };
 
 // #endregion

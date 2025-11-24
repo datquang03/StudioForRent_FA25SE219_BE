@@ -1,7 +1,9 @@
 //#region Imports
 import { createPaymentOptions, handlePaymentWebhook, getPaymentStatus, createPaymentForRemaining } from '../services/payment.service.js';
 import { createPaymentForOption } from '../services/payment.service.js';
-import { ValidationError } from '../utils/errors.js';
+import { ValidationError, NotFoundError } from '../utils/errors.js';
+import Booking from '../models/Booking/booking.model.js';
+import { USER_ROLES } from '../utils/constants.js';
 import logger from '../utils/logger.js';
 //#endregion
 
@@ -114,7 +116,18 @@ export const createRemainingPaymentController = async (req, res) => {
       throw new ValidationError('Booking ID is required');
     }
 
-    const payment = await createPaymentForRemaining(bookingId);
+    // Ensure booking exists and enforce ownership for customers
+    const booking = await Booking.findById(bookingId).select('userId');
+    if (!booking) throw new NotFoundError('Booking not found');
+
+    if (req.user && req.user.role === USER_ROLES.CUSTOMER) {
+      if (!booking.userId || booking.userId.toString() !== req.user._id.toString()) {
+        return res.status(403).json({ success: false, message: 'Forbidden: not owner of booking' });
+      }
+    }
+
+    // Pass actorId for audit (who created the remaining payment)
+    const payment = await createPaymentForRemaining(bookingId, { actorId: req.user?._id });
 
     res.status(200).json({ success: true, message: 'Remaining payment created', data: payment });
   } catch (error) {

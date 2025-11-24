@@ -313,15 +313,21 @@ export const sendNoShowEmail = async (to, details = {}) => {
  * @param {string} subject - Tiêu đề email
  * @param {string} htmlContent - Nội dung HTML
  */
-export const sendEmail = async (to, subject, htmlContent) => {
+export const sendEmail = async (to, subject, htmlContent, cc = null) => {
   try {
-    await transporter.sendMail({
+    const mailOptions = {
       from: `"Studio Management" <${EMAIL_CONFIG.USER}>`,
       to,
       subject,
       html: htmlContent,
-    });
-    logger.success(`Email sent to ${to}`);
+    };
+
+    if (cc) {
+      mailOptions.cc = Array.isArray(cc) ? cc.join(',') : cc;
+    }
+
+    await transporter.sendMail(mailOptions);
+    logger.success(`Email sent to ${to}` + (cc ? ` cc:${mailOptions.cc}` : ''));
   } catch (error) {
     logger.error(`Failed to send email to ${to}`, error);
     throw new Error(`EMAIL_SEND_FAILED: ${error.message}`);
