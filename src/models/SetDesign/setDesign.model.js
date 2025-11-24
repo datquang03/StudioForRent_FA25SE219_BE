@@ -1,145 +1,228 @@
 import mongoose from "mongoose";
-import { AI_SET_DESIGN_STATUS } from "../../utils/constants.js";
 
 /**
- * AI SET DESIGN MODEL
- * Chat-based AI design workflow:
- * 1. Customer chats with AI about their photoshoot vision
- * 2. AI generates design suggestions based on conversation
- * 3. Customer selects and confirms a design
-  * 4. Staff receives confirmed design and implements it
- *
- * BREAKING CHANGE (v2): Legacy fields `finalAiPrompt` and `finalAiImageUrl` have been removed.
- *   - Previously, the final AI-generated prompt and image URL were stored separately.
- *   - Now, the confirmed design is stored in the `finalDesign` object, which includes:
- *       - title, description, colorScheme, lighting, mood, cameraAngles, specialEffects, imageUrl, confirmedAt
- *   - This change allows for richer, structured data and better tracking of customer confirmation.
- *
- *   Service layer code referencing the old fields must be updated to use `finalDesign`.
+ * SET DESIGN MODEL
+ * Simplified model for set design products that customers can browse, purchase, and review.
  *
  * Schema fields:
- *   - bookingId: Reference to Booking
- *   - chatHistory: Array of customer/AI messages
- *   - aiIterations: Array of AI-generated design suggestions
- *   - finalDesign: The design confirmed by the customer (see above)
- *   - requiredProps: List of props/items needed for the set design
- *   - staffInChargeId: Staff member responsible for execution
- *   - staffFinalSetupImages: Images of the final setup
- *   - staffNotes: Staff notes/comments
- *   - finalPrice: Price for the set design
- *   - status: Workflow status
+ *   - name: Display name of the set design
+ *   - description: Detailed description of the design
+ *   - price: Price for this set design
+ *   - images: Array of image URLs (stored in Cloudinary)
+ *   - reviews: Array of customer reviews and ratings
+ *   - comments: Array of customer comments/questions
+ *   - createdAt: Auto-generated creation timestamp
+ *   - updatedAt: Auto-generated update timestamp
  */
 const setDesignSchema = new mongoose.Schema(
   {
-    bookingId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Booking",
-      required: true,
-      unique: true,
+    // === BASIC INFORMATION ===
+    name: {
+      type: String,
+      required: [true, "Set design name is required"],
+      trim: true,
+      maxlength: [100, "Name cannot exceed 100 characters"],
     },
-    
-    // === CUSTOMER-AI CHAT HISTORY ===
-    chatHistory: {
+
+    description: {
+      type: String,
+      required: [true, "Set design description is required"],
+      trim: true,
+      maxlength: [1000, "Description cannot exceed 1000 characters"],
+    },
+
+    price: {
+      type: Number,
+      required: [true, "Set design price is required"],
+      min: [0, "Price cannot be negative"],
+      default: 0,
+    },
+
+    // === IMAGES ===
+    images: {
+      type: [String], // Array of Cloudinary URLs
+      default: [],
+      validate: {
+        validator: function(images) {
+          return images.length <= 10; // Max 10 images per design
+        },
+        message: "Cannot have more than 10 images per set design"
+      }
+    },
+
+    // === REVIEWS ===
+    reviews: {
       type: [{
-        role: {
+        customerId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          required: true,
+        },
+        customerName: {
           type: String,
-          enum: ['customer', 'ai'],
+          required: true,
+        },
+        rating: {
+          type: Number,
+          required: true,
+          min: 1,
+          max: 5,
+        },
+        comment: {
+          type: String,
+          maxlength: [500, "Review comment cannot exceed 500 characters"],
+        },
+        createdAt: {
+          type: Date,
+          default: Date.now,
+        },
+      }],
+      default: [],
+    },
+
+    // === COMMENTS ===
+    comments: {
+      type: [{
+        customerId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          required: true,
+        },
+        customerName: {
+          type: String,
           required: true,
         },
         message: {
           type: String,
           required: true,
+          maxlength: [300, "Comment cannot exceed 300 characters"],
         },
-        timestamp: {
+        createdAt: {
           type: Date,
           default: Date.now,
+        },
+        replies: {
+          type: [{
+            staffId: {
+              type: mongoose.Schema.Types.ObjectId,
+              ref: "User",
+              required: true,
+            },
+            staffName: {
+              type: String,
+              required: true,
+            },
+            message: {
+              type: String,
+              required: true,
+              maxlength: [300, "Reply cannot exceed 300 characters"],
+            },
+            createdAt: {
+              type: Date,
+              default: Date.now,
+            },
+          }],
+          default: [],
         },
       }],
       default: [],
     },
-    
-    // === AI GENERATION PHASE ===
-    // Lưu tất cả design iterations AI tạo trong cuộc trò chuyện
-    aiIterations: {
-      type: [{
-        title: String,
-        description: String,
-        colorScheme: [String],
-        lighting: String,
-        mood: String,
-        cameraAngles: [String],
-        specialEffects: [String],
-        imageUrl: String, // Optional: Generated image from Imagen
-        generatedAt: {
-          type: Date,
-          default: Date.now,
-        },
-      }],
-      default: [],
+    isActive: {
+      type: Boolean,
+      default: true,
     },
-    
-    // === CUSTOMER CONFIRMATION ===
-    // Design cuối cùng khách hàng chọn và xác nhận
-    finalDesign: {
-      type: {
-        title: String,
-        description: String,
-        colorScheme: [String],
-        lighting: String,
-        mood: String,
-        cameraAngles: [String],
-        specialEffects: [String],
-        imageUrl: String,
-        confirmedAt: Date,
-      },
+
+    category: {
+      type: String,
+      enum: ['wedding', 'portrait', 'corporate', 'event', 'family', 'graduation', 'other'],
+      default: 'other',
     },
-    
-    // Danh sách props/dụng cụ cần thiết cho set design
-    requiredProps: {
-      type: mongoose.Schema.Types.Mixed,
-      default: {},
-      // Example: { items: ['backdrop-white', 'chair-vintage', 'plant-large'], notes: '...' }
-    },
-    
-    // === STAFF EXECUTION PHASE ===
-    staffInChargeId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-    },
-    
-    // Ảnh setup thực tế sau khi staff dựng xong
-    staffFinalSetupImages: {
+
+    tags: {
       type: [String],
       default: [],
     },
-    
-    staffNotes: {
-      type: String,
-    },
-    
-    // Giá riêng cho set design này
-    finalPrice: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-    
-    // === STATUS WORKFLOW ===
-    status: {
-      type: String,
-      enum: Object.values(AI_SET_DESIGN_STATUS),
-      default: AI_SET_DESIGN_STATUS.DRAFTING,
-      required: true,
-    },
   },
   {
-    timestamps: true,
+    timestamps: true, // Automatically adds createdAt and updatedAt
   }
 );
 
-// Indexes
-setDesignSchema.index({ bookingId: 1, status: 1 });
-setDesignSchema.index({ staffInChargeId: 1 });
+// Indexes for performance
+setDesignSchema.index({ name: 1 });
+setDesignSchema.index({ category: 1 });
+setDesignSchema.index({ isActive: 1 });
+setDesignSchema.index({ price: 1 });
+setDesignSchema.index({ createdAt: -1 });
+
+// Virtual for average rating
+setDesignSchema.virtual('averageRating').get(function() {
+  if (this.reviews.length === 0) return 0;
+  const sum = this.reviews.reduce((acc, review) => acc + review.rating, 0);
+  return Math.round((sum / this.reviews.length) * 10) / 10; // Round to 1 decimal
+});
+
+// Virtual for total reviews count
+setDesignSchema.virtual('totalReviews').get(function() {
+  return this.reviews.length;
+});
+
+// Virtual for total comments count
+setDesignSchema.virtual('totalComments').get(function() {
+  return this.comments.length;
+});
+
+// Ensure virtual fields are serialized
+setDesignSchema.set('toJSON', { virtuals: true });
+setDesignSchema.set('toObject', { virtuals: true });
+
+// Static method to get active designs
+setDesignSchema.statics.getActiveDesigns = function() {
+  return this.find({ isActive: true }).sort({ createdAt: -1 });
+};
+
+// Static method to get designs by category
+setDesignSchema.statics.getByCategory = function(category) {
+  return this.find({ category, isActive: true }).sort({ createdAt: -1 });
+};
+
+// Instance method to add review
+setDesignSchema.methods.addReview = function(customerId, customerName, rating, comment) {
+  this.reviews.push({
+    customerId,
+    customerName,
+    rating,
+    comment,
+    createdAt: new Date(),
+  });
+  return this.save();
+};
+
+// Instance method to add comment
+setDesignSchema.methods.addComment = function(customerId, customerName, message) {
+  this.comments.push({
+    customerId,
+    customerName,
+    message,
+    createdAt: new Date(),
+    replies: [],
+  });
+  return this.save();
+};
+
+// Instance method to reply to comment
+setDesignSchema.methods.replyToComment = function(commentIndex, staffId, staffName, message) {
+  if (this.comments[commentIndex]) {
+    this.comments[commentIndex].replies.push({
+      staffId,
+      staffName,
+      message,
+      createdAt: new Date(),
+    });
+    return this.save();
+  }
+  throw new Error('Comment not found');
+};
 
 const SetDesign = mongoose.model("SetDesign", setDesignSchema);
 

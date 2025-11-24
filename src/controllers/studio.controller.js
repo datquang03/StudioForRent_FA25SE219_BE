@@ -8,10 +8,12 @@ import {
   changeStudioStatus,
   deleteStudio,
   getActiveStudios,
-  getStudioAvailability,
+  getStudioSchedule,
+  getStudioScheduleByDate,
+  getStudiosSchedule,
+  getStudiosScheduleByDate,
   getStudiosAvailability,
-  checkTimeSlotAvailability,
-  getStudioBookedSchedules,
+  getStudioBookedHistory,
   getStudiosBookedSchedules,
 } from '../services/studio.service.js';
 import { uploadMultipleImages, uploadVideo } from '../services/upload.service.js';
@@ -218,23 +220,101 @@ export const uploadStudioMedia = asyncHandler(async (req, res) => {
 // #region Studio Availability
 
 /**
- * Get availability for a specific studio
- * GET /api/studios/:id/availability
+ * Get schedule (booked/ongoing) for a specific studio
+ * GET /api/studios/:id/schedule
  */
-export const getStudioAvailabilityController = asyncHandler(async (req, res) => {
+export const getStudioScheduleController = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { startDate, endDate, page, limit } = req.query;
+  const { startDate, endDate } = req.query;
 
-  const result = await getStudioAvailability(id, {
+  const result = await getStudioSchedule(id, {
     startDate,
-    endDate,
-    page: parseInt(page) || 1,
-    limit: parseInt(limit) || 20
+    endDate
   });
 
   res.status(200).json({
     success: true,
-    message: 'Lấy thông tin availability của studio thành công!',
+    message: 'Lấy thông tin lịch của studio thành công!',
+    data: result,
+  });
+});
+
+/**
+ * Get schedule for a specific studio on a single date
+ * GET /api/studios/:id/schedule/date/:date
+ */
+export const getStudioScheduleByDateController = asyncHandler(async (req, res) => {
+  const { id, date } = req.params;
+
+  if (!date) {
+    res.status(400);
+    throw new Error('Ngày là bắt buộc');
+  }
+
+  const targetDate = new Date(date);
+  if (isNaN(targetDate.getTime())) {
+    res.status(400);
+    throw new Error('Định dạng ngày không hợp lệ');
+  }
+
+  const result = await getStudioScheduleByDate(id, targetDate);
+
+  res.status(200).json({
+    success: true,
+    message: 'Lấy thông tin lịch của studio theo ngày thành công!',
+    data: result,
+  });
+});
+
+/**
+ * Get schedules for all studios by date range
+ * GET /api/studios/schedule
+ */
+export const getStudiosScheduleController = asyncHandler(async (req, res) => {
+  const { startDate, endDate, page, limit } = req.query;
+
+  const result = await getStudiosSchedule({
+    startDate,
+    endDate,
+    page: parseInt(page) || 1,
+    limit: parseInt(limit) || 10
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'Lấy thông tin lịch của các studios thành công!',
+    data: result,
+  });
+});
+
+/**
+ * Get schedules for all studios by a single date
+ * GET /api/studios/schedule/date/:date
+ */
+export const getStudiosScheduleByDateController = asyncHandler(async (req, res) => {
+  const { date } = req.params;
+  const { page, limit } = req.query;
+
+  if (!date) {
+    res.status(400);
+    throw new Error('Ngày là bắt buộc');
+  }
+
+  const targetDate = new Date(date);
+  if (isNaN(targetDate.getTime())) {
+    res.status(400);
+    throw new Error('Định dạng ngày không hợp lệ');
+  }
+
+  const result = await getStudiosScheduleByDate(
+    targetDate,
+    parseInt(page) || 1,
+    parseInt(limit) || 10
+  );
+
+  res.status(200).json({
+    success: true,
+    message: 'Lấy thông tin lịch của các studios theo ngày thành công!',
     data: result,
   });
 });
@@ -260,63 +340,26 @@ export const getStudiosAvailabilityController = asyncHandler(async (req, res) =>
   });
 });
 
-/**
- * Check if a specific time slot is available
- * POST /api/studios/:id/check-availability
- */
-export const checkTimeSlotAvailabilityController = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const { startTime, endTime } = req.body;
-
-  if (!startTime || !endTime) {
-    res.status(400);
-    throw new Error('startTime và endTime là bắt buộc');
-  }
-
-  const start = new Date(startTime);
-  const end = new Date(endTime);
-
-  if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-    res.status(400);
-    throw new Error('startTime và endTime phải là ngày hợp lệ');
-  }
-
-  if (end <= start) {
-    res.status(400);
-    throw new Error('endTime phải sau startTime');
-  }
-
-  const result = await checkTimeSlotAvailability(id, start, end);
-
-  res.status(200).json({
-    success: true,
-    message: 'Kiểm tra availability thành công!',
-    data: result,
-  });
-});
-
 // #endregion
 
 // #region Studio Booked Schedules
 
 /**
- * Get booked schedules for a specific studio
- * GET /api/studios/:id/booked-schedules
+ * Get booked history for a specific studio
+ * GET /api/studios/:id/booked-history
  */
-export const getStudioBookedSchedulesController = asyncHandler(async (req, res) => {
+export const getStudioBookedHistoryController = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { startDate, endDate, page, limit } = req.query;
+  const { startDate, endDate } = req.query;
 
-  const result = await getStudioBookedSchedules(id, {
+  const result = await getStudioBookedHistory(id, {
     startDate,
-    endDate,
-    page: parseInt(page) || 1,
-    limit: parseInt(limit) || 20
+    endDate
   });
 
   res.status(200).json({
     success: true,
-    message: 'Lấy thông tin booked schedules của studio thành công!',
+    message: 'Lấy thông tin booked history của studio thành công!',
     data: result,
   });
 });

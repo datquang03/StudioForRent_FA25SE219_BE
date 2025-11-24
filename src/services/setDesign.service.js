@@ -1,599 +1,1170 @@
 // #region Imports
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import OpenAI from 'openai';
 import SetDesign from '../models/SetDesign/setDesign.model.js';
-import Booking from '../models/Booking/booking.model.js';
-import { AI_SET_DESIGN_STATUS } from '../utils/constants.js';
+import CustomDesignRequest from '../models/CustomDesignRequest/customDesignRequest.model.js';
 import logger from '../utils/logger.js';
+import cloudinary from '../config/cloudinary.js';
+import axios from 'axios';
+import { generateImageWithGetty } from './gettyImages.service.js';
 // #endregion
 
-// Initialize Gemini AI with safety settings
+// Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({
-  model: 'gemini-2.5-flash', // Updated to latest released model
-  safetySettings: [
-    {
-      category: 'HARM_CATEGORY_HARASSMENT',
-      threshold: 'BLOCK_MEDIUM_AND_ABOVE',
-    },
-    {
-      category: 'HARM_CATEGORY_HATE_SPEECH',
-      threshold: 'BLOCK_MEDIUM_AND_ABOVE',
-    },
-    {
-      category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-      threshold: 'BLOCK_MEDIUM_AND_ABOVE',
-    },
-    {
-      category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
-      threshold: 'BLOCK_MEDIUM_AND_ABOVE',
-    },
-  ],
+const textModel = genAI.getGenerativeModel({
+  model: 'gemini-2.0-flash-exp',
   generationConfig: {
-    temperature: 0.7,
+    temperature: 0.9,
     topK: 40,
     topP: 0.95,
     maxOutputTokens: 2048,
   },
 });
 
-// Imagen 4.0 image generation is NOT accessible via @google/generative-ai SDK's getGenerativeModel.
-// To use Imagen 4.0, you must use the appropriate API endpoint or SDK provided by Google for image generation.
-// Remove or replace this block with the correct integration when available.
+// Gemini Imagen 3 is already initialized through genAI above
 
-// #region Set Design Service
+// #region Set Design Service - Product Catalog
 
 /**
- * Generate AI design suggestions for a booking
- * @param {string} bookingId - Booking ID
- * @param {Object} preferences - User preferences (theme, style, colors, etc.)
- * @returns {Object} AI-generated design suggestions
+ * Get all active set designs with pagination and filtering
+ * @param {Object} options - Query options
+ * @param {number} options.page - Page number (default: 1)
+ * @param {number} options.limit - Items per page (default: 10)
+ * @param {string} options.category - Filter by category
+ * @param {string} options.search - Search in name and description
+ * @param {string} options.sortBy - Sort field (default: createdAt)
+ * @param {string} options.sortOrder - Sort order (default: desc)
+ * @returns {Object} Paginated set designs
  */
-export const generateAiDesign = async (bookingId, preferences = {}) => {
+export const getSetDesigns = async (options = {}) => {
   try {
-    // Get booking details for context
-    const booking = await Booking.findById(bookingId)
-      .populate('scheduleId', 'studioId startTime endTime')
-      .populate('scheduleId.studioId', 'name type capacity');
+    const {
+      page = 1,
+      limit = 10,
+      category,
+      search,
+      sortBy = 'createdAt',
+      sortOrder = 'desc'
+    } = options;
 
-    if (!booking) {
-      throw new Error('Booking not found');
+    const query = { isActive: true };
+
+    // Add category filter
+    if (category && category !== 'all') {
+      query.category = category;
     }
 
-    // Create prompt for Gemini with strict studio-only instructions
-    const prompt = createDesignPrompt(booking, preferences);
-
-    // Generate design suggestions with system instructions
-    const systemPrompt = `SYSTEM INSTRUCTIONS: You are a professional photo studio set designer AI that ONLY creates content related to photo studio set designs. You MUST refuse any requests that are not related to photo studio set design, photography equipment, lighting, props, or studio setup. If asked about anything else, respond with: "I can only assist with photo studio set design topics."
-
-You are restricted to:
-- Photo studio set designs and layouts
-- Photography lighting and equipment
-- Props and backdrops for photo shoots
-- Camera angles and techniques for studio photography
-- Color schemes and mood for studio shoots
-
-You CANNOT discuss or generate content about:
-- General topics not related to photography
-- Personal advice or life coaching
-- Political topics
-- Sensitive or controversial subjects
-- Anything outside of professional photo studio work
-
-Always respond in the requested JSON format for valid studio design requests.`;
-
-    const fullPrompt = `${systemPrompt}\n\nUSER REQUEST: ${prompt}`;
-
-    // Log AI usage for monitoring
-    logger.info(`AI Design Generation - User: ${booking.userId}, Booking: ${bookingId}, Preferences: ${Object.keys(preferences).length} items`);
-
-    // Generate design suggestions
-    const result = await model.generateContent(fullPrompt);
-    const response = await result.response;
-    const responseText = response.text();
-
-    // Validate response is studio-related
-    if (responseText.toLowerCase().includes('i can only assist') ||
-        !responseText.includes('title') ||
-        !responseText.includes('description')) {
-      throw new Error('AI response was not studio design related or invalid format');
+    // Add search filter
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } }
+      ];
     }
 
-    let designSuggestions;
-    try {
-      designSuggestions = JSON.parse(responseText);
-    } catch (parseError) {
-      logger.error('Failed to parse AI response as JSON:', responseText);
-      throw new Error('AI generated invalid response format');
+    const sortOptions = {};
+    sortOptions[sortBy] = sortOrder === 'desc' ? -1 : 1;
+
+    const skip = (page - 1) * limit;
+
+    const [designs, total] = await Promise.all([
+      SetDesign.find(query)
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(limit)
+        .populate('reviews.customerId', 'name email')
+        .populate('comments.customerId', 'name email')
+        .populate('comments.replies.staffId', 'name email'),
+      SetDesign.countDocuments(query)
+    ]);
+
+    return {
+      designs,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    };
+  } catch (error) {
+    logger.error('Error getting set designs:', error);
+    throw new Error('Failed to retrieve set designs');
+  }
+};
+
+/**
+ * Get a single set design by ID
+ * @param {string} id - Set design ID
+ * @returns {Object} Set design with populated reviews and comments
+ */
+export const getSetDesignById = async (id) => {
+  try {
+    const design = await SetDesign.findById(id)
+      .populate('reviews.customerId', 'name email')
+      .populate('comments.customerId', 'name email')
+      .populate('comments.replies.staffId', 'name email');
+
+    if (!design) {
+      throw new Error('Set design not found');
     }
 
-    // Save AI iteration to database
-    const setDesign = await SetDesign.findOneAndUpdate(
-      { bookingId },
-      {
-        $push: {
-          aiIterations: {
-            prompt: JSON.stringify(preferences),
-            imageUrl: designSuggestions.imageUrl || null,
-            generatedAt: new Date()
-          }
-        }
-      },
-      { upsert: true, new: true }
+    return design;
+  } catch (error) {
+    logger.error('Error getting set design by ID:', error);
+    throw new Error('Failed to retrieve set design');
+  }
+};
+
+/**
+ * Create a new set design (Admin only)
+ * @param {Object} designData - Set design data
+ * @returns {Object} Created set design
+ */
+export const createSetDesign = async (designData) => {
+  try {
+    const design = new SetDesign(designData);
+    await design.save();
+
+    logger.info(`New set design created: ${design.name}`);
+    return design;
+  } catch (error) {
+    logger.error('Error creating set design:', error);
+    throw new Error('Failed to create set design');
+  }
+};
+
+/**
+ * Update a set design (Admin only)
+ * @param {string} id - Set design ID
+ * @param {Object} updateData - Update data
+ * @returns {Object} Updated set design
+ */
+export const updateSetDesign = async (id, updateData) => {
+  try {
+    const design = await SetDesign.findByIdAndUpdate(
+      id,
+      { ...updateData, updatedAt: new Date() },
+      { new: true, runValidators: true }
     );
 
-    return {
-      setDesignId: setDesign._id,
-      suggestions: designSuggestions,
-      iterationCount: setDesign.aiIterations.length
-    };
+    if (!design) {
+      throw new Error('Set design not found');
+    }
 
+    logger.info(`Set design updated: ${design.name}`);
+    return design;
   } catch (error) {
-    logger.error('Error generating AI design:', error);
-    throw new Error('Failed to generate AI design suggestions');
+    logger.error('Error updating set design:', error);
+    throw new Error('Failed to update set design');
   }
 };
 
 /**
- * Select final AI design from iterations
- * @param {string} setDesignId - SetDesign ID
- * @param {number} iterationIndex - Index of selected iteration
- * @returns {Object} Updated SetDesign
+ * Delete a set design (Admin only) - Soft delete by setting isActive to false
+ * @param {string} id - Set design ID
+ * @returns {Object} Deleted set design
  */
-export const selectFinalDesign = async (setDesignId, iterationIndex) => {
+export const deleteSetDesign = async (id) => {
   try {
-    const setDesign = await SetDesign.findById(setDesignId);
+    const design = await SetDesign.findByIdAndUpdate(
+      id,
+      { isActive: false, updatedAt: new Date() },
+      { new: true }
+    );
 
-    if (!setDesign) {
-      throw new Error('SetDesign not found');
+    if (!design) {
+      throw new Error('Set design not found');
     }
 
-    if (!setDesign.aiIterations[iterationIndex]) {
-      throw new Error('Invalid iteration index');
-    }
-
-    const selectedIteration = setDesign.aiIterations[iterationIndex];
-
-    setDesign.finalDesign = {
-      title: selectedIteration.title,
-      description: selectedIteration.description,
-      colorScheme: selectedIteration.colorScheme,
-      lighting: selectedIteration.lighting,
-      mood: selectedIteration.mood,
-      cameraAngles: selectedIteration.cameraAngles,
-      specialEffects: selectedIteration.specialEffects,
-      imageUrl: selectedIteration.imageUrl,
-      confirmedAt: new Date()
-    };
-    setDesign.status = AI_SET_DESIGN_STATUS.DESIGN_APPROVED;
-
-    await setDesign.save();
-
-    return setDesign;
-
+    logger.info(`Set design deactivated: ${design.name}`);
+    return design;
   } catch (error) {
-    logger.error('Error selecting final design:', error);
-    throw error;
+    logger.error('Error deleting set design:', error);
+    throw new Error('Failed to delete set design');
   }
 };
 
 /**
- * Generate props/equipment recommendations for a design
- * @param {string} setDesignId - SetDesign ID
- * @returns {Object} Props recommendations
+ * Add a review to a set design
+ * @param {string} designId - Set design ID
+ * @param {string} customerId - Customer ID
+ * @param {string} customerName - Customer name
+ * @param {number} rating - Rating (1-5)
+ * @param {string} comment - Review comment
+ * @returns {Object} Updated set design
  */
-export const generatePropsRecommendations = async (setDesignId) => {
+export const addReview = async (designId, customerId, customerName, rating, comment) => {
   try {
-    const setDesign = await SetDesign.findById(setDesignId)
-      .populate('bookingId', 'scheduleId')
-      .populate('bookingId.scheduleId', 'studioId')
-      .populate('bookingId.scheduleId.studioId', 'equipment');
-
-    if (!setDesign || !setDesign.finalAiPrompt) {
-      throw new Error('SetDesign not found or no final design selected');
+    const design = await SetDesign.findById(designId);
+    if (!design) {
+      throw new Error('Set design not found');
     }
 
-    const systemPrompt = `SYSTEM INSTRUCTIONS: You are a professional photo studio equipment specialist. You ONLY provide recommendations for photography equipment, lighting, props, and studio setup. You MUST refuse any requests not related to professional photo studio work.`;
+    await design.addReview(customerId, customerName, rating, comment);
 
-    const prompt = `${systemPrompt}
-
-Based on this approved studio set design: "${setDesign.finalAiPrompt}"
-
-Please recommend ONLY professional photography equipment and props needed for this studio set design.
-
-Available studio equipment: ${JSON.stringify(setDesign.bookingId.scheduleId.studioId.equipment || [])}
-
-REQUIREMENTS:
-- Only recommend photography-related equipment and props
-- Focus on lighting, backdrops, stands, modifiers, cameras, lenses
-- No general household items or non-photography equipment
-- Be specific about professional photography gear
-- Consider the studio's existing equipment
-
-Return ONLY a valid JSON object with this exact structure:
-{
-  "recommendedProps": ["Professional photography prop 1", "Professional photography prop 2"],
-  "availableEquipment": ["Existing studio equipment to use"],
-  "additionalNotes": "Professional photography setup notes only"
-}`;
-
-    // Log AI usage for props recommendations
-    logger.info(`AI Props Recommendations - SetDesign: ${setDesignId}, User: ${setDesign.bookingId.userId}`);
-
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const responseText = response.text();
-
-    // Validate response is equipment-related
-    if (responseText.toLowerCase().includes('i can only assist') ||
-        !responseText.includes('recommendedProps') ||
-        !responseText.includes('availableEquipment')) {
-      throw new Error('AI response was not equipment-related or invalid format');
-    }
-
-    let recommendations;
-    try {
-      recommendations = JSON.parse(responseText);
-    } catch (parseError) {
-      logger.error('Failed to parse props recommendations as JSON:', responseText);
-      throw new Error('AI generated invalid props response format');
-    }
-
-    // Update setDesign with recommendations
-    setDesign.requiredProps = recommendations;
-    await setDesign.save();
-
-    return recommendations;
-
+    logger.info(`Review added to set design: ${design.name}`);
+    return design;
   } catch (error) {
-    logger.error('Error generating props recommendations:', error);
-    throw new Error('Failed to generate props recommendations');
+    logger.error('Error adding review:', error);
+    throw new Error('Failed to add review');
   }
 };
 
 /**
- * Get all AI iterations for a setDesign
- * @param {string} setDesignId - SetDesign ID
- * @returns {Array} AI iterations
+ * Add a comment to a set design
+ * @param {string} designId - Set design ID
+ * @param {string} customerId - Customer ID
+ * @param {string} customerName - Customer name
+ * @param {string} message - Comment message
+ * @returns {Object} Updated set design
  */
-export const getAiIterations = async (setDesignId) => {
+export const addComment = async (designId, customerId, customerName, message) => {
   try {
-    const setDesign = await SetDesign.findById(setDesignId)
-      .select('aiIterations finalAiPrompt finalAiImageUrl status')
-      .lean();
-
-    if (!setDesign) {
-      throw new Error('SetDesign not found');
+    const design = await SetDesign.findById(designId);
+    if (!design) {
+      throw new Error('Set design not found');
     }
 
-    return setDesign;
+    await design.addComment(customerId, customerName, message);
 
+    logger.info(`Comment added to set design: ${design.name}`);
+    return design;
   } catch (error) {
-    logger.error('Error getting AI iterations:', error);
-    throw error;
+    logger.error('Error adding comment:', error);
+    throw new Error('Failed to add comment');
   }
 };
 
 /**
- * Create design prompt for Gemini AI
- * @param {Object} booking - Booking object
- * @param {Object} preferences - User preferences
- * @returns {string} Formatted prompt
+ * Reply to a comment on a set design (Staff only)
+ * @param {string} designId - Set design ID
+ * @param {number} commentIndex - Index of the comment to reply to
+ * @param {string} staffId - Staff ID
+ * @param {string} staffName - Staff name
+ * @param {string} message - Reply message
+ * @returns {Object} Updated set design
  */
-const createDesignPrompt = (booking, preferences) => {
-  const studio = booking.scheduleId?.studioId;
+export const replyToComment = async (designId, commentIndex, staffId, staffName, message) => {
+  try {
+    const design = await SetDesign.findById(designId);
+    if (!design) {
+      throw new Error('Set design not found');
+    }
 
-  // Validate preferences are studio-related
-  const allowedKeys = ['theme', 'style', 'colors', 'mood', 'lighting', 'backdrop', 'props', 'camera', 'specialEffects', 'atmosphere'];
-  const filteredPreferences = Object.entries(preferences)
-    .filter(([key]) => allowedKeys.includes(key.toLowerCase()))
-    .reduce((obj, [key, value]) => {
-      obj[key] = value;
-      return obj;
-    }, {});
+    await design.replyToComment(commentIndex, staffId, staffName, message);
 
-  return `STUDIO SET DESIGN REQUEST ONLY:
-
-You must ONLY generate photo studio set design concepts. This is for professional photography studio work.
-
-Studio Specifications:
-- Studio Name: ${studio?.name || 'Professional Photo Studio'}
-- Studio Type: ${studio?.type || 'Commercial Photography Studio'}
-- Capacity: ${studio?.capacity || 'Standard'} people
-- Session Time: ${booking.scheduleId?.startTime || 'Scheduled time'} to ${booking.scheduleId?.endTime || 'End time'}
-
-Client Preferences (studio-related only):
-${Object.entries(filteredPreferences).map(([key, value]) => `- ${key}: ${value}`).join('\n')}
-
-REQUIRED: Generate exactly 3 different professional photo studio set design concepts for this booking.
-
-Each design concept MUST include:
-1. title: A professional, descriptive title (max 50 characters)
-2. description: Detailed studio setup description (200-400 characters)
-3. colorScheme: Professional color palette for studio photography
-4. lighting: Specific lighting setup using studio equipment
-5. mood: Professional photography mood/atmosphere
-6. cameraAngles: Recommended camera techniques for this setup
-7. specialEffects: Studio-appropriate effects and techniques
-
-IMPORTANT RESTRICTIONS:
-- Only discuss studio photography equipment and techniques
-- No general topics, personal advice, or non-studio content
-- All suggestions must be practical for professional photo studios
-- Focus on lighting, composition, props, and camera work
-- Keep descriptions professional and photography-focused
-
-Return ONLY a valid JSON array with exactly 3 objects. No additional text or explanations.`;
+    logger.info(`Reply added to comment on set design: ${design.name}`);
+    return design;
+  } catch (error) {
+    logger.error('Error replying to comment:', error);
+    throw new Error('Failed to reply to comment');
+  }
 };
 
 /**
- * Generate image from design description (Optional - requires Imagen API)
- * @param {string} designDescription - Text description from Gemini
- * @returns {Object} Image generation result
+ * Upload an image to Cloudinary for a set design
+ * @param {string} base64Image - Base64 encoded image
+ * @param {string} fileName - File name for the image
+ * @returns {string} Cloudinary URL of the uploaded image
  */
-export const generateDesignImage = async (designDescription) => {
+export const uploadDesignImage = async (base64Image, fileName = 'design') => {
   try {
-    // Check if Imagen is available
-    if (!imagenModel) {
-      logger.info(`Image generation requested but Gemini API not configured: ${designDescription.substring(0, 100)}...`);
-      return {
-        imageUrl: null,
-        prompt: designDescription,
-        note: 'Image generation requires GOOGLE_GEMINI_API_KEY in .env file (same key used for text generation)'
-      };
-    }
+    // Remove data URL prefix if present
+    const base64Data = base64Image.replace(/^data:image\/[a-z]+;base64,/, '');
 
-    // Create professional photography prompt for Imagen 4.0
-    const imagePrompt = `Professional photo studio set design: ${designDescription}. 
-High quality, 4K HDR, professional photography, studio lighting, detailed, realistic, 
-cinematic composition, professional color grading, shot with professional camera equipment`;
-
-    logger.info(`Generating image with Imagen 4.0: ${designDescription.substring(0, 100)}...`);
-
-    // Generate image with Imagen 4.0
-    const result = await imagenModel.generateImages({
-      prompt: imagePrompt,
-      numberOfImages: 1,
-      aspectRatio: '16:9', // Widescreen for studio layouts
-      personGeneration: 'allow_adult' // Allow people in studio setup images
+    // Upload to Cloudinary
+    const result = await cloudinary.uploader.upload(`data:image/png;base64,${base64Data}`, {
+      folder: 'set-designs',
+      public_id: `${fileName}-${Date.now()}`,
+      resource_type: 'image',
+      transformation: [
+        { width: 1200, height: 800, crop: 'limit' },
+        { quality: 'auto' }
+      ]
     });
 
-    const generatedImages = result.generatedImages;
-    if (!generatedImages || generatedImages.length === 0) {
-      throw new Error('No images generated');
-    }
-
-    // Return the first generated image
-    return {
-      imageUrl: generatedImages[0].imageUrl || generatedImages[0].image,
-      prompt: imagePrompt,
-      model: 'imagen-4.0-generate-001',
-      aspectRatio: '16:9'
-    };
-
+    logger.info(`Image uploaded to Cloudinary: ${result.secure_url}`);
+    return result.secure_url;
   } catch (error) {
-    logger.error('Error generating design image:', error);
-    throw new Error('Failed to generate design image: ' + error.message);
+    logger.error('Error uploading image to Cloudinary:', error);
+    throw new Error('Failed to upload image');
   }
 };
 
 /**
- * Send a chat message to AI and get conversational response
- * @param {string} bookingId - Booking ID
- * @param {string} userMessage - Customer's message
- * @returns {Promise<Object>} AI response with chat history
+ * Get set designs by category
+ * @param {string} category - Category to filter by
+ * @returns {Array} Array of set designs in the category
  */
-export const sendChatMessage = async (bookingId, userMessage) => {
+export const getSetDesignsByCategory = async (category) => {
   try {
-    // Validate booking exists
-    const booking = await Booking.findById(bookingId);
-    if (!booking) {
-      throw new Error('Booking not found');
-    }
+    return await SetDesign.getByCategory(category);
+  } catch (error) {
+    logger.error('Error getting set designs by category:', error);
+    throw new Error('Failed to retrieve set designs by category');
+  }
+};
 
-    // Find or create SetDesign for this booking
-    let setDesign = await SetDesign.findOne({ bookingId });
+/**
+ * Get active set designs (for homepage/catalog)
+ * @returns {Array} Array of active set designs
+ */
+export const getActiveSetDesigns = async () => {
+  try {
+    return await SetDesign.getActiveDesigns();
+  } catch (error) {
+    logger.error('Error getting active set designs:', error);
+    throw new Error('Failed to retrieve active set designs');
+  }
+};
+
+// #endregion
+
+// #region AI Design Consultation & Image Generation
+
+/**
+ * Chat with AI about design ideas and get suggestions
+ * @param {string} userMessage - User's question or request about design
+ * @param {Array} conversationHistory - Previous conversation messages
+ * @returns {Object} AI response with design suggestions
+ */
+export const chatWithDesignAI = async (userMessage, conversationHistory = []) => {
+  try {
+    logger.info('Processing design consultation chat');
+
+    const systemPrompt = `You are an expert studio photography set designer and creative consultant. Your role is to:
+
+1. Help customers brainstorm creative ideas for their photoshoot set designs
+2. Suggest specific props, backdrops, lighting setups, and color schemes
+3. Provide professional advice on composition and atmosphere
+4. Ask clarifying questions to understand their vision better
+5. Recommend styles that match their needs (wedding, portrait, corporate, etc.)
+
+Always be:
+- Creative and inspiring
+- Practical and feasible
+- Professional and helpful
+- Detailed with specific suggestions
+
+Focus on studio photography set designs WITHOUT people in the frame.`;
+
+    // Build conversation context
+    let conversationText = `${systemPrompt}\n\n`;
     
-    if (!setDesign) {
-      // Create new SetDesign in drafting status
-      setDesign = new SetDesign({
-        bookingId,
-        status: AI_SET_DESIGN_STATUS.DRAFTING,
-        chatHistory: []
+    if (conversationHistory.length > 0) {
+      conversationText += 'Previous conversation:\n';
+      conversationHistory.forEach((msg) => {
+        conversationText += `${msg.role === 'user' ? 'Customer' : 'Designer'}: ${msg.content}\n`;
       });
+      conversationText += '\n';
     }
 
-    // Add customer message to chat history
-    setDesign.chatHistory.push({
-      role: 'customer',
-      message: userMessage,
-      timestamp: new Date()
-    });
+    conversationText += `Customer: ${userMessage}\n\nPlease provide helpful design suggestions:`;
 
-    // Build conversation context for AI
-    const conversationContext = setDesign.chatHistory
-      .map(msg => `${msg.role === 'customer' ? 'Customer' : 'AI'}: ${msg.message}`)
-      .join('\n');
+    const result = await textModel.generateContent([conversationText]);
+    const response = await result.response;
+    const aiMessage = response.text();
 
-    // Create AI prompt for conversational response
-    const prompt = `You are a helpful AI assistant for a photoshoot studio. You help customers design their perfect photoshoot setup through conversation.
-
-Previous conversation:
-${conversationContext}
-
-Instructions:
-1. Have a natural, friendly conversation about the customer's photoshoot vision
-2. Ask clarifying questions about: theme, colors, mood, lighting preferences, special effects
-3. When you have enough information (at least theme, colors, and mood), suggest generating 3 specific design concepts
-4. Keep responses concise and conversational (2-3 sentences)
-5. Focus on studio photoshoot setups only
-
-Respond to the customer's latest message naturally and helpfully.`;
-
-    const result = await model.generateContent(prompt);
-    const aiMessage = result.response.text();
-
-    // Add AI response to chat history
-    setDesign.chatHistory.push({
-      role: 'ai',
-      message: aiMessage,
-      timestamp: new Date()
-    });
-
-    // Save updated SetDesign
-    await setDesign.save();
-
-    // Determine if we have enough information to generate designs
-    const conversationText = conversationContext.toLowerCase();
-    const hasTheme = conversationText.includes('theme') || 
-                     conversationText.includes('occasion') || 
-                     conversationText.includes('wedding') ||
-                     conversationText.includes('portrait') ||
-                     conversationText.includes('couple');
-    const hasColors = conversationText.match(/\b(color|white|black|red|blue|green|pink|gold|silver)\b/);
-    const hasMood = conversationText.match(/\b(mood|elegant|romantic|modern|classic|dreamy|cozy|bright)\b/);
-    
-    const canGenerateDesigns = hasTheme && hasColors && hasMood;
+    logger.info('Design consultation response generated');
 
     return {
-      setDesignId: setDesign._id,
-      aiMessage,
-      chatHistory: setDesign.chatHistory,
-      canGenerateDesigns,
-      messageCount: setDesign.chatHistory.length
+      success: true,
+      userMessage,
+      aiResponse: aiMessage,
+      timestamp: new Date().toISOString(),
+      conversationLength: conversationHistory.length + 1
     };
-
   } catch (error) {
-    logger.error('Error in chat with AI:', error);
-    throw new Error('Failed to process chat message: ' + error.message);
+    logger.error('Error in design consultation chat:', error);
+    throw new Error('Failed to process design consultation');
   }
 };
 
 /**
- * Get chat history for a booking
- * @param {string} bookingId - Booking ID
- * @returns {Promise<Object>} Chat history
+ * Generate design summary and image prompt from conversation
+ * @param {Array} conversationHistory - Full conversation history
+ * @returns {Object} Design summary and optimized prompt
  */
-export const getChatHistory = async (bookingId) => {
+export const generateDesignSummaryFromChat = async (conversationHistory) => {
   try {
-    const setDesign = await SetDesign.findOne({ bookingId });
-    
-    if (!setDesign) {
-      return {
-        chatHistory: [],
-        messageCount: 0
-      };
-    }
+    logger.info('Generating design summary from conversation');
 
-    return {
-      setDesignId: setDesign._id,
-      chatHistory: setDesign.chatHistory || [],
-      messageCount: setDesign.chatHistory?.length || 0,
-      status: setDesign.status
-    };
-
-  } catch (error) {
-    logger.error('Error getting chat history:', error);
-    throw new Error('Failed to get chat history: ' + error.message);
-  }
-};
-
-/**
- * Generate design concepts based on entire chat conversation
- * @param {string} bookingId - Booking ID
- * @returns {Promise<Object>} Generated design suggestions
- */
-export const generateDesignsFromChat = async (bookingId) => {
-  try {
-    // Get SetDesign with chat history
-    const setDesign = await SetDesign.findOne({ bookingId });
-    
-    if (!setDesign || !setDesign.chatHistory || setDesign.chatHistory.length === 0) {
-      throw new Error('No chat history found. Please chat with AI first.');
-    }
-
-    // Build conversation summary for AI
-    const conversationSummary = setDesign.chatHistory
-      .map(msg => `${msg.role === 'customer' ? 'Customer' : 'AI'}: ${msg.message}`)
+    const conversationText = conversationHistory
+      .map(msg => `${msg.role === 'user' ? 'Customer' : 'Designer'}: ${msg.content}`)
       .join('\n');
 
-    // Create detailed prompt for design generation
-    const prompt = `Based on this entire conversation with the customer, generate 3 distinct photoshoot setup designs.
+    const summaryPrompt = `Based on the following conversation about a studio photography set design, create a comprehensive summary and an optimized prompt for AI image generation.
 
 Conversation:
-${conversationSummary}
+${conversationText}
 
-Generate 3 professional studio photoshoot setup designs in JSON format. Each design should include:
-- title: Creative, descriptive name
-- description: Detailed setup description (2-3 sentences)
-- colorScheme: Array of 3-5 specific colors
-- lighting: Detailed lighting setup
-- mood: Overall atmosphere
-- cameraAngles: Array of recommended angles
-- specialEffects: Array of effects/techniques
+Provide your response in this exact JSON format:
+{
+  "designSummary": "A brief summary of the agreed design concept",
+  "keyElements": ["element1", "element2", "element3"],
+  "style": "overall style (e.g., vintage, modern, minimalist)",
+  "colorScheme": "main colors",
+  "mood": "desired atmosphere",
+  "imagePrompt": "A detailed, optimized prompt for DALL-E 3 image generation focusing on the studio set design"
+}`;
 
-Return ONLY valid JSON array with no markdown formatting:
-[
-  {
-    "title": "Design Name",
-    "description": "...",
-    "colorScheme": ["color1", "color2", "color3"],
-    "lighting": "...",
-    "mood": "...",
-    "cameraAngles": ["angle1", "angle2"],
-    "specialEffects": ["effect1", "effect2"]
+    const result = await textModel.generateContent([summaryPrompt]);
+    const response = await result.response;
+    let summaryText = response.text();
+
+    // Extract JSON from response
+    const jsonMatch = summaryText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      summaryText = jsonMatch[0];
+    }
+
+    const designSummary = JSON.parse(summaryText);
+
+    logger.info('Design summary generated successfully');
+
+    return {
+      success: true,
+      ...designSummary,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    logger.error('Error generating design summary:', error);
+    throw new Error('Failed to generate design summary');
   }
-]`;
+};
 
-    const result = await model.generateContent(prompt);
-    let responseText = result.response.text().trim();
-
-    // Clean response - remove markdown code blocks if present
-    responseText = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-
-    let suggestions;
-    try {
-      suggestions = JSON.parse(responseText);
-    } catch (parseError) {
-      logger.error('Failed to parse AI response:', responseText);
-      throw new Error('AI generated invalid response format');
+/**
+ * Generate actual image using DALL-E 3 from OpenAI
+ * @param {string} prompt - Image generation prompt
+ * @param {Object} options - Generation options
+ * @returns {Object} Generated image data
+ */
+export const generateImageWithDALLE = async (prompt, options = {}) => {
+  try {
+    if (!openai) {
+      throw new Error('OpenAI API key not configured. Please add OPENAI_API_KEY to .env file');
     }
 
-    if (!Array.isArray(suggestions) || suggestions.length === 0) {
-      throw new Error('AI did not generate valid design suggestions');
+    logger.info('Generating image with DALL-E 3');
+
+    const {
+      size = '1024x1024', // Options: 1024x1024, 1024x1792, 1792x1024
+      quality = 'hd', // Options: standard, hd
+      style = 'vivid' // Options: vivid, natural
+    } = options;
+
+    // Enhance prompt for studio photography
+    const enhancedPrompt = `Professional studio photography set design: ${prompt}. 
+High-quality, photorealistic, well-lit professional photography setup. 
+No people in the frame, focus on the set design, props, and equipment. 
+Studio lighting visible, clean composition, magazine-quality image.`;
+
+    const response = await openai.images.generate({
+      model: 'dall-e-3',
+      prompt: enhancedPrompt.substring(0, 4000), // DALL-E 3 limit
+      n: 1,
+      size,
+      quality,
+      style,
+      response_format: 'url'
+    });
+
+    const imageUrl = response.data[0].url;
+    const revisedPrompt = response.data[0].revised_prompt;
+
+    logger.info('Image generated successfully with DALL-E 3');
+
+    // Download image and upload to Cloudinary for permanent storage
+    const cloudinaryUrl = await downloadAndUploadToCloudinary(imageUrl, 'ai-generated-design');
+
+    return {
+      success: true,
+      imageUrl: cloudinaryUrl,
+      originalUrl: imageUrl,
+      revisedPrompt,
+      metadata: {
+        model: 'dall-e-3',
+        size,
+        quality,
+        style,
+        generatedAt: new Date().toISOString()
+      }
+    };
+  } catch (error) {
+    logger.error('Error generating image with DALL-E:', error);
+    if (error.message.includes('API key')) {
+      throw error;
+    }
+    throw new Error('Failed to generate image with DALL-E 3');
+  }
+};
+
+/**
+ * Download image from URL and upload to Cloudinary
+ * @param {string} imageUrl - Source image URL
+ * @param {string} fileName - File name prefix
+ * @returns {string} Cloudinary URL
+ */
+const downloadAndUploadToCloudinary = async (imageUrl, fileName) => {
+  try {
+    // Download image as buffer
+    const response = await axios.get(imageUrl, {
+      responseType: 'arraybuffer'
+    });
+
+    const imageBuffer = Buffer.from(response.data, 'binary');
+    const base64Image = imageBuffer.toString('base64');
+
+    // Upload to Cloudinary
+    const result = await cloudinary.uploader.upload(
+      `data:image/png;base64,${base64Image}`,
+      {
+        folder: 'ai-generated-designs',
+        public_id: `${fileName}-${Date.now()}`,
+        resource_type: 'image',
+        transformation: [
+          { quality: 'auto' },
+          { fetch_format: 'auto' }
+        ]
+      }
+    );
+
+    logger.info(`Image uploaded to Cloudinary: ${result.secure_url}`);
+    return result.secure_url;
+  } catch (error) {
+    logger.error('Error uploading to Cloudinary:', error);
+    throw new Error('Failed to upload image to Cloudinary');
+  }
+};
+
+/**
+ * Complete workflow: Chat → Design Summary → Generate Image
+ * @param {Array} conversationHistory - Full conversation
+ * @param {Object} imageOptions - Image generation options
+ * @returns {Object} Complete result with summary and image
+ */
+export const generateCompleteDesign = async (conversationHistory, imageOptions = {}) => {
+  try {
+    logger.info('Starting complete design generation workflow');
+
+    // Step 1: Generate design summary from conversation
+    const summary = await generateDesignSummaryFromChat(conversationHistory);
+
+    // Step 2: Generate image using the optimized prompt
+    const imageResult = await generateImageWithDALLE(summary.imagePrompt, imageOptions);
+
+    // Combine results
+    return {
+      success: true,
+      designSummary: {
+        description: summary.designSummary,
+        keyElements: summary.keyElements,
+        style: summary.style,
+        colorScheme: summary.colorScheme,
+        mood: summary.mood
+      },
+      image: {
+        url: imageResult.imageUrl,
+        revisedPrompt: imageResult.revisedPrompt,
+        metadata: imageResult.metadata
+      },
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    logger.error('Error in complete design generation:', error);
+    throw new Error('Failed to generate complete design');
+  }
+};
+
+// #endregion
+
+// #region Custom Design Requests - AI Image Generation
+
+/**
+ * Generate enhanced prompt for image generation from text description
+ * RESTRICTED: Only for studio photography set design
+ * @param {string} description - Text description of the desired set design
+ * @returns {string} Enhanced prompt for image generation
+ */
+export const generateEnhancedPrompt = async (description) => {
+  try {
+    logger.info('Generating enhanced image prompt for studio set design using Gemini AI');
+
+    const promptEnhancementRequest = `You are an expert in creating detailed prompts for AI image generation tools specialized in STUDIO PHOTOGRAPHY SET DESIGN.
+
+User's description: "${description}"
+
+Create a highly detailed, professional prompt SPECIFICALLY for generating a PHOTOGRAPHY STUDIO SET DESIGN image. The prompt MUST:
+
+IMPORTANT REQUIREMENTS:
+- This is for a PHOTOGRAPHY STUDIO SET DESIGN only (not portraits, products, or other subjects)
+- Focus on the PHYSICAL SPACE and SETUP of a photography studio
+- Include studio equipment, lighting setups, backdrops, and props
+
+The prompt should:
+1. Specify the type of photography studio (portrait, product, fashion, newborn, wedding, etc.)
+2. Detail the backdrop/background (color, material, texture)
+3. Describe lighting equipment and setup (softboxes, reflectors, natural light, etc.)
+4. List props and decorative elements relevant to the studio type
+5. Mention studio layout and spatial arrangement
+6. Include technical photography terms
+7. Specify colors, materials, and textures
+8. Describe the overall mood and aesthetic
+9. Be optimized for photorealistic results
+10. NO PEOPLE in the image - empty studio set only
+
+STUDIO CONTEXT: This is for a studio rental service, so the image should show an attractive, professional photography set that customers would want to rent.
+
+Return ONLY the enhanced prompt text, nothing else. Make it detailed but concise (max 250 words).`;
+
+    const result = await textModel.generateContent([promptEnhancementRequest]);
+    const response = await result.response;
+    const enhancedPrompt = response.text();
+
+    logger.info('Enhanced studio set design prompt generated successfully');
+    return enhancedPrompt.trim();
+  } catch (error) {
+    logger.error('Error generating enhanced prompt, using fallback:', error.message);
+    
+    // FALLBACK: Rule-based prompt enhancement (no API needed)
+    const enhancedPrompt = generateFallbackPrompt(description);
+    logger.info('Using fallback prompt enhancement (no AI)');
+    return enhancedPrompt;
+  }
+};
+
+/**
+ * Generate enhanced prompt without AI (fallback for quota issues)
+ * @param {string} description - Original description
+ * @returns {string} Enhanced prompt
+ */
+const generateFallbackPrompt = (description) => {
+  const desc = description.toLowerCase();
+  
+  // Detect studio type
+  let studioType = 'photography';
+  if (desc.includes('portrait') || desc.includes('chân dung')) studioType = 'portrait photography';
+  else if (desc.includes('product') || desc.includes('sản phẩm')) studioType = 'product photography';
+  else if (desc.includes('wedding') || desc.includes('cưới')) studioType = 'wedding photography';
+  else if (desc.includes('newborn') || desc.includes('em bé')) studioType = 'newborn photography';
+  else if (desc.includes('fashion')) studioType = 'fashion photography';
+  
+  // Detect style
+  let style = 'modern';
+  if (desc.includes('vintage') || desc.includes('cổ điển')) style = 'vintage';
+  else if (desc.includes('minimalist') || desc.includes('tối giản')) style = 'minimalist';
+  else if (desc.includes('luxury') || desc.includes('sang trọng')) style = 'luxury';
+  
+  // Detect colors
+  let colors = 'neutral tones';
+  if (desc.includes('white') || desc.includes('trắng')) colors = 'white';
+  if (desc.includes('pastel')) colors = 'pastel colors';
+  if (desc.includes('dark') || desc.includes('tối')) colors = 'dark tones';
+  
+  // Build enhanced prompt
+  return `Professional ${studioType} studio set design: ${description}. 
+  
+Empty studio space featuring:
+- ${style} aesthetic with ${colors}
+- Professional lighting equipment (softboxes, reflectors, key lights)
+- High-quality backdrop or seamless paper background
+- Carefully arranged props and decorative elements
+- Clean, well-organized studio layout
+- Modern professional photography equipment visible
+- Photorealistic quality, 8K resolution
+- Architectural photography perspective
+- No people in the scene - empty studio ready for photoshoot
+- Inviting atmosphere perfect for a studio rental service`.trim();
+};
+
+/**
+ * Generate AI image from text description using Gemini Imagen 3
+ * NOTE: Gemini Imagen has strict free tier limits. This function will:
+ * 1. Try to generate with Gemini Imagen (if quota available)
+ * 2. Fallback to enhanced prompt only (if quota exceeded)
+ * 
+ * @param {string} description - Text description of the desired set design
+ * @param {Object} options - Generation options
+ * @returns {Object} Image generation result with URL or enhanced prompt
+ */
+export const generateImageFromText = async (description, options = {}) => {
+  try {
+    logger.info('Processing text-to-image request');
+
+    const {
+      provider = 'getty', // Changed default to Getty Images
+      model = 'gemini-2.5-flash-image',
+      aspectRatio = '16:9',
+      imageSize = '1K',
+      numberOfImages = 1,
+      negativePrompt = '',
+      responseModalities = ['IMAGE'],
+      useGoogleSearch = false,
+      enableActualGeneration = true,
+    } = options;
+
+    // Getty Images Generation (Primary Provider)
+    if (provider === 'getty') {
+      logger.info('Using Getty Images AI Generation');
+
+      try {
+        const gettyOptions = {
+          aspectRatio,
+          numberOfImages,
+          negativePrompt: negativePrompt || 'blurry, low quality, distorted, unprofessional'
+        };
+
+        const result = await generateImageWithGetty(description, gettyOptions);
+
+        if (!result.success) {
+          throw new Error(result.error || 'Getty Images generation failed');
+        }
+
+        logger.info('Getty Images generation successful');
+
+        return {
+          success: true,
+          mode: 'full-generation',
+          provider: 'getty',
+          url: result.url,
+          originalDescription: description,
+          enhancedPrompt: description,
+          metadata: {
+            ...result.metadata,
+            aspectRatio,
+            numberOfImages,
+            timestamp: new Date().toISOString()
+          }
+        };
+
+      } catch (gettyError) {
+        logger.error('Getty Images generation failed:', gettyError);
+
+        // Fallback to Gemini if Getty fails
+        if (options.allowFallback !== false) {
+          logger.info('Falling back to Gemini Imagen');
+          return generateImageFromText(description, { 
+            ...options, 
+            provider: 'gemini',
+            allowFallback: false // Prevent infinite fallback loop
+          });
+        }
+
+        throw gettyError;
+      }
     }
 
-    // Validate and map AI suggestions to expected schema
-    function mapSuggestion(suggestion) {
-      // Define expected fields and types
-      return {
-        title: typeof suggestion.title === 'string' ? suggestion.title : '',
-        description: typeof suggestion.description === 'string' ? suggestion.description : '',
-        colorScheme: typeof suggestion.colorScheme === 'string' ? suggestion.colorScheme : '',
-        style: typeof suggestion.style === 'string' ? suggestion.style : '',
-        elements: Array.isArray(suggestion.elements) ? suggestion.elements : [],
-        generatedAt: new Date()
-      };
+    // Gemini Imagen Generation (Fallback Provider)
+    if (provider === 'gemini') {
+      logger.info('Using Gemini Imagen');
+
+      // Generate enhanced prompt using Gemini text model
+      const enhancedPrompt = await generateEnhancedPrompt(description);
+
+      // If actual image generation is disabled or not available, return enhanced prompt only
+      if (!enableActualGeneration) {
+        logger.info('Returning enhanced prompt only (actual generation disabled)');
+        
+        return {
+          success: true,
+          mode: 'prompt-only',
+          provider: 'gemini',
+          originalDescription: description,
+          enhancedPrompt: enhancedPrompt,
+          metadata: {
+            aspectRatio: aspectRatio,
+            imageSize: imageSize,
+            timestamp: new Date().toISOString()
+          },
+          instructions: {
+            message: 'Enhanced prompt generated successfully. Use with external image generation service.',
+            recommendedServices: [
+              'Getty Images AI (Primary - Commercial License)',
+              'Gemini Imagen (requires paid API key)',
+              'DALL-E 3 (OpenAI)',
+              'Midjourney',
+              'Stable Diffusion XL'
+            ],
+            prompt: enhancedPrompt,
+            note: 'To enable automatic image generation, upgrade to paid Gemini API or use Getty Images.'
+          }
+        };
+      }
+
+      // Try to generate with Gemini Imagen
+      try {
+        logger.info('Attempting to generate image with Gemini Imagen');
+
+        const imageModel = genAI.getGenerativeModel({
+          model: model,
+        });
+
+        const generationConfig = {
+          responseModalities: responseModalities,
+        };
+
+        if (aspectRatio || imageSize) {
+          generationConfig.imageConfig = {};
+          if (aspectRatio) generationConfig.imageConfig.aspectRatio = aspectRatio;
+          if (imageSize && model === 'gemini-3-pro-image-preview') {
+            generationConfig.imageConfig.imageSize = imageSize;
+          }
+        }
+
+        if (useGoogleSearch && model === 'gemini-3-pro-image-preview') {
+          generationConfig.tools = [{ google_search: {} }];
+        }
+
+        const result = await imageModel.generateContent({
+          contents: [{ role: 'user', parts: [{ text: enhancedPrompt }] }],
+          generationConfig: generationConfig,
+        });
+
+        const response = result.response;
+
+        // Extract image data
+        let imageData = null;
+        let imageText = null;
+
+        for (const part of response.candidates[0].content.parts) {
+          if (part.inlineData && part.inlineData.mimeType.startsWith('image/')) {
+            imageData = part.inlineData;
+          }
+          if (part.text) {
+            imageText = part.text;
+          }
+        }
+
+        if (!imageData) {
+          throw new Error('No image generated in response');
+        }
+
+        // Upload to Cloudinary
+        const base64Image = `data:${imageData.mimeType};base64,${imageData.data}`;
+        const cloudinaryResult = await cloudinary.uploader.upload(base64Image, {
+          folder: 'ai-generated-designs',
+          resource_type: 'image',
+        });
+
+        logger.info('Image generated and uploaded successfully');
+
+        return {
+          success: true,
+          mode: 'full-generation',
+          provider: 'gemini',
+          url: cloudinaryResult.secure_url,
+          publicId: cloudinaryResult.public_id,
+          description: imageText || enhancedPrompt,
+          originalDescription: description,
+          enhancedPrompt: enhancedPrompt,
+          metadata: {
+            model: model,
+            aspectRatio: aspectRatio,
+            imageSize: imageSize,
+            mimeType: imageData.mimeType,
+            width: cloudinaryResult.width,
+            height: cloudinaryResult.height,
+            format: cloudinaryResult.format,
+            bytes: cloudinaryResult.bytes,
+            timestamp: new Date().toISOString()
+          }
+        };
+
+      } catch (imageGenError) {
+        // Check if it's a quota error
+        if (imageGenError.message && imageGenError.message.includes('quota')) {
+          logger.warn('Gemini Imagen quota exceeded, falling back to prompt-only mode');
+          
+          return {
+            success: true,
+            mode: 'prompt-only',
+            provider: 'gemini',
+            originalDescription: description,
+            enhancedPrompt: enhancedPrompt,
+            metadata: {
+              aspectRatio: aspectRatio,
+              imageSize: imageSize,
+              timestamp: new Date().toISOString()
+            },
+            quotaInfo: {
+              exceeded: true,
+              message: 'Gemini Imagen free tier quota exceeded',
+              recommendation: 'Use Getty Images or upgrade to paid API key'
+            },
+            instructions: {
+              message: 'Enhanced prompt generated. Actual image generation unavailable due to quota limits.',
+              recommendedServices: [
+                'Getty Images AI (Recommended - Commercial License)',
+                'DALL-E 3 (OpenAI) - Best quality',
+                'Midjourney - Artistic styles',
+                'Stable Diffusion XL - Open source'
+              ],
+              prompt: enhancedPrompt
+            }
+          };
+        }
+        
+        // Other errors, throw
+        throw imageGenError;
+      }
     }
-    setDesign.aiIterations = suggestions.map(mapSuggestion);
 
-    // Store the full conversation as final prompt context
-    setDesign.finalAiPrompt = conversationSummary;
+    // Invalid provider
+    throw new Error(`Invalid provider: ${provider}. Supported providers: getty, gemini`);
 
-    // Update status to design_approved (waiting for customer selection)
-    setDesign.status = AI_SET_DESIGN_STATUS.DRAFTING; // Still drafting until they select
+  } catch (error) {
+    logger.error('Error in text-to-image processing:', error);
+    throw new Error(`Failed to process text-to-image request: ${error.message}`);
+  }
+};
+
+/**
+ * Create a custom design request with AI-generated image
+ * @param {Object} requestData - Customer request data
+ * @returns {Object} Created custom design request
+ */
+export const createCustomDesignRequest = async (requestData) => {
+  try {
+    const {
+      customerName,
+      email,
+      phoneNumber,
+      description,
+      referenceImages = [],
+      preferredCategory,
+      budgetRange
+    } = requestData;
+
+    logger.info(`Creating custom design request for ${email}`);
+
+    // Create the request with pending status
+    const customRequest = new CustomDesignRequest({
+      customerName,
+      email,
+      phoneNumber,
+      description,
+      referenceImages,
+      preferredCategory,
+      budgetRange,
+      status: 'pending',
+      aiGenerationAttempts: 0
+    });
+
+    await customRequest.save();
+
+    logger.info(`Custom design request created: ${customRequest._id}`);
+
+    // Attempt to generate AI image asynchronously (don't block the request)
+    // We'll update the request with the image later
+    generateAndAttachAIImage(customRequest._id, description).catch(err => {
+      logger.error(`Failed to generate AI image for request ${customRequest._id}:`, err);
+    });
+
+    return customRequest;
+  } catch (error) {
+    logger.error('Error creating custom design request:', error);
+    throw new Error('Failed to create custom design request');
+  }
+};
+
+/**
+ * Generate AI image and attach to existing request (async background task)
+ * @param {string} requestId - Custom design request ID
+ * @param {string} description - Design description
+ */
+const generateAndAttachAIImage = async (requestId, description) => {
+  try {
+    const request = await CustomDesignRequest.findById(requestId);
+    if (!request) return;
+
+    // Update status to processing
+    request.status = 'processing';
+    request.aiGenerationAttempts += 1;
+    await request.save();
+
+    // Generate image using Gemini Imagen
+    const imageResult = await generateImageFromText(description, {
+      model: 'gemini-2.5-flash-image',
+      aspectRatio: '16:9',
+    });
+    
+    // Update request with generated image
+    request.generatedImage = imageResult.url;
+    request.status = 'pending'; // Back to pending for staff review
+    request.aiMetadata = {
+      prompt: imageResult.enhancedPrompt,
+      model: imageResult.metadata.model,
+      generatedAt: imageResult.metadata.timestamp,
+    };
+    await request.save();
+
+    logger.info(`AI image generated successfully for request ${requestId}`);
+
+  } catch (error) {
+    logger.error(`Error in generateAndAttachAIImage for ${requestId}:`, error);
+    // Update request to show generation failed
+    const request = await CustomDesignRequest.findById(requestId);
+    if (request) {
+      request.status = 'pending'; // Keep as pending for manual processing
+      await request.save();
+    }
+  }
+};
+
+/**
+ * Get all custom design requests with pagination
+ * @param {Object} options - Query options
+ * @returns {Object} Paginated custom design requests
+ */
+export const getCustomDesignRequests = async (options = {}) => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      status,
+      search
+    } = options;
+
+    const query = {};
+
+    // Add status filter
+    if (status) {
+      query.status = status;
+    }
+
+    // Add search filter
+    if (search) {
+      query.$or = [
+        { customerName: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const skip = (page - 1) * limit;
+
+    const [requests, total] = await Promise.all([
+      CustomDesignRequest.find(query)
+        .populate('processedBy', 'name email')
+        .populate('convertedToDesignId', 'name price')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      CustomDesignRequest.countDocuments(query)
+    ]);
+
+    return {
+      requests,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    };
+  } catch (error) {
+    logger.error('Error getting custom design requests:', error);
+    throw new Error('Failed to retrieve custom design requests');
+  }
+};
+
+/**
+ * Get a single custom design request by ID
+ * @param {string} id - Request ID
+ * @returns {Object} Custom design request
+ */
+export const getCustomDesignRequestById = async (id) => {
+  try {
+    const request = await CustomDesignRequest.findById(id)
+      .populate('processedBy', 'name email')
+      .populate('convertedToDesignId', 'name price images');
+
+    if (!request) {
+      throw new Error('Custom design request not found');
+    }
+
+    return request;
+  } catch (error) {
+    logger.error('Error getting custom design request:', error);
+    throw new Error('Failed to retrieve custom design request');
+  }
+};
+
+/**
+ * Update custom design request status (Staff only)
+ * @param {string} id - Request ID
+ * @param {string} status - New status
+ * @param {string} staffId - Staff member ID
+ * @param {Object} updateData - Additional update data
+ * @returns {Object} Updated request
+ */
+export const updateCustomDesignRequestStatus = async (id, status, staffId, updateData = {}) => {
+  try {
+    const request = await CustomDesignRequest.findById(id);
+    if (!request) {
+      throw new Error('Custom design request not found');
+    }
+
+    request.status = status;
+    request.processedBy = staffId;
+
+    if (updateData.staffNotes) request.staffNotes = updateData.staffNotes;
+    if (updateData.estimatedPrice) request.estimatedPrice = updateData.estimatedPrice;
+
+    await request.save();
+
+    logger.info(`Custom design request ${id} updated to status: ${status}`);
+    return request;
+  } catch (error) {
+    logger.error('Error updating custom design request:', error);
+    throw new Error('Failed to update custom design request');
+  }
+};
+
+/**
+ * Convert approved custom request to actual SetDesign product
+ * @param {string} requestId - Custom design request ID
+ * @param {Object} designData - Additional design data
+ * @returns {Object} Created SetDesign
+ */
+export const convertRequestToSetDesign = async (requestId, designData = {}) => {
+  try {
+    const request = await CustomDesignRequest.findById(requestId);
+    if (!request) {
+      throw new Error('Custom design request not found');
+    }
+
+    if (request.status !== 'completed') {
+      throw new Error('Only completed requests can be converted to set designs');
+    }
+
+    // Create SetDesign from request
+    const setDesign = new SetDesign({
+      name: designData.name || `Custom Design - ${request.customerName}`,
+      description: request.description,
+      price: request.estimatedPrice || designData.price || 0,
+      images: [
+        ...(request.generatedImage ? [request.generatedImage] : []),
+        ...request.referenceImages,
+        ...(designData.additionalImages || [])
+      ],
+      category: request.preferredCategory || 'other',
+      tags: ['custom', ...(designData.tags || [])],
+      isActive: designData.isActive !== undefined ? designData.isActive : true
+    });
 
     await setDesign.save();
 
-    return {
-      setDesignId: setDesign._id,
-      suggestions: setDesign.aiIterations,
-      iterationCount: setDesign.aiIterations.length,
-      conversationSummary
-    };
+    // Update request with conversion info
+    request.convertedToDesignId = setDesign._id;
+    await request.save();
 
+    logger.info(`Custom design request ${requestId} converted to SetDesign ${setDesign._id}`);
+    return setDesign;
   } catch (error) {
-    logger.error('Error generating designs from chat:', error);
-    throw new Error('Failed to generate designs: ' + error.message);
+    logger.error('Error converting request to set design:', error);
+    throw new Error('Failed to convert request to set design');
   }
 };
 
