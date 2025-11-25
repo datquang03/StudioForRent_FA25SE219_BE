@@ -742,3 +742,18 @@ export const createPaymentForRemaining = async (bookingId, opts = {}) => {
     session.endSession();
   }
 };
+
+/**
+ * Create refund request for a payment
+ * @param {string} paymentId - Payment ID to refund
+ * @param {object} opts - Options object
+ * @param {number} opts.amount - Refund amount (optional, defaults to full payment amount)
+ * @param {string} opts.reason - Reason for refund
+ * @param {string} opts.actorId - ID of user initiating refund (staff/admin)
+ * @returns {object} Refund information
+ */
+export const createRefund = async (paymentId, opts = {}) => {
+  // Import and delegate to Refund service
+  const { createRefund: createRefundService } = await import('./refund.service.js');
+  return await createRefundService(paymentId, opts);
+};
