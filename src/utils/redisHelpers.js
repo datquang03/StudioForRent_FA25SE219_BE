@@ -1,107 +1,64 @@
-/**
- * Redis helpers for caching and idempotency
- * 
- * Note: This is a placeholder implementation that works without Redis.
- * For production with Redis, install redis package and configure connection.
- */
-
 import logger from './logger.js';
+import { getRedis, isRedisConnected } from '../config/redis.js';
 
-// In-memory fallback for idempotency keys (not suitable for multi-instance deployments)
+// In-memory fallback for idempotency keys (used when Redis is not available)
 const memoryStore = new Map();
 
 /**
  * Check if Redis is available and connected
- * @returns {boolean} - True if Redis is available, false otherwise
+ * @returns {boolean}
  */
 export const isRedisAvailable = () => {
-  // Redis is not configured in this application
-  // This returns false to indicate fallback to in-memory storage
-  return false;
+  try {
+    return Boolean(getRedis() && isRedisConnected());
+  } catch (err) {
+    return false;
+  }
 };
 
 /**
- * Claim an idempotency key to prevent duplicate processing
- * 
- * @param {string} key - The idempotency key to claim
- * @param {number} ttlSeconds - Time to live in seconds
- * @returns {Promise<boolean|null>} 
- *   - true: key was successfully claimed (first time)
- *   - false: key already exists (duplicate)
- *   - null: Redis not available, unable to claim
+ * Claim an idempotency key. Returns:
+ *  - true: successfully claimed (proceed)
+ *  - false: key already exists (duplicate)
+ *  - null: redis not available (fallback)
  */
 export const claimIdempotencyKey = async (key, ttlSeconds = 30) => {
   try {
-    if (!isRedisAvailable()) {
-      // Fallback to in-memory store for development/testing
-      logger.debug(`Using in-memory fallback for idempotency key: ${key}`);
-      
-      // Check if key exists
-      if (memoryStore.has(key)) {
-        logger.debug(`Idempotency key already exists (duplicate): ${key}`);
-        return false;
-      }
-      
-      // Claim the key with TTL
-      memoryStore.set(key, {
-        timestamp: Date.now(),
-        ttl: ttlSeconds * 1000
-      });
-      
-      // Auto-cleanup after TTL
-      setTimeout(() => {
-        memoryStore.delete(key);
-        logger.debug(`Idempotency key expired and removed: ${key}`);
-      }, ttlSeconds * 1000);
-      
-      logger.debug(`Idempotency key claimed successfully: ${key}`);
-      return true;
+    if (isRedisAvailable()) {
+      const client = getRedis();
+      // SET key value NX EX ttl
+      const res = await client.set(key, '1', { NX: true, EX: ttlSeconds });
+      return res === 'OK';
     }
-    
-    // TODO: Implement Redis-based idempotency when Redis is configured
-    // Example Redis implementation:
-    // const claimed = await redisClient.set(key, '1', {
-    //   NX: true,  // Only set if key doesn't exist
-    //   EX: ttlSeconds  // Expiration time
-    // });
-    // return claimed === 'OK';
-    
+
+    // In-memory fallback (not suitable for multi-instance production)
+    if (memoryStore.has(key)) return false;
+    memoryStore.set(key, { timestamp: Date.now(), ttl: ttlSeconds * 1000 });
+    setTimeout(() => memoryStore.delete(key), ttlSeconds * 1000);
+    return true;
+  } catch (err) {
+    logger.warn('claimIdempotencyKey failed, falling back to null', { key, error: err?.message || err });
     return null;
-    
-  } catch (error) {
-    logger.error('Error in claimIdempotencyKey:', error);
-    throw error;
   }
 };
 
-/**
- * Release an idempotency key manually (optional)
- * @param {string} key - The idempotency key to release
- * @returns {Promise<boolean>} - True if key was deleted, false otherwise
- */
 export const releaseIdempotencyKey = async (key) => {
   try {
-    if (!isRedisAvailable()) {
-      const existed = memoryStore.has(key);
-      memoryStore.delete(key);
-      logger.debug(`Idempotency key released: ${key}`);
-      return existed;
+    if (isRedisAvailable()) {
+      const client = getRedis();
+      await client.del(key);
+      return true;
     }
-    
-    // TODO: Implement Redis-based release
-    // return await redisClient.del(key) === 1;
-    
-    return false;
-  } catch (error) {
-    logger.error('Error in releaseIdempotencyKey:', error);
+
+    const existed = memoryStore.has(key);
+    memoryStore.delete(key);
+    return existed;
+  } catch (err) {
+    logger.warn('releaseIdempotencyKey failed', { key, error: err?.message || err });
     return false;
   }
 };
 
-/**
- * Clear all idempotency keys (for testing/cleanup)
- * WARNING: Use with caution!
- */
 export const clearAllIdempotencyKeys = () => {
   const count = memoryStore.size;
   memoryStore.clear();
@@ -109,28 +66,17 @@ export const clearAllIdempotencyKeys = () => {
   return count;
 };
 
-// Periodic cleanup of expired keys from in-memory store
-if (!isRedisAvailable()) {
-  setInterval(() => {
-    const now = Date.now();
-    let cleaned = 0;
-    
-    for (const [key, value] of memoryStore.entries()) {
-      if (now - value.timestamp > value.ttl) {
-        memoryStore.delete(key);
-        cleaned++;
-      }
-    }
-    
-    if (cleaned > 0) {
-      logger.debug(`Periodic cleanup: removed ${cleaned} expired idempotency keys`);
-    }
-  }, 60000); // Check every minute
-}
+// Periodic cleanup of expired keys
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of memoryStore.entries()) {
+    if (now - v.timestamp > v.ttl) memoryStore.delete(k);
+  }
+}, 60000);
 
 export default {
   isRedisAvailable,
   claimIdempotencyKey,
   releaseIdempotencyKey,
-  clearAllIdempotencyKeys
+  clearAllIdempotencyKeys,
 };
