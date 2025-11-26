@@ -73,10 +73,11 @@ router.patch('/custom-requests/:id/status', validateObjectId(), authorize(USER_R
 router.post('/upload-image', authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), uploadDesignImageController);
 
 // Admin-only routes
-router.post('/', authorize(USER_ROLES.ADMIN), createSetDesignController);
-router.put('/:id', validateObjectId(), authorize(USER_ROLES.ADMIN), updateSetDesignController);
-router.delete('/:id', validateObjectId(), authorize(USER_ROLES.ADMIN), deleteSetDesignController);
-router.post('/custom-requests/:id/convert', validateObjectId(), authorize(USER_ROLES.ADMIN), convertRequestToSetDesignController);
+// Staff-only routes
+router.post('/', authorize(USER_ROLES.STAFF), createSetDesignController);
+router.put('/:id', validateObjectId(), authorize(USER_ROLES.STAFF), updateSetDesignController);
+router.delete('/:id', validateObjectId(), authorize(USER_ROLES.STAFF), deleteSetDesignController);
+router.post('/custom-requests/:id/convert', validateObjectId(), authorize(USER_ROLES.STAFF), convertRequestToSetDesignController);
 
 // #endregion
 
