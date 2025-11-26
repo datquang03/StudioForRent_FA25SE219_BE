@@ -1,7 +1,6 @@
 import mongoose from 'mongoose';
 import Refund from '../models/Refund/refund.model.js';
 import Payment from '../models/Payment/payment.model.js';
-import Booking from '../models/Booking/booking.model.js';
 import payos from '../config/payos.js';
 import { PAYMENT_STATUS } from '../utils/constants.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
