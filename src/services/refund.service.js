@@ -18,67 +18,72 @@ import { NOTIFICATION_TYPE } from '../utils/constants.js';
  * @returns {object} Refund information
  */
 export const createRefund = async (paymentId, opts = {}) => {
+  const { amount, reason, actorId } = opts;
+
+  // 0. Basic validation will be performed here to allow early exits without opening a session
+  const payment = await Payment.findById(paymentId);
+  if (!payment) {
+    throw new NotFoundError('Payment not found');
+  }
+  if (payment.status !== PAYMENT_STATUS.PAID) {
+    throw new ValidationError('Only paid payments can be refunded');
+  }
+
+  // Check for existing active refunds (fast path)
+  const existingRefund = await Refund.findOne({ paymentId, status: { $in: ['PENDING', 'PROCESSING'] } });
+  if (existingRefund) {
+    throw new ValidationError('Refund already exists for this payment');
+  }
+
+  // 1. Start transaction to create refund atomically
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
-    const { amount, reason, actorId } = opts;
-
-    // 1. Validate payment exists and is PAID
-    const payment = await Payment.findById(paymentId).session(session);
-    if (!payment) {
+    // Recalculate amounts within transaction for accuracy
+    const paymentForTx = await Payment.findById(paymentId).session(session);
+    if (!paymentForTx) {
       throw new NotFoundError('Payment not found');
     }
 
-    if (payment.status !== PAYMENT_STATUS.PAID) {
-      throw new ValidationError('Only paid payments can be refunded');
-    }
+    const refundAmount = amount || paymentForTx.amount;
 
-    // 2. Check for existing active refunds
-    const existingRefund = await Refund.findOne({
-      paymentId,
-      status: { $in: ['PENDING', 'PROCESSING'] }
-    }).session(session);
-
-    if (existingRefund) {
-      throw new ValidationError('Refund already exists for this payment');
-    }
-
-    // 3. Calculate refund amount and validate
-    const refundAmount = amount || payment.amount;
-
-    // Check total refunded amount
-    const completedRefunds = await Refund.find({
-      paymentId,
-      status: 'COMPLETED'
-    }).session(session);
-
+    const completedRefunds = await Refund.find({ paymentId, status: 'COMPLETED' }).session(session);
     const totalRefunded = completedRefunds.reduce((sum, r) => sum + r.amount, 0);
-    const remainingAmount = payment.amount - totalRefunded;
+    const remainingAmount = paymentForTx.amount - totalRefunded;
 
     if (refundAmount > remainingAmount) {
       throw new ValidationError(`Refund amount (${refundAmount}) exceeds remaining amount (${remainingAmount})`);
     }
 
-    // 4. Create refund record
-    const refund = await Refund.create([{
-      paymentId,
-      amount: refundAmount,
-      reason: reason || 'Customer requested refund',
-      requestedBy: actorId,
-      status: 'PENDING'
-    }], { session });
+    // Create refund record; handle duplicate-key race
+    let refund;
+    try {
+      refund = await Refund.create([
+        {
+          paymentId,
+          amount: refundAmount,
+          reason: reason || 'Customer requested refund',
+          requestedBy: actorId,
+          status: 'PENDING'
+        }
+      ], { session });
+    } catch (err) {
+      // Duplicate key (race) - surface friendly error
+      if (err && err.code === 11000) {
+        throw new ValidationError('Refund already exists for this payment');
+      }
+      throw err;
+    }
 
-    // 5. Update payment status to REFUNDED
-    payment.status = PAYMENT_STATUS.REFUNDED;
-    await payment.save({ session });
-
-    // 6. Start PayOS refund processing (await initiation)
-    await processPayOSRefund(refund[0]._id);
-
+    // Commit transaction - do NOT change payment.status here. Update the payment only when refund completes.
     await session.commitTransaction();
-    return refund[0];
 
+    // Start async processing (won't affect DB transaction state)
+    processPayOSRefund(refund[0]._id).catch(error => {
+      logger.error('Failed to start PayOS refund processing:', error);
+    });
+    return refund[0];
   } catch (error) {
     await session.abortTransaction();
     logger.error('Create refund failed:', error);
@@ -93,31 +98,31 @@ export const createRefund = async (paymentId, opts = {}) => {
  * @param {string} refundId - Refund ID to process
  */
 export const processPayOSRefund = async (refundId) => {
-  // First, check refund existence and status before starting a session
-  const refundCheck = await Refund.findById(refundId)
-    .populate('paymentId');
-
+  // First, fetch refund without a session to perform quick existence/status check
+  const refundCheck = await Refund.findById(refundId).populate('paymentId');
   if (!refundCheck) {
     throw new NotFoundError('Refund not found');
   }
-
   if (refundCheck.status !== 'PENDING') {
     logger.info(`Refund ${refundId} already processed with status: ${refundCheck.status}`);
     return;
   }
 
+  // Start a transaction to mark refund PROCESSING atomically
   const session = await mongoose.startSession();
   session.startTransaction();
-
   try {
-    // 1. Get refund details within the session
-    const refund = await Refund.findById(refundId)
-      .populate('paymentId')
-      .session(session);
-    // 2. Update status to PROCESSING
+    const refund = await Refund.findById(refundId).populate('paymentId').session(session);
+    if (!refund) {
+      throw new NotFoundError('Refund not found');
+    }
+    if (refund.status !== 'PENDING') {
+      await session.commitTransaction();
+      logger.info(`Refund ${refundId} already processed with status: ${refund.status}`);
+      return;
+    }
     refund.status = 'PROCESSING';
     await refund.save({ session });
-
     await session.commitTransaction();
 
     // 3. Call PayOS refund API (outside transaction for better performance)
@@ -150,7 +155,7 @@ export const processPayOSRefund = async (refundId) => {
       }
 
       // 4. Update refund as COMPLETED
-      await updateRefundStatus(refundId, 'COMPLETED', {
+      await updateRefundStatusAndPayment(refundId, 'COMPLETED', {
         payosRefundId: payosResult.refundId,
         payosResponse: payosResult,
         processedBy: null, // System processed
@@ -168,7 +173,7 @@ export const processPayOSRefund = async (refundId) => {
       });
 
       // Update refund as FAILED
-      await updateRefundStatus(refundId, 'FAILED', {
+      await updateRefundStatusAndPayment(refundId, 'FAILED', {
         failureReason: payosError.message || 'PayOS refund failed',
         processedBy: null,
         processedAt: new Date()
@@ -179,11 +184,10 @@ export const processPayOSRefund = async (refundId) => {
     }
 
   } catch (error) {
-    await session.abortTransaction();
-    logger.error('Process PayOS refund failed:', error);
+    logger.error('Process PayOS refund failed outer:', error);
     throw error;
   } finally {
-    session.endSession();
+    try { session.endSession(); } catch (e) { /* ignore */ }
   }
 };
 
@@ -206,6 +210,42 @@ export const updateRefundStatus = async (refundId, status, updateData = {}) => {
   await Refund.findByIdAndUpdate(refundId, update);
 
   logger.info(`Refund ${refundId} status updated to ${status}`);
+};
+
+// Ensure payment status is updated after updating refund status
+// Wrap original updateRefundStatus to trigger payment update when appropriate
+const originalUpdateRefundStatus = updateRefundStatus;
+export const updateRefundStatusAndPayment = async (refundId, status, updateData = {}) => {
+  await originalUpdateRefundStatus(refundId, status, updateData);
+  // If refund completed, try updating payment
+  if (status === 'COMPLETED') {
+    await updatePaymentAfterRefund(refundId);
+  }
+};
+
+// When a refund completes, update the related payment status accordingly
+const updatePaymentAfterRefund = async (refundId) => {
+  try {
+    const refund = await Refund.findById(refundId);
+    if (!refund) return;
+    if (refund.status !== 'COMPLETED') return;
+
+    // Mark payment as refunded if fully refunded
+    const payment = await Payment.findById(refund.paymentId);
+    if (!payment) return;
+
+    // Calculate total refunded amount for payment
+    const completedRefunds = await Refund.find({ paymentId: payment._id, status: 'COMPLETED' });
+    const totalRefunded = completedRefunds.reduce((s, r) => s + r.amount, 0);
+
+    if (totalRefunded >= payment.amount) {
+      payment.status = PAYMENT_STATUS.REFUNDED;
+      await payment.save();
+      logger.info(`Payment ${payment._id} marked as REFUNDED after refund ${refundId}`);
+    }
+  } catch (err) {
+    logger.error('Failed to update payment after refund:', err);
+  }
 };
 
 /**
@@ -286,7 +326,7 @@ const sendRefundNotification = async (refund, type) => {
 
     if (type === 'completed') {
       message = `Hoàn tiền ${refund.amount.toLocaleString()} VND cho booking #${bookingId} đã được xử lý thành công. Lý do: ${refund.reason}`;
-      notificationType = NOTIFICATION_TYPE.SUCCESS;
+      notificationType = NOTIFICATION_TYPE.CONFIRMATION;
     } else {
       message = `Hoàn tiền ${refund.amount.toLocaleString()} VND cho booking #${bookingId} thất bại. Chúng tôi sẽ xử lý lại trong thời gian sớm nhất.`;
       notificationType = NOTIFICATION_TYPE.ERROR;

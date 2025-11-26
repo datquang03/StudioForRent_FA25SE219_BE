@@ -3,12 +3,10 @@ import {
   uploadVideo,
   uploadMultipleImages,
   deleteFile,
-  deleteMultipleFiles,
   getOptimizedImageUrl,
   getVideoThumbnailUrl
 } from '../services/upload.service.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
-import { FILE_SIZE_LIMITS, ALLOWED_FILE_TYPES } from '../middlewares/upload.js';
 import logger from '../utils/logger.js';
 
 // Upload user avatar

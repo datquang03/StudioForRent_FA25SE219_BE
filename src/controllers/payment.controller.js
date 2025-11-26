@@ -1,12 +1,11 @@
 //#region Imports
-import { createPaymentOptions, handlePaymentWebhook, getPaymentStatus, createPaymentForRemaining } from '../services/payment.service.js';
-import { createPaymentForOption } from '../services/payment.service.js';
+import { createPaymentOptions, handlePaymentWebhook, getPaymentStatus, createPaymentForRemaining, getStaffPaymentHistory, createPaymentForOption } from '../services/payment.service.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
-import Booking from '../models/Booking/booking.model.js';
 import Payment from '../models/Payment/payment.model.js';
 import Schedule from '../models/Schedule/schedule.model.js';
 import { USER_ROLES } from '../utils/constants.js';
 import logger from '../utils/logger.js';
+import { isValidObjectId, isPositiveNumber } from '../utils/validators.js';
 //#endregion
 
 /**
@@ -17,8 +16,8 @@ export const createPaymentOptionsController = async (req, res) => {
   try {
     const { bookingId } = req.params;
 
-    if (!bookingId) {
-      throw new ValidationError('Booking ID is required');
+    if (!bookingId || !isValidObjectId(bookingId)) {
+      throw new ValidationError('Valid Booking ID is required');
     }
 
     const paymentOptions = await createPaymentOptions(bookingId);
@@ -64,6 +63,10 @@ export const getPaymentStatusController = async (req, res) => {
   try {
     const { paymentId } = req.params;
 
+    if (!paymentId || !isValidObjectId(paymentId)) {
+      throw new ValidationError('Valid Payment ID is required');
+    }
+
     const payment = await getPaymentStatus(paymentId);
 
     res.status(200).json({
@@ -88,8 +91,8 @@ export const createSinglePaymentController = async (req, res) => {
     const { bookingId } = req.params;
     const { percentage, payType } = req.body;
 
-    if (!bookingId) {
-      throw new ValidationError('Booking ID is required');
+    if (!bookingId || !isValidObjectId(bookingId)) {
+      throw new ValidationError('Valid Booking ID is required');
     }
 
     // Either percentage or payType must be provided
@@ -162,28 +165,40 @@ export const getCustomerPaymentHistoryController = async (req, res) => {
     if (status) paymentQuery.status = status;
 
     const payments = await Payment.find(paymentQuery)
-      .populate({
-        path: 'bookingId',
-        select: 'status totalBeforeDiscount finalAmount createdAt',
-        populate: {
-          path: 'scheduleId',
-          select: 'startTime endTime',
-          populate: {
-            path: 'studioId',
-            select: 'name location'
-          }
-        }
-      })
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
-      .limit(parseInt(limit));
+      .limit(parseInt(limit))
+      .lean();
 
     const total = await Payment.countDocuments(paymentQuery);
+
+    // Batch load booking data for all payments
+    const paymentBookingIds = payments.map(p => p.bookingId);
+    const bookings = await Booking.find({ _id: { $in: paymentBookingIds } })
+      .populate({
+        path: 'scheduleId',
+        select: 'startTime endTime',
+        populate: {
+          path: 'studioId',
+          select: 'name location'
+        }
+      })
+      .select('status totalBeforeDiscount finalAmount scheduleId createdAt')
+      .lean();
+
+    // Create lookup map
+    const bookingMap = new Map(bookings.map(b => [b._id.toString(), b]));
+
+    // Combine payment data with booking data
+    const enrichedPayments = payments.map(payment => ({
+      ...payment,
+      booking: bookingMap.get(payment.bookingId?.toString()) || null
+    }));
 
     res.status(200).json({
       success: true,
       data: {
-        payments,
+        payments: enrichedPayments,
         pagination: {
           page: parseInt(page),
           limit: parseInt(limit),
@@ -209,57 +224,40 @@ export const getStaffPaymentHistoryController = async (req, res) => {
   try {
     const { page = 1, limit = 10, status, startDate, endDate, studioId } = req.query;
 
-    let query = {};
-    if (status) query.status = status;
-    if (studioId) {
-      // Filter by studio through booking -> schedule
-      const bookings = await Booking.find({
-        'scheduleId.studioId': studioId
-      }).select('_id');
-      query.bookingId = { $in: bookings.map(b => b._id) };
-    }
-    if (startDate || endDate) {
-      query.createdAt = {};
-      if (startDate) query.createdAt.$gte = new Date(startDate);
-      if (endDate) query.createdAt.$lte = new Date(endDate);
+    // Validate pagination parameters
+    const pageNum = parseInt(page, 10);
+    const limitNum = parseInt(limit, 10);
+
+    if (pageNum < 1 || limitNum < 1 || limitNum > 100) {
+      throw new ValidationError('Invalid pagination parameters');
     }
 
-    const payments = await Payment.find(query)
-      .populate({
-        path: 'bookingId',
-        select: 'status totalBeforeDiscount finalAmount userId createdAt',
-        populate: [
-          {
-            path: 'userId',
-            select: 'fullName email phone'
-          },
-          {
-            path: 'scheduleId',
-            select: 'startTime endTime',
-            populate: {
-              path: 'studioId',
-              select: 'name location'
-            }
-          }
-        ]
-      })
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(parseInt(limit));
+    // Validate dates if provided
+    if (startDate && isNaN(Date.parse(startDate))) {
+      throw new ValidationError('Invalid startDate format');
+    }
 
-    const total = await Payment.countDocuments(query);
+    if (endDate && isNaN(Date.parse(endDate))) {
+      throw new ValidationError('Invalid endDate format');
+    }
+
+    // Validate studioId if provided
+    if (studioId && !isValidObjectId(studioId)) {
+      throw new ValidationError('Invalid studioId format');
+    }
+
+    const result = await getStaffPaymentHistory({
+      status,
+      studioId,
+      startDate,
+      endDate,
+      page: pageNum,
+      limit: limitNum
+    });
 
     res.status(200).json({
       success: true,
-      data: {
-        payments,
-        pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
-          total,
-          pages: Math.ceil(total / limit)
-        }
-      }
+      data: result
     });
   } catch (error) {
     logger.error('Get staff payment history error:', error);
@@ -280,12 +278,30 @@ export const createRefundController = async (req, res) => {
     const { amount, reason } = req.body;
     const actorId = req.user._id;
 
-    if (!paymentId) {
-      throw new ValidationError('Payment ID is required');
+    // Validate paymentId
+    if (!paymentId || !isValidObjectId(paymentId)) {
+      throw new ValidationError('Valid Payment ID is required');
     }
 
-    // Import refund service function (will create)
-    const { createRefund } = await import('../services/payment.service.js');
+    // Validate amount if provided
+    if (amount !== undefined) {
+      if (!isPositiveNumber(amount)) {
+        throw new ValidationError('Refund amount must be a positive number');
+      }
+    }
+
+    // Validate reason
+    if (reason && (typeof reason !== 'string' || reason.trim().length === 0)) {
+      throw new ValidationError('Refund reason must be a non-empty string');
+    }
+
+    // Validate actorId
+    if (!actorId || !isValidObjectId(actorId)) {
+      throw new ValidationError('Invalid user authentication');
+    }
+
+    // Import refund service function
+    const { createRefund } = await import('../services/refund.service.js');
     const refund = await createRefund(paymentId, { amount, reason, actorId });
 
     res.status(201).json({

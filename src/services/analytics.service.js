@@ -117,10 +117,18 @@ export const getEquipmentStats = async () => {
       Equipment.countDocuments({
         createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
       }),
-      Equipment.aggregate([{ $group: { _id: null, total: { $sum: '$totalQty' } } }]),
-      Equipment.aggregate([{ $group: { _id: null, total: { $sum: '$availableQty' } } }]),
-      Equipment.aggregate([{ $group: { _id: null, total: { $sum: '$inUseQty' } } }]),
-      Equipment.aggregate([{ $group: { _id: null, total: { $sum: '$maintenanceQty' } } }])
+      Equipment.find().select('totalQty availableQty inUseQty maintenanceQty').lean().then(equipments => ({
+        total: equipments.reduce((sum, eq) => sum + (eq.totalQty || 0), 0)
+      })),
+      Equipment.find().select('totalQty availableQty inUseQty maintenanceQty').lean().then(equipments => ({
+        total: equipments.reduce((sum, eq) => sum + (eq.availableQty || 0), 0)
+      })),
+      Equipment.find().select('totalQty availableQty inUseQty maintenanceQty').lean().then(equipments => ({
+        total: equipments.reduce((sum, eq) => sum + (eq.inUseQty || 0), 0)
+      })),
+      Equipment.find().select('totalQty availableQty inUseQty maintenanceQty').lean().then(equipments => ({
+        total: equipments.reduce((sum, eq) => sum + (eq.maintenanceQty || 0), 0)
+      }))
     ]);
 
     const totalQty = totalQuantity[0]?.total || 0;

@@ -198,6 +198,18 @@ export const messageLimiter = createPerUserLimiter({
 });
 
 /**
+ * Rate limiter cho review creation
+ * Giới hạn: 5 reviews / giờ / user
+ */
+export const reviewLimiter = createPerUserLimiter({
+  windowMs: 60 * 60 * 1000, // 1 giờ
+  max: 5, // Tối đa 5 reviews per user per hour
+  message: "Quá nhiều yêu cầu tạo review. Vui lòng thử lại sau 1 giờ!",
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+/**
  * Rate limiter cho search operations
  * Giới hạn: 30 searches / phút / user
  */
@@ -234,6 +246,7 @@ export default {
   uploadLimiter,
   bookingLimiter,
   messageLimiter,
+  reviewLimiter,
   searchLimiter,
   aiLimiter,
 };

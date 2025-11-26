@@ -166,6 +166,7 @@ export const NOTIFICATION_TYPE = {
   INFO: "info",
   WARNING: "warning",
   ERROR: "error",
+  SUCCESS: "success",
   CONFIRMATION: "confirmation",
   CHANGE: "change",
   REMINDER: "reminder",

@@ -6,7 +6,6 @@ import { generalLimiter } from "../middlewares/rateLimiter.js";
 import {
   validatePromotionCreation,
   validatePromotionUpdate,
-  validatePromotionCode,
   validateObjectId,
 } from "../middlewares/validate.js";
 import {

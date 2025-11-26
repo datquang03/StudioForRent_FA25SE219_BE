@@ -54,7 +54,12 @@ const refundSchema = new mongoose.Schema({
 });
 
 // Indexes for performance
-refundSchema.index({ paymentId: 1, status: 1 });
+// Ensure only one active refund (PENDING/PROCESSING) exists per payment.
+// Use a partial unique index to allow multiple historical COMPLETED/FAILED refunds.
+refundSchema.index(
+  { paymentId: 1, status: 1 },
+  { unique: true, partialFilterExpression: { status: { $in: ['PENDING', 'PROCESSING'] } } }
+);
 refundSchema.index({ status: 1, requestedAt: -1 });
 refundSchema.index({ requestedAt: 1 });
 
@@ -74,24 +79,45 @@ refundSchema.methods.canRetry = function() {
 
 // Static method to get refund statistics
 refundSchema.statics.getStats = async function(startDate, endDate) {
-  const match = {};
+  const query = {};
   if (startDate || endDate) {
-    match.requestedAt = {};
-    if (startDate) match.requestedAt.$gte = startDate;
-    if (endDate) match.requestedAt.$lte = endDate;
+    query.requestedAt = {};
+    if (startDate) query.requestedAt.$gte = startDate;
+    if (endDate) query.requestedAt.$lte = endDate;
   }
 
-  return await this.aggregate([
-    { $match: match },
-    {
-      $group: {
-        _id: '$status',
-        count: { $sum: 1 },
-        totalAmount: { $sum: '$amount' },
-        avgAmount: { $avg: '$amount' }
-      }
+  const refunds = await this.find(query).select('status amount').lean();
+
+  // Group by status and calculate stats
+  const statsMap = new Map();
+
+  for (const refund of refunds) {
+    const status = refund.status;
+    if (!statsMap.has(status)) {
+      statsMap.set(status, {
+        _id: status,
+        count: 0,
+        totalAmount: 0,
+        amounts: []
+      });
     }
-  ]);
+
+    const stat = statsMap.get(status);
+    stat.count++;
+    stat.totalAmount += refund.amount;
+    stat.amounts.push(refund.amount);
+  }
+
+  // Calculate averages
+  const result = [];
+  for (const [status, stat] of statsMap) {
+    stat.avgAmount = stat.amounts.length > 0 ?
+      stat.amounts.reduce((sum, amount) => sum + amount, 0) / stat.amounts.length : 0;
+    delete stat.amounts;
+    result.push(stat);
+  }
+
+  return result;
 };
 
 const Refund = mongoose.model('Refund', refundSchema);

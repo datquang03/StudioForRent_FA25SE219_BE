@@ -91,31 +91,41 @@ export const createMessage = async (fromUserId, toUserId, content, bookingId = n
 export const getConversations = async (userId) => {
   try {
     // Lấy conversations theo booking (nếu có booking module)
-    const bookingConversations = await Message.aggregate([
-      {
-        $match: {
-          $or: [{ fromUserId: userId }, { toUserId: userId }],
-          bookingId: { $ne: null }
-        }
-      },
-      {
-        $group: {
-          _id: "$bookingId",
-          messages: { $push: "$$ROOT" },
-          lastMessage: { $last: "$$ROOT" },
-          unreadCount: {
-            $sum: {
-              $cond: [
-                { $and: [{ $eq: ["$toUserId", userId] }, { $eq: ["$isRead", false] }] },
-                1,
-                0
-              ]
-            }
-          }
-        }
-      },
-      { $sort: { "lastMessage.createdAt": -1 } }
-    ]);
+    const bookingMessages = await Message.find({
+      $or: [{ fromUserId: userId }, { toUserId: userId }],
+      bookingId: { $ne: null }
+    }).sort({ createdAt: -1 });
+
+    // Group booking messages by bookingId
+    const bookingConversationsMap = new Map();
+    for (const message of bookingMessages) {
+      const bookingId = message.bookingId.toString();
+
+      if (!bookingConversationsMap.has(bookingId)) {
+        bookingConversationsMap.set(bookingId, {
+          _id: bookingId,
+          messages: [],
+          lastMessage: message,
+          unreadCount: 0
+        });
+      }
+
+      const conversation = bookingConversationsMap.get(bookingId);
+      conversation.messages.push(message);
+
+      // Count unread messages for this user
+      if (message.toUserId.toString() === userId && !message.isRead) {
+        conversation.unreadCount++;
+      }
+
+      // Update last message if newer
+      if (message.createdAt > conversation.lastMessage.createdAt) {
+        conversation.lastMessage = message;
+      }
+    }
+
+    const bookingConversations = Array.from(bookingConversationsMap.values())
+      .sort((a, b) => b.lastMessage.createdAt - a.lastMessage.createdAt);
 
     // Lấy direct conversations (không có bookingId) - sử dụng JavaScript grouping
     const directMessages = await Message.find({

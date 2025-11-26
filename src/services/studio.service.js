@@ -843,37 +843,29 @@ export const getStudiosBookedSchedules = async (options = {}) => {
       }
 
       // Get booked slots count and total revenue
-      const [bookedCount, revenueResult] = await Promise.all([
+      const [bookedCount, schedulesWithBookings] = await Promise.all([
         Schedule.countDocuments(query),
-        Schedule.aggregate([
-          { $match: query },
-          {
-            $lookup: {
-              from: 'bookings',
-              localField: 'bookingId',
-              foreignField: '_id',
-              as: 'booking'
-            }
-          },
-          { $unwind: '$booking' },
-          {
-            $group: {
-              _id: null,
-              totalRevenue: { $sum: '$booking.finalAmount' },
-              totalDuration: {
-                $sum: {
-                  $divide: [
-                    { $subtract: ['$endTime', '$startTime'] },
-                    1000 * 60 * 60 // Convert to hours
-                  ]
-                }
-              }
-            }
-          }
-        ])
+        Schedule.find(query)
+          .populate('bookingId', 'finalAmount')
+          .select('startTime endTime bookingId')
+          .lean()
       ]);
 
-      const revenue = revenueResult.length > 0 ? revenueResult[0] : { totalRevenue: 0, totalDuration: 0 };
+      // Calculate revenue and duration
+      let totalRevenue = 0;
+      let totalDuration = 0;
+
+      for (const schedule of schedulesWithBookings) {
+        if (schedule.bookingId?.finalAmount) {
+          totalRevenue += schedule.bookingId.finalAmount;
+        }
+
+        const durationMs = schedule.endTime - schedule.startTime;
+        const durationHours = durationMs / (1000 * 60 * 60);
+        totalDuration += durationHours;
+      }
+
+      const revenue = { totalRevenue, totalDuration };
 
       return {
         _id: studio._id,

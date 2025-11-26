@@ -56,24 +56,38 @@ export const createReview = async ({ userId, bookingId, rating, title, comment }
 
   await review.save();
 
-  // Update studio aggregates
+  // Update studio aggregates using atomic operations to prevent race conditions
   if (studioId) {
-    const studio = await Studio.findById(studioId);
-    if (studio) {
-      const prevCount = studio.reviewCount || 0;
-      const prevAvg = studio.avgRating || 0;
-      const newCount = prevCount + 1;
-      const newAvg = (prevAvg * prevCount + rating) / newCount;
-      studio.reviewCount = newCount;
-      studio.avgRating = Math.round(newAvg * 10) / 10;
-      await studio.save();
-    }
+    await Studio.findByIdAndUpdate(studioId, [
+      {
+        $set: {
+          reviewCount: { $add: ['$reviewCount', 1] },
+          avgRating: {
+            $round: [
+              {
+                $divide: [
+                  { $add: [{ $multiply: ['$avgRating', '$reviewCount'] }, rating] },
+                  { $add: ['$reviewCount', 1] }
+                ]
+              },
+              1
+            ]
+          }
+        }
+      }
+    ]);
   }
 
   return review;
 };
 
 export const getReviewsByStudio = async ({ studioId, limit = 20, skip = 0 }) => {
+  if (!mongoose.Types.ObjectId.isValid(studioId)) {
+    const err = new Error("Invalid studioId");
+    err.status = 400;
+    throw err;
+  }
+
   const query = { studioId };
   const reviews = await Review.find(query)
     .sort({ createdAt: -1 })
