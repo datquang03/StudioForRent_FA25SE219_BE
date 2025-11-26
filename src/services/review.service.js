@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { Booking, Review, Schedule, Studio } from "../models/index.js";
+import { Booking, Review, Studio } from "../models/index.js";
 import { BOOKING_STATUS } from "../utils/constants.js";
 
 export const createReview = async ({ userId, bookingId, rating, title, comment }) => {
