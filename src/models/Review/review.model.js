@@ -17,11 +17,19 @@ const reviewSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    studioId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Studio",
+      required: true,
+    },
     rating: {
       type: Number,
       required: true,
       min: 1,
       max: 5,
+    },
+    title: {
+      type: String,
     },
     comment: {
       type: String,
@@ -32,7 +40,7 @@ const reviewSchema = new mongoose.Schema(
     },
   },
   {
-    timestamps: { createdAt: true, updatedAt: false },
+    timestamps: true,
   }
 );
 
@@ -40,6 +48,7 @@ const reviewSchema = new mongoose.Schema(
 // bookingId đã có unique: true, không cần index riêng
 reviewSchema.index({ userId: 1 });
 reviewSchema.index({ rating: 1 });
+reviewSchema.index({ studioId: 1 });
 
 const Review = mongoose.model("Review", reviewSchema);
 

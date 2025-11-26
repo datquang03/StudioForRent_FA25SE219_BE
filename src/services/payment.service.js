@@ -8,6 +8,8 @@ import payos from '../config/payos.js';
 import { PAYMENT_STATUS, PAY_TYPE, BOOKING_STATUS } from '../utils/constants.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
+import { createAndSendNotification } from './notification.service.js';
+import { NOTIFICATION_TYPE } from '../utils/constants.js';
 import { claimIdempotencyKey, isRedisAvailable } from '../utils/redisHelpers.js';
 //#endregion
 
@@ -621,7 +623,7 @@ export const createPaymentForOption = async (bookingId, opts = {}) => {
 /**
  * Create payment for the remaining amount after existing completed payments
  */
-export const createPaymentForRemaining = async (bookingId) => {
+export const createPaymentForRemaining = async (bookingId, opts = {}) => {
   const session = await mongoose.startSession();
   session.startTransaction();
 
@@ -642,6 +644,12 @@ export const createPaymentForRemaining = async (bookingId) => {
 
     const totalPaid = paidSummary[0]?.totalPaid || 0;
     const remaining = booking.finalAmount - totalPaid;
+
+    // Do not allow creating remaining payment after checkout/completion
+    if (booking.status === BOOKING_STATUS.COMPLETED) {
+      await session.commitTransaction();
+      throw new ValidationError('Cannot create remaining payment after checkout');
+    }
 
     if (remaining <= 0) {
       await session.commitTransaction();
@@ -685,7 +693,7 @@ export const createPaymentForRemaining = async (bookingId) => {
 
     const checkoutUrl = paymentLinkResponse?.checkoutUrl || paymentLinkResponse?.data?.checkoutUrl || paymentLinkResponse?.data?.url || paymentLinkResponse?.url || null;
     const qrCodeUrl = paymentLinkResponse?.qrCode || paymentLinkResponse?.data?.qrCode || null;
-    const gatewayResponse = { orderCode, createdAt: new Date(), paymentLinkId: paymentLinkResponse?.paymentLinkId || paymentLinkResponse?.data?.id || null, qrCode: qrCodeUrl };
+    const gatewayResponse = { orderCode, createdAt: new Date(), paymentLinkId: paymentLinkResponse?.paymentLinkId || paymentLinkResponse?.data?.id || null, qrCode: qrCodeUrl, actorId: opts.actorId ? opts.actorId.toString() : undefined };
 
     if (!checkoutUrl) {
       throw new Error('PayOS did not return a valid checkout URL');
@@ -695,7 +703,36 @@ export const createPaymentForRemaining = async (bookingId) => {
 
     const payment = await Payment.create([{ bookingId, paymentCode, amount: remaining, payType: PAY_TYPE.FULL, status: PAYMENT_STATUS.PENDING, transactionId: orderCode.toString(), qrCodeUrl: checkoutUrl, gatewayResponse, expiresAt }], { session });
 
+    // Audit: push event to booking.events indicating who created the remaining payment
+    try {
+      if (opts.actorId) {
+        booking.events = booking.events || [];
+        booking.events.push({
+          type: 'PAYMENT_CREATED',
+          timestamp: new Date(),
+          actorId: opts.actorId,
+          details: { amount: remaining, paymentId: payment[0]._id }
+        });
+        await booking.save({ session });
+      }
+    } catch (eventErr) {
+      logger.warn('Failed to append booking event for remaining payment', { bookingId, error: eventErr?.message || eventErr });
+    }
+
     await session.commitTransaction();
+
+    // Notify customer about remaining payment link (best-effort, outside transaction)
+    try {
+      const userId = booking.userId?._id || booking.userId;
+      if (userId) {
+        const message = `Bạn còn ${remaining} VND cần thanh toán cho booking #${booking._id.toString().slice(-8)}. Link thanh toán: ${checkoutUrl}`;
+        // sendEmail=false to avoid unexpected emails; frontend can surface link
+        await createAndSendNotification(userId, NOTIFICATION_TYPE.INFO, 'Thanh toán phần còn lại', message, false, null, payment[0]._id);
+      }
+    } catch (notifErr) {
+      logger.warn('Failed to notify customer about remaining payment', { bookingId, error: notifErr?.message || notifErr });
+    }
+
     return payment[0];
   } catch (error) {
     await session.abortTransaction();
@@ -704,4 +741,19 @@ export const createPaymentForRemaining = async (bookingId) => {
   } finally {
     session.endSession();
   }
+};
+
+/**
+ * Create refund request for a payment
+ * @param {string} paymentId - Payment ID to refund
+ * @param {object} opts - Options object
+ * @param {number} opts.amount - Refund amount (optional, defaults to full payment amount)
+ * @param {string} opts.reason - Reason for refund
+ * @param {string} opts.actorId - ID of user initiating refund (staff/admin)
+ * @returns {object} Refund information
+ */
+export const createRefund = async (paymentId, opts = {}) => {
+  // Import and delegate to Refund service
+  const { createRefund: createRefundService } = await import('./refund.service.js');
+  return await createRefundService(paymentId, opts);
 };

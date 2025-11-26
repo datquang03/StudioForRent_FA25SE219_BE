@@ -25,6 +25,7 @@ import paymentRoutes from "./src/routes/payment.route.js";
 import setDesignRoutes from "./src/routes/setDesign.route.js";
 import roomPolicyRoutes from "./src/routes/roomPolicy.route.js";
 import reportRoutes from "./src/routes/report.route.js";
+import reviewRoutes from "./src/routes/review.route.js";
 import logger from "./src/utils/logger.js";
 import { errorHandler, notFoundHandler } from "./src/middlewares/errorHandler.js";
 import { socketAuth, handleSocketConnection } from "./src/middlewares/socket.js";
@@ -55,7 +56,6 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
 connectDB();
-
 // Ensure upload temp directory exists
 const uploadTempDir = path.join(process.cwd(), 'uploads', 'temp');
 if (!fs.existsSync(uploadTempDir)) {
@@ -81,6 +81,7 @@ app.use("/api/set-designs", setDesignRoutes);
 app.use("/api/room-policies", roomPolicyRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/reports", reportRoutes);
+app.use("/api/reviews", reviewRoutes);
 
 // Setup Socket.io with authentication
 io.use(socketAuth);
@@ -92,7 +93,10 @@ app.use((req, res, next) => {
   next();
 });
 
-// No-show job temporarily disabled (consider Redis-based queue later)
+// Background jobs (no-show, reminders, etc.) should NOT be started
+// from the web server process. Start jobs via the dedicated worker:
+//   `npm run worker` which runs `src/jobs/worker.js`.
+// This file intentionally does not initialize schedulers or cron jobs.
 
 app.get("/", (req, res) => {
   res.send("🚀 API is running...");

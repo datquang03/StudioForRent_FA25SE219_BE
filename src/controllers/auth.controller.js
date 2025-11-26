@@ -5,6 +5,7 @@ import {
   verifyEmail,
   resendVerificationCode,
   login,
+  loginWithGoogle,
   refreshAccessToken,
   logout,
   createStaffAccount,
@@ -82,6 +83,24 @@ export const loginController = asyncHandler(async (req, res) => {
   res.status(200).json({
     success: true,
     message: AUTH_MESSAGES.LOGIN_SUCCESS,
+    data: { user, accessToken, refreshToken },
+  });
+});
+
+export const googleLoginController = asyncHandler(async (req, res) => {
+  const { idToken } = req.body;
+
+  if (!idToken) {
+    res.status(400);
+    throw new Error('idToken is required');
+  }
+
+  const ipAddress = req.ip || req.connection.remoteAddress;
+  const { user, accessToken, refreshToken } = await loginWithGoogle(idToken, ipAddress);
+
+  res.status(200).json({
+    success: true,
+    message: 'Login with Google successful',
     data: { user, accessToken, refreshToken },
   });
 });

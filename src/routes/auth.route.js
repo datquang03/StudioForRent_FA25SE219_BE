@@ -4,6 +4,7 @@ import {
   verifyEmailController,
   resendCodeController,
   loginController,
+  googleLoginController,
   refreshTokenController,
   logoutController,
   createStaffController,
@@ -33,6 +34,7 @@ router.post('/register/customer', authLimiter, validateRegistration, registerCus
 router.post('/verify', verificationLimiter, validateEmailVerification, verifyEmailController);
 router.post('/resend-code', verificationLimiter, resendCodeController);
 router.post('/login', strictLoginLimiter, validateLogin, loginController);
+router.post('/login/google', strictLoginLimiter, googleLoginController);
 router.post('/refresh', authLimiter, validateRefreshToken, refreshTokenController);
 router.post('/logout', validateRefreshToken, logoutController);
 router.post('/forgot-password', passwordResetLimiter, forgotPasswordController);

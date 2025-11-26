@@ -38,6 +38,18 @@ const studioSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    // Aggregate rating fields
+    avgRating: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 5,
+    },
+    reviewCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     status: {
       type: String,
       enum: Object.values(STUDIO_STATUS),

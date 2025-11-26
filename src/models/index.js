@@ -25,6 +25,7 @@ export { default as SetDesign } from './SetDesign/setDesign.model.js';
 
 // Financial
 export { default as Payment } from './Payment/payment.model.js';
+export { default as Refund } from './Refund/refund.model.js';
 export { default as Promotion } from './Promotion/promotion.model.js';
 
 // Policies
