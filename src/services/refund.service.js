@@ -74,13 +74,10 @@ export const createRefund = async (paymentId, opts = {}) => {
     payment.status = PAYMENT_STATUS.REFUNDED;
     await payment.save({ session });
 
+    // 6. Start PayOS refund processing (await initiation)
+    await processPayOSRefund(refund[0]._id);
+
     await session.commitTransaction();
-
-    // 6. Start PayOS refund processing (async)
-    processPayOSRefund(refund[0]._id).catch(error => {
-      logger.error('Failed to start PayOS refund processing:', error);
-    });
-
     return refund[0];
 
   } catch (error) {
