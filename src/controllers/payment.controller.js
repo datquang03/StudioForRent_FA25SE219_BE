@@ -4,6 +4,7 @@ import { createPaymentForOption } from '../services/payment.service.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
 import Booking from '../models/Booking/booking.model.js';
 import Payment from '../models/Payment/payment.model.js';
+import Schedule from '../models/Schedule/schedule.model.js';
 import { USER_ROLES } from '../utils/constants.js';
 import logger from '../utils/logger.js';
 //#endregion
