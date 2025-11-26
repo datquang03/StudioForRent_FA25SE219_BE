@@ -97,24 +97,27 @@ export const createRefund = async (paymentId, opts = {}) => {
  * @param {string} refundId - Refund ID to process
  */
 export const processPayOSRefund = async (refundId) => {
+  // First, check refund existence and status before starting a session
+  const refundCheck = await Refund.findById(refundId)
+    .populate('paymentId');
+
+  if (!refundCheck) {
+    throw new NotFoundError('Refund not found');
+  }
+
+  if (refundCheck.status !== 'PENDING') {
+    logger.info(`Refund ${refundId} already processed with status: ${refundCheck.status}`);
+    return;
+  }
+
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
-    // 1. Get refund details
+    // 1. Get refund details within the session
     const refund = await Refund.findById(refundId)
       .populate('paymentId')
       .session(session);
-
-    if (!refund) {
-      throw new NotFoundError('Refund not found');
-    }
-
-    if (refund.status !== 'PENDING') {
-      logger.info(`Refund ${refundId} already processed with status: ${refund.status}`);
-      return;
-    }
-
     // 2. Update status to PROCESSING
     refund.status = 'PROCESSING';
     await refund.save({ session });
