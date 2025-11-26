@@ -5,7 +5,7 @@ import {
   uploadAvatar
 } from '../controllers/staff.controller.js';
 import { protect, authorize } from '../middlewares/auth.js';
-import { sanitizeInput, validateObjectId } from '../middlewares/validate.js';
+import { sanitizeInput } from '../middlewares/validate.js';
 import { generalLimiter } from '../middlewares/rateLimiter.js';
 import { USER_ROLES } from '../utils/constants.js';
 import { upload, FILE_SIZE_LIMITS, ALLOWED_FILE_TYPES } from '../middlewares/upload.js';

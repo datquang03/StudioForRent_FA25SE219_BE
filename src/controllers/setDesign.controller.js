@@ -19,7 +19,6 @@ import {
   convertRequestToSetDesign,
   generateImageFromText,
   chatWithDesignAI,
-  generateDesignSummaryFromChat,
   generateCompleteDesign
 } from '../services/setDesign.service.js';
 // #endregion

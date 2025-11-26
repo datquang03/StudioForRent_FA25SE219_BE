@@ -714,12 +714,12 @@ export const checkInBooking = async (bookingId, actorId = null) => {
       }
 
       // Ensure sufficient payment (>=30%)
-      const paidSummary = await Payment.aggregate([
-        { $match: { bookingId: booking._id, status: PAYMENT_STATUS.PAID } },
-        { $group: { _id: null, totalPaid: { $sum: '$amount' } } }
-      ]).session(session);
+      const paidPayments = await Payment.find({
+        bookingId: booking._id,
+        status: PAYMENT_STATUS.PAID
+      }).select('amount').session(session);
 
-      const totalPaid = paidSummary[0]?.totalPaid || 0;
+      const totalPaid = paidPayments.reduce((sum, payment) => sum + payment.amount, 0);
       const required = Math.round(booking.finalAmount * 0.3);
       if (totalPaid < required) {
         throw new ValidationError('Deposit 30% is required before check-in');

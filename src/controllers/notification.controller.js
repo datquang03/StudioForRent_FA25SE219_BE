@@ -6,7 +6,6 @@ import {
   deleteNotification,
   createAndSendNotification,
 } from '../services/notification.service.js';
-import { USER_ROLES } from '../utils/constants.js';
 // #endregion
 
 // #region Notification Controllers

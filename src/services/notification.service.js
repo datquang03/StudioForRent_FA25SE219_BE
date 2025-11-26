@@ -253,12 +253,12 @@ export const scheduleReminders = () => {
           if (booking.status === BOOKING_STATUS.COMPLETED || booking.status === BOOKING_STATUS.CANCELLED) continue;
 
           // Calculate total paid for this booking
-          const paidSummary = await Payment.aggregate([
-            { $match: { bookingId: booking._id, status: PAYMENT_STATUS.PAID } },
-            { $group: { _id: null, totalPaid: { $sum: '$amount' } } }
-          ]);
+          const paidPayments = await Payment.find({
+            bookingId: booking._id,
+            status: PAYMENT_STATUS.PAID
+          }).select('amount');
 
-          const totalPaid = paidSummary[0]?.totalPaid || 0;
+          const totalPaid = paidPayments.reduce((sum, payment) => sum + payment.amount, 0);
           const remaining = booking.finalAmount - totalPaid;
           if (remaining <= 0) continue; // nothing to remind
 

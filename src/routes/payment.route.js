@@ -5,9 +5,13 @@ import { generalLimiter } from '../middlewares/rateLimiter.js';
 import {
   createPaymentOptionsController,
   paymentWebhookController,
-  getPaymentStatusController
+  getPaymentStatusController,
+  createSinglePaymentController,
+  getCustomerPaymentHistoryController,
+  getStaffPaymentHistoryController,
+  createRefundController,
+  getRefundStatusController
 } from '../controllers/payment.controller.js';
-import { createSinglePaymentController } from '../controllers/payment.controller.js';
 import { USER_ROLES } from '../utils/constants.js';
 //#endregion
 
@@ -65,6 +69,30 @@ router.post(
 );
 
 /**
+ * GET /api/payments/history
+ * Get payment history for customer
+ */
+router.get(
+  '/history',
+  generalLimiter,
+  protect,
+  authorize(USER_ROLES.CUSTOMER),
+  getCustomerPaymentHistoryController
+);
+
+/**
+ * GET /api/payments/staff/history
+ * Get payment history for staff/admin (can filter by studio)
+ */
+router.get(
+  '/staff/history',
+  generalLimiter,
+  protect,
+  authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN),
+  getStaffPaymentHistoryController
+);
+
+/**
  * GET /api/payments/:paymentId
  * Get payment status
  */
@@ -74,6 +102,30 @@ router.get(
   protect,
   authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN),
   getPaymentStatusController
+);
+
+/**
+ * POST /api/payments/:paymentId/refund
+ * Create refund request
+ */
+router.post(
+  '/:paymentId/refund',
+  generalLimiter,
+  protect,
+  authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN),
+  createRefundController
+);
+
+/**
+ * GET /api/payments/:paymentId/refund
+ * Get refund status
+ */
+router.get(
+  '/:paymentId/refund',
+  generalLimiter,
+  protect,
+  authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN),
+  getRefundStatusController
 );
 //#endregion
 

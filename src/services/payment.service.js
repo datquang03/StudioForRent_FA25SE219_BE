@@ -10,7 +10,7 @@ import { ValidationError, NotFoundError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
 import { createAndSendNotification } from './notification.service.js';
 import { NOTIFICATION_TYPE } from '../utils/constants.js';
-import { claimIdempotencyKey, isRedisAvailable } from '../utils/redisHelpers.js';
+import { claimIdempotencyKey } from '../utils/redisHelpers.js';
 //#endregion
 
 // PayOS description maximum length (PayOS validation)
@@ -356,23 +356,13 @@ export const handlePaymentWebhook = async (webhookPayload) => {
       const booking = await Booking.findById(payment.bookingId).session(session);
       
       if (booking) {
-        // Calculate total paid amount using aggregation for accuracy
-        const paidSummary = await Payment.aggregate([
-          {
-            $match: {
-              bookingId: booking._id,
-              status: PAYMENT_STATUS.PAID
-            }
-          },
-          {
-            $group: {
-              _id: null,
-              totalPaid: { $sum: '$amount' }
-            }
-          }
-        ]).session(session);
+        // Calculate total paid amount using find for accuracy
+        const paidPayments = await Payment.find({
+          bookingId: booking._id,
+          status: PAYMENT_STATUS.PAID
+        }).select('amount').session(session);
 
-        const totalPaid = paidSummary[0]?.totalPaid || 0;
+        const totalPaid = paidPayments.reduce((sum, payment) => sum + payment.amount, 0);
         const paymentPercentage = (totalPaid / booking.finalAmount) * 100;
 
         logger.info(`Booking ${booking._id} payment progress: ${paymentPercentage.toFixed(2)}%`, {
@@ -637,12 +627,12 @@ export const createPaymentForRemaining = async (bookingId, opts = {}) => {
     }
 
     // Sum completed payments
-    const paidSummary = await Payment.aggregate([
-      { $match: { bookingId: booking._id, status: PAYMENT_STATUS.PAID } },
-      { $group: { _id: null, totalPaid: { $sum: '$amount' } } }
-    ]).session(session);
+    const paidPayments = await Payment.find({
+      bookingId: booking._id,
+      status: PAYMENT_STATUS.PAID
+    }).select('amount').session(session);
 
-    const totalPaid = paidSummary[0]?.totalPaid || 0;
+    const totalPaid = paidPayments.reduce((sum, payment) => sum + payment.amount, 0);
     const remaining = booking.finalAmount - totalPaid;
 
     // Do not allow creating remaining payment after checkout/completion
@@ -741,4 +731,113 @@ export const createPaymentForRemaining = async (bookingId, opts = {}) => {
   } finally {
     session.endSession();
   }
+};
+
+/**
+ * Create refund request for a payment
+ * @param {string} paymentId - Payment ID to refund
+ * @param {object} opts - Options object
+ * @param {number} opts.amount - Refund amount (optional, defaults to full payment amount)
+ * @param {string} opts.reason - Reason for refund
+ * @param {string} opts.actorId - ID of user initiating refund (staff/admin)
+ * @returns {object} Refund information
+ */
+export const createRefund = async (paymentId, opts = {}) => {
+  // Import and delegate to Refund service
+  const { createRefund: createRefundService } = await import('./refund.service.js');
+  return await createRefundService(paymentId, opts);
+};
+
+/**
+ * Get payment history for staff/admin with optimized queries
+ * @param {object} filters - Filter options
+ * @param {string} filters.status - Payment status filter
+ * @param {string} filters.studioId - Studio ID filter
+ * @param {Date} filters.startDate - Start date filter
+ * @param {Date} filters.endDate - End date filter
+ * @param {number} filters.page - Page number (1-based)
+ * @param {number} filters.limit - Items per page
+ * @returns {object} Paginated payment history
+ */
+export const getStaffPaymentHistory = async (filters = {}) => {
+  const {
+    status,
+    studioId,
+    startDate,
+    endDate,
+    page = 1,
+    limit = 10
+  } = filters;
+
+  // Build base query
+  let query = {};
+
+  if (status) {
+    query.status = status;
+  }
+
+  if (startDate || endDate) {
+    query.createdAt = {};
+    if (startDate) query.createdAt.$gte = new Date(startDate);
+    if (endDate) query.createdAt.$lte = new Date(endDate);
+  }
+
+  // Handle studio filtering efficiently
+  if (studioId) {
+    // Get bookings for this studio first (more efficient than nested lookups)
+    const bookings = await Booking.find()
+      .populate({
+        path: 'scheduleId',
+        match: { studioId: studioId },
+        select: '_id'
+      })
+      .select('_id scheduleId')
+      .lean();
+
+    const bookingIds = bookings
+      .filter(b => b.scheduleId) // Only bookings with matching studio
+      .map(b => b._id);
+
+    query.bookingId = { $in: bookingIds };
+  }
+
+  // Get total count
+  const total = await Payment.countDocuments(query);
+
+  // Get payments first (without populate)
+  const payments = await Payment.find(query)
+    .sort({ createdAt: -1 })
+    .skip((page - 1) * limit)
+    .limit(limit)
+    .lean();
+
+  // Batch load all related booking data
+  const bookingIds = payments.map(p => p.bookingId);
+  const bookings = await Booking.find({ _id: { $in: bookingIds } })
+    .populate('userId', 'fullName email phone')
+    .populate({
+      path: 'scheduleId',
+      populate: { path: 'studioId', select: 'name location' }
+    })
+    .select('status totalBeforeDiscount finalAmount userId scheduleId createdAt')
+    .lean();
+
+  // Create lookup map for fast access
+  const bookingMap = new Map(bookings.map(b => [b._id.toString(), b]));
+
+  // Combine payment data with booking data
+  const enrichedPayments = payments.map(payment => ({
+    ...payment,
+    booking: bookingMap.get(payment.bookingId?.toString()) || null
+  }));
+
+  return {
+    payments: enrichedPayments,
+    pagination: {
+      page: parseInt(page),
+      limit: parseInt(limit),
+      total,
+      pages: Math.ceil(total / limit)
+    }
+  };
 };
