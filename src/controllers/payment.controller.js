@@ -315,8 +315,7 @@ export const getRefundStatusController = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: refunds.length > 0 ? refunds[0] : null, // Return latest refund
-      allRefunds: refunds // Include all refunds for this payment
+      data: refunds // Return all refunds as an array (empty if none)
     });
   } catch (error) {
     logger.error('Get refund status error:', error);
