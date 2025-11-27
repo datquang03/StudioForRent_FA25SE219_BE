@@ -1134,9 +1134,6 @@ export const updateCustomDesignRequestStatus = async (id, status, staffId, updat
  */
 export const convertRequestToSetDesign = async (requestId, designData = {}, user) => {
   try {
-    if (!user || user.role !== 'staff') {
-      throw new Error('Only staff can convert custom requests to set designs');
-    }
     const request = await CustomDesignRequest.findById(requestId);
     if (!request) {
       throw new Error('Custom design request not found');
