@@ -121,11 +121,13 @@ export const getSetDesignById = async (id) => {
  * @param {Object} designData - Set design data
  * @returns {Object} Created set design
  */
-export const createSetDesign = async (designData) => {
+export const createSetDesign = async (designData, user) => {
   try {
+    if (!user || user.role !== 'staff') {
+      throw new Error('Only staff can create set designs');
+    }
     const design = new SetDesign(designData);
     await design.save();
-
     logger.info(`New set design created: ${design.name}`);
     return design;
   } catch (error) {
@@ -140,18 +142,19 @@ export const createSetDesign = async (designData) => {
  * @param {Object} updateData - Update data
  * @returns {Object} Updated set design
  */
-export const updateSetDesign = async (id, updateData) => {
+export const updateSetDesign = async (id, updateData, user) => {
   try {
+    if (!user || user.role !== 'staff') {
+      throw new Error('Only staff can update set designs');
+    }
     const design = await SetDesign.findByIdAndUpdate(
       id,
       { ...updateData, updatedAt: new Date() },
       { new: true, runValidators: true }
     );
-
     if (!design) {
       throw new Error('Set design not found');
     }
-
     logger.info(`Set design updated: ${design.name}`);
     return design;
   } catch (error) {
@@ -165,18 +168,19 @@ export const updateSetDesign = async (id, updateData) => {
  * @param {string} id - Set design ID
  * @returns {Object} Deleted set design
  */
-export const deleteSetDesign = async (id) => {
+export const deleteSetDesign = async (id, user) => {
   try {
+    if (!user || user.role !== 'staff') {
+      throw new Error('Only staff can delete set designs');
+    }
     const design = await SetDesign.findByIdAndUpdate(
       id,
       { isActive: false, updatedAt: new Date() },
       { new: true }
     );
-
     if (!design) {
       throw new Error('Set design not found');
     }
-
     logger.info(`Set design deactivated: ${design.name}`);
     return design;
   } catch (error) {
@@ -1128,17 +1132,15 @@ export const updateCustomDesignRequestStatus = async (id, status, staffId, updat
  * @param {Object} designData - Additional design data
  * @returns {Object} Created SetDesign
  */
-export const convertRequestToSetDesign = async (requestId, designData = {}) => {
+export const convertRequestToSetDesign = async (requestId, designData = {}, user) => {
   try {
     const request = await CustomDesignRequest.findById(requestId);
     if (!request) {
       throw new Error('Custom design request not found');
     }
-
     if (request.status !== 'completed') {
       throw new Error('Only completed requests can be converted to set designs');
     }
-
     // Create SetDesign from request
     const setDesign = new SetDesign({
       name: designData.name || `Custom Design - ${request.customerName}`,
@@ -1153,13 +1155,10 @@ export const convertRequestToSetDesign = async (requestId, designData = {}) => {
       tags: ['custom', ...(designData.tags || [])],
       isActive: designData.isActive !== undefined ? designData.isActive : true
     });
-
     await setDesign.save();
-
     // Update request with conversion info
     request.convertedToDesignId = setDesign._id;
     await request.save();
-
     logger.info(`Custom design request ${requestId} converted to SetDesign ${setDesign._id}`);
     return setDesign;
   } catch (error) {

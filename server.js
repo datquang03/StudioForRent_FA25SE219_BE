@@ -24,6 +24,7 @@ import scheduleRoutes from "./src/routes/schedule.route.js";
 import paymentRoutes from "./src/routes/payment.route.js";
 import setDesignRoutes from "./src/routes/setDesign.route.js";
 import roomPolicyRoutes from "./src/routes/roomPolicy.route.js";
+import reportRoutes from "./src/routes/report.route.js";
 import reviewRoutes from "./src/routes/review.route.js";
 import logger from "./src/utils/logger.js";
 import { errorHandler, notFoundHandler } from "./src/middlewares/errorHandler.js";
@@ -79,6 +80,7 @@ app.use("/api/schedules", scheduleRoutes);
 app.use("/api/set-designs", setDesignRoutes);
 app.use("/api/room-policies", roomPolicyRoutes);
 app.use("/api/payments", paymentRoutes);
+app.use("/api/reports", reportRoutes);
 app.use("/api/reviews", reviewRoutes);
 
 // Setup Socket.io with authentication

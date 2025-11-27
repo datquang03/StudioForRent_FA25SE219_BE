@@ -69,9 +69,7 @@ export const getSetDesignByIdController = asyncHandler(async (req, res) => {
  */
 export const createSetDesignController = asyncHandler(async (req, res) => {
   const designData = req.body;
-
-  const design = await createSetDesign(designData);
-
+  const design = await createSetDesign(designData, req.user);
   res.status(201).json({
     success: true,
     message: 'Set design created successfully',
@@ -86,9 +84,7 @@ export const createSetDesignController = asyncHandler(async (req, res) => {
 export const updateSetDesignController = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const updateData = req.body;
-
-  const design = await updateSetDesign(id, updateData);
-
+  const design = await updateSetDesign(id, updateData, req.user);
   res.status(200).json({
     success: true,
     message: 'Set design updated successfully',
@@ -102,9 +98,7 @@ export const updateSetDesignController = asyncHandler(async (req, res) => {
  */
 export const deleteSetDesignController = asyncHandler(async (req, res) => {
   const { id } = req.params;
-
-  const design = await deleteSetDesign(id);
-
+  const design = await deleteSetDesign(id, req.user);
   res.status(200).json({
     success: true,
     message: 'Set design deleted successfully',
@@ -356,9 +350,7 @@ export const updateCustomDesignRequestStatusController = asyncHandler(async (req
 export const convertRequestToSetDesignController = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const designData = req.body;
-
-  const setDesign = await convertRequestToSetDesign(id, designData);
-
+  const setDesign = await convertRequestToSetDesign(id, designData, req.user);
   res.status(201).json({
     success: true,
     message: 'Custom request converted to set design successfully',
