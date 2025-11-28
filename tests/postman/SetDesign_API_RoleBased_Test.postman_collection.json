@@ -1,9 +1,9 @@
 {
   "info": {
-    "_postman_id": "set-design-controller-crud-2025",
-    "name": "SetDesign Controller CRUD API Tests",
+    "_postman_id": "setdesign-api-2025",
+    "name": "SetDesign API Role-Based Tests",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "CRUD and feature tests for SetDesign controller endpoints."
+    "description": "Role-based CRUD and feature tests for SetDesign API."
   },
   "item": [
     {
@@ -33,7 +33,7 @@
       "response": []
     },
     {
-      "name": "Create Set Design (Admin)",
+      "name": "Create Set Design (Staff Only)",
       "request": {
         "method": "POST",
         "header": [
@@ -53,7 +53,7 @@
       "response": []
     },
     {
-      "name": "Update Set Design (Staff)",
+      "name": "Update Set Design (Staff Only)",
       "request": {
         "method": "PUT",
         "header": [
@@ -73,7 +73,7 @@
       "response": []
     },
     {
-      "name": "Delete Set Design (Staff)",
+      "name": "Delete Set Design (Staff Only)",
       "request": {
         "method": "DELETE",
         "header": [
@@ -88,7 +88,7 @@
       "response": []
     },
     {
-      "name": "Add Review",
+      "name": "Add Review (Customer Only)",
       "request": {
         "method": "POST",
         "header": [
@@ -108,7 +108,7 @@
       "response": []
     },
     {
-      "name": "Add Comment",
+      "name": "Add Comment (Customer Only)",
       "request": {
         "method": "POST",
         "header": [
@@ -128,7 +128,7 @@
       "response": []
     },
     {
-      "name": "Reply to Comment (Staff)",
+      "name": "Reply to Comment (Staff Only)",
       "request": {
         "method": "POST",
         "header": [
@@ -148,11 +148,12 @@
       "response": []
     },
     {
-      "name": "Upload Design Image",
+      "name": "Upload Design Image (Customer/Staff)",
       "request": {
         "method": "POST",
         "header": [
-          { "key": "Content-Type", "value": "application/json" }
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{staff_token}}" }
         ],
         "body": {
           "mode": "raw",
@@ -188,152 +189,6 @@
           "raw": "{{base_url}}/api/set-designs/active",
           "host": ["{{base_url}}"],
           "path": ["api", "set-designs", "active"]
-        }
-      },
-      "response": []
-    },
-    {
-      "name": "Create Custom Design Request",
-      "request": {
-        "method": "POST",
-        "header": [
-          { "key": "Content-Type", "value": "application/json" }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"customerName\": \"Test User\",\n  \"email\": \"test@email.com\",\n  \"phoneNumber\": \"0123456789\",\n  \"description\": \"A valid description for custom design request.\"\n}"
-        },
-        "url": {
-          "raw": "{{base_url}}/api/set-designs/custom-request",
-          "host": ["{{base_url}}"],
-          "path": ["api", "set-designs", "custom-request"]
-        }
-      },
-      "response": []
-    },
-    {
-      "name": "Get All Custom Design Requests",
-      "request": {
-        "method": "GET",
-        "header": [
-          { "key": "Authorization", "value": "Bearer {{staff_token}}" }
-        ],
-        "url": {
-          "raw": "{{base_url}}/api/set-designs/custom-requests",
-          "host": ["{{base_url}}"],
-          "path": ["api", "set-designs", "custom-requests"]
-        }
-      },
-      "response": []
-    },
-    {
-      "name": "Get Custom Design Request By ID",
-      "request": {
-        "method": "GET",
-        "header": [
-          { "key": "Authorization", "value": "Bearer {{staff_token}}" }
-        ],
-        "url": {
-          "raw": "{{base_url}}/api/set-designs/custom-requests/{{customRequestId}}",
-          "host": ["{{base_url}}"],
-          "path": ["api", "set-designs", "custom-requests", "{{customRequestId}}"]
-        }
-      },
-      "response": []
-    },
-    {
-      "name": "Update Custom Design Request Status (Staff/Admin)",
-      "request": {
-        "method": "PATCH",
-        "header": [
-          { "key": "Content-Type", "value": "application/json" },
-          { "key": "Authorization", "value": "Bearer {{staff_token}}" }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"status\": \"completed\"\n}"
-        },
-        "url": {
-          "raw": "{{base_url}}/api/set-designs/custom-requests/{{customRequestId}}/status",
-          "host": ["{{base_url}}"],
-          "path": ["api", "set-designs", "custom-requests", "{{customRequestId}}", "status"]
-        }
-      },
-      "response": []
-    },
-    {
-      "name": "Convert Custom Request to Set Design (Admin)",
-      "request": {
-        "method": "POST",
-        "header": [
-          { "key": "Content-Type", "value": "application/json" },
-          { "key": "Authorization", "value": "Bearer {{staff_token}}" }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"name\": \"Converted Set Design\"\n}"
-        },
-        "url": {
-          "raw": "{{base_url}}/api/set-designs/custom-requests/{{customRequestId}}/convert",
-          "host": ["{{base_url}}"],
-          "path": ["api", "set-designs", "custom-requests", "{{customRequestId}}", "convert"]
-        }
-      },
-      "response": []
-    },
-    {
-      "name": "Generate Image From Text",
-      "request": {
-        "method": "POST",
-        "header": [
-          { "key": "Content-Type", "value": "application/json" }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"description\": \"studio set design\",\n  \"provider\": \"getty\"\n}"
-        },
-        "url": {
-          "raw": "{{base_url}}/api/set-designs/generate-from-text",
-          "host": ["{{base_url}}"],
-          "path": ["api", "set-designs", "generate-from-text"]
-        }
-      },
-      "response": []
-    },
-    {
-      "name": "Chat With Design AI",
-      "request": {
-        "method": "POST",
-        "header": [
-          { "key": "Content-Type", "value": "application/json" }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"message\": \"Hi!\",\n  \"conversationHistory\": []\n}"
-        },
-        "url": {
-          "raw": "{{base_url}}/api/set-designs/ai-chat",
-          "host": ["{{base_url}}"],
-          "path": ["api", "set-designs", "ai-chat"]
-        }
-      },
-      "response": []
-    },
-    {
-      "name": "Generate Complete Design From Conversation",
-      "request": {
-        "method": "POST",
-        "header": [
-          { "key": "Content-Type", "value": "application/json" }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"conversationHistory\": [\"msg1\", \"msg2\"],\n  \"imageOptions\": {}\n}"
-        },
-        "url": {
-          "raw": "{{base_url}}/api/set-designs/ai-generate-design",
-          "host": ["{{base_url}}"],
-          "path": ["api", "set-designs", "ai-generate-design"]
         }
       },
       "response": []

@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { SET_DESIGN_CATEGORIES } from '../../utils/constants.js';
 
 /**
  * SET DESIGN MODEL
@@ -134,7 +135,7 @@ const setDesignSchema = new mongoose.Schema(
 
     category: {
       type: String,
-      enum: ['wedding', 'portrait', 'corporate', 'event', 'family', 'graduation', 'other'],
+      enum: SET_DESIGN_CATEGORIES,
       default: 'other',
     },
 
