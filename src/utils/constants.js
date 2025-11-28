@@ -1,3 +1,13 @@
+// Set Design Categories
+export const SET_DESIGN_CATEGORIES = [
+  'wedding',
+  'portrait',
+  'corporate',
+  'event',
+  'family',
+  'graduation',
+  'other'
+];
 // #region Response Messages
 
 // Authentication Messages
