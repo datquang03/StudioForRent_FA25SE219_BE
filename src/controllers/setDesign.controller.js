@@ -10,7 +10,6 @@ import {
   addComment,
   replyToComment,
   uploadDesignImage,
-  uploadDesignImages,
   getSetDesignsByCategory,
   getActiveSetDesigns,
   createCustomDesignRequest,
