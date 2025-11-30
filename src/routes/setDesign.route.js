@@ -9,7 +9,7 @@ import {
   addReviewController,
   addCommentController,
   replyToCommentController,
-  uploadDesignImageController,
+  uploadDesignImagesController,
   getSetDesignsByCategoryController,
   getActiveSetDesignsController,
   createCustomDesignRequestController,
@@ -24,7 +24,7 @@ import {
 import { protect } from '../middlewares/auth.js';
 import { authorize } from '../middlewares/auth.js';
 import { sanitizeInput, validateObjectId } from '../middlewares/validate.js';
-import { generalLimiter, aiLimiter } from '../middlewares/rateLimiter.js';
+import { generalLimiter, aiLimiter, uploadLimiter } from '../middlewares/rateLimiter.js';
 import { USER_ROLES } from '../utils/constants.js';
 // #endregion
 
@@ -70,7 +70,7 @@ router.get('/custom-requests/:id', validateObjectId(), authorize(USER_ROLES.STAF
 router.patch('/custom-requests/:id/status', validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), updateCustomDesignRequestStatusController);
 
 // Image upload (Customer and Staff)
-router.post('/upload-image', authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), uploadDesignImageController);
+router.post('/upload-images', authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), uploadLimiter, uploadDesignImagesController);
 
 // Admin-only routes
 // Staff-only routes

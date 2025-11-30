@@ -52,8 +52,8 @@ const PORT = process.env.PORT || 8000;
 app.set('trust proxy', 1);
 
 app.use(cors());
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json({ limit: '10mb' }));
+app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 
 connectDB();
 // Ensure upload temp directory exists
