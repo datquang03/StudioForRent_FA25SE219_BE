@@ -10,6 +10,7 @@ import {
   addComment,
   replyToComment,
   uploadDesignImage,
+  uploadDesignImages,
   getSetDesignsByCategory,
   getActiveSetDesigns,
   createCustomDesignRequest,
@@ -164,23 +165,89 @@ export const replyToCommentController = asyncHandler(async (req, res) => {
 });
 
 /**
- * Upload an image for a set design
- * POST /api/set-designs/upload-image
+ * Upload multiple images for a set design
+ * POST /api/set-designs/upload-images
  */
-export const uploadDesignImageController = asyncHandler(async (req, res) => {
-  const { base64Image, fileName } = req.body;
+export const uploadDesignImagesController = asyncHandler(async (req, res) => {
+  const { images } = req.body; // Array of { base64Image, fileName }
 
-  if (!base64Image) {
+  if (!images || !Array.isArray(images) || images.length === 0) {
     res.status(400);
-    throw new Error('Base64 image is required');
+    throw new Error('Images array is required and must not be empty');
   }
 
-  const imageUrl = await uploadDesignImage(base64Image, fileName);
+  if (images.length > 10) {
+    res.status(400);
+    throw new Error('Cannot upload more than 10 images at once');
+  }
+
+  // Validate each image
+  const validatedImages = [];
+  let totalSize = 0;
+
+  for (let i = 0; i < images.length; i++) {
+    const { base64Image, fileName } = images[i];
+
+    if (!base64Image) {
+      res.status(400);
+      throw new Error(`Image ${i + 1}: Base64 image is required`);
+    }
+
+    // Validate base64 format
+    if (!base64Image.startsWith('data:image/')) {
+      res.status(400);
+      throw new Error(`Image ${i + 1}: Invalid image format. Must be a valid base64 image`);
+    }
+
+    // Extract mime type and data
+    const [mimePart, dataPart] = base64Image.split(',');
+    const mimeType = mimePart.split(':')[1].split(';')[0];
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(mimeType)) {
+      res.status(400);
+      throw new Error(`Image ${i + 1}: File type ${mimeType} not allowed. Allowed types: ${allowedTypes.join(', ')}`);
+    }
+
+    // Calculate file size
+    const fileSizeBytes = (dataPart.length * 3) / 4;
+    const maxSizeBytes = 5 * 1024 * 1024; // 5MB per image
+
+    if (fileSizeBytes > maxSizeBytes) {
+      const maxSizeMB = (maxSizeBytes / (1024 * 1024)).toFixed(1);
+      const actualSizeMB = (fileSizeBytes / (1024 * 1024)).toFixed(1);
+      res.status(400);
+      throw new Error(`Image ${i + 1}: File size ${actualSizeMB}MB exceeds ${maxSizeMB}MB limit`);
+    }
+
+    totalSize += fileSizeBytes;
+    validatedImages.push({ base64Image, fileName: fileName || `design-${i + 1}` });
+  }
+
+  // Check total size (max 25MB for batch upload)
+  const maxTotalSize = 25 * 1024 * 1024; // 25MB
+  if (totalSize > maxTotalSize) {
+    const totalSizeMB = (totalSize / (1024 * 1024)).toFixed(1);
+    res.status(400);
+    throw new Error(`Total upload size ${totalSizeMB}MB exceeds 25MB limit`);
+  }
+
+  // Upload all images in parallel
+  const uploadPromises = validatedImages.map(({ base64Image, fileName }) =>
+    uploadDesignImage(base64Image, fileName)
+  );
+
+  const imageUrls = await Promise.all(uploadPromises);
 
   res.status(200).json({
     success: true,
-    message: 'Image uploaded successfully',
-    data: { imageUrl }
+    message: `${images.length} image(s) uploaded successfully`,
+    data: {
+      imageUrls,
+      count: imageUrls.length,
+      totalSizeMB: (totalSize / (1024 * 1024)).toFixed(1)
+    }
   });
 });
 

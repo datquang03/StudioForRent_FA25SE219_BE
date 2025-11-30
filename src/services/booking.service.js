@@ -10,11 +10,33 @@ import { releaseEquipment } from './equipment.service.js';
 import { createAndSendNotification } from './notification.service.js';
 import { NOTIFICATION_TYPE } from '../utils/constants.js';
 import RoomPolicyService from './roomPolicy.service.js';
+import { createPaymentOptions } from './payment.service.js';
+import { acquireLock, releaseLock } from '../utils/redisLock.js';
 // #endregion
 
 export const createBooking = async (data) => {
   const { userId } = data;
   if (!userId) throw new ValidationError('Missing userId');
+
+  // Acquire lock to prevent concurrent bookings for the same schedule/slot
+  let lockKey;
+  let lockToken = null;
+  if (data.scheduleId) {
+    lockKey = `booking:schedule:${data.scheduleId}`;
+  } else {
+    const { studioId, startTime, endTime } = data;
+    if (!studioId || !startTime || !endTime) {
+      throw new ValidationError('Missing schedule info: studioId, startTime, endTime');
+    }
+    const s = new Date(startTime);
+    const e = new Date(endTime);
+    lockKey = `booking:studio:${studioId}:${s.getTime()}:${e.getTime()}`;
+  }
+
+  lockToken = await acquireLock(lockKey);
+  if (!lockToken) {
+    throw new ConflictError('Schedule is currently being booked by another user. Please try again.');
+  }
 
   const session = await mongoose.startSession();
   try {
@@ -33,9 +55,6 @@ export const createBooking = async (data) => {
       } else {
     // Expect schedule details: studioId, startTime, endTime
     const { studioId, startTime, endTime } = data;
-    if (!studioId || !startTime || !endTime) {
-      throw new ValidationError('Missing schedule info: studioId, startTime, endTime');
-    }
 
         const s = new Date(startTime);
         const e = new Date(endTime);
@@ -207,10 +226,23 @@ export const createBooking = async (data) => {
     console.error('Failed to send booking confirmation notification:', notifyErr);
   }
 
-    return booking;
+  // Create payment options
+  let paymentOptions = [];
+  try {
+    paymentOptions = await createPaymentOptions(booking._id);
+  } catch (paymentErr) {
+    // Log error but don't fail booking creation
+    console.error('Failed to create payment options:', paymentErr);
+  }
+
+  return { booking, paymentOptions };
     }, { writeConcern: { w: 'majority' }, readConcern: { level: 'majority' } });
   } finally {
     session.endSession();
+    // Release lock
+    if (lockToken) {
+      await releaseLock(lockKey, lockToken);
+    }
   }
 };
 
