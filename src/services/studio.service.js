@@ -5,6 +5,7 @@ import { createAndSendNotification } from '../services/notification.service.js';
 import { STUDIO_STATUS, NOTIFICATION_TYPE, SCHEDULE_STATUS } from '../utils/constants.js';
 import { NotFoundError, ValidationError } from '../utils/errors.js';
 import { escapeRegex } from '../utils/helpers.js';
+import { cacheGet, cacheSet } from '../utils/cache.js';
 // #endregion
 
 // #region Get Studios
@@ -54,11 +55,23 @@ export const getAllStudios = async ({ page = 1, limit = 10, status, search, sort
 };
 
 export const getStudioById = async (studioId) => {
+  const cacheKey = `studio:${studioId}`;
+  
+  // Try to get from cache first
+  const cachedStudio = await cacheGet(cacheKey);
+  if (cachedStudio) {
+    return cachedStudio;
+  }
+  
+  // If not in cache, query database
   const studio = await Studio.findById(studioId).lean();
   
   if (!studio) {
     throw new NotFoundError('Studio không tồn tại!');
   }
+  
+  // Cache the result for 5 minutes (300 seconds)
+  await cacheSet(cacheKey, studio, 300);
   
   return studio;
 };
@@ -100,6 +113,10 @@ export const updateStudio = async (studioId, updateData) => {
   
   await studio.save();
   
+  // Invalidate cache after update
+  const cacheKey = `studio:${studioId}`;
+  await cacheSet(cacheKey, null); // Delete cache
+  
   return studio;
 };
 // #endregion
@@ -118,6 +135,10 @@ export const changeStudioStatus = async (studioId, newStatus) => {
   
   studio.status = newStatus;
   await studio.save();
+
+  // Invalidate cache after status change
+  const cacheKey = `studio:${studioId}`;
+  await cacheSet(cacheKey, null); // Delete cache
 
   // Notify all staff/admin about studio status change
   const { User } = await import('../models/index.js');
@@ -149,6 +170,10 @@ export const deleteStudio = async (studioId) => {
   }
   
   await Studio.findByIdAndDelete(studioId);
+  
+  // Invalidate cache after delete
+  const cacheKey = `studio:${studioId}`;
+  await cacheSet(cacheKey, null); // Delete cache
   
   return { message: 'Xóa studio thành công!' };
 };
