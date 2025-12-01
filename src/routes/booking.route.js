@@ -26,23 +26,24 @@ router.use(generalLimiter);
 router.use(protect);
 router.use(userLimiter); // Apply per-user rate limiting
 
+// Staff routes for managing bookings (MUST be before /:id routes to avoid conflict)
+router.get('/staff', authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), getActiveBookingsForStaff);
+
 // Customer routes
 router.post('/', authorize(USER_ROLES.CUSTOMER), bookingLimiter, createBooking);
 router.get('/', authorize(USER_ROLES.CUSTOMER), getBookings);
-router.get('/:id', validateObjectId(), authorize(USER_ROLES.CUSTOMER), getBooking);
 router.post('/:id/details', validateObjectId(), authorize(USER_ROLES.CUSTOMER), createBookingDetailsController);
 router.post('/:id/cancel', validateObjectId(), authorize(USER_ROLES.CUSTOMER), cancelBooking);
 
 // Staff/Admin routes
 router.patch('/:id', validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), updateBooking);
-router.get('/:id', validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), getBooking);
 router.post('/:id/confirm', validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), confirmBooking);
 router.post('/:id/no-show', validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), markAsNoShow);
 // Check-in / Check-out (only staff allowed)
 router.post('/:id/checkin', validateObjectId(), authorize(USER_ROLES.STAFF), checkIn);
 router.post('/:id/checkout', validateObjectId(), authorize(USER_ROLES.STAFF), checkOut);
 
-// Staff routes for managing bookings
-router.get('/staff', authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), getActiveBookingsForStaff);
+// Shared route for both Customer and Staff/Admin (MUST be last)
+router.get('/:id', validateObjectId(), authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), getBooking);
 
 export default router;

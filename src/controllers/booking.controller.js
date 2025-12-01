@@ -37,7 +37,10 @@ export const getBookings = asyncHandler(async (req, res) => {
 });
 
 export const getBooking = asyncHandler(async (req, res) => {
-  const booking = await getBookingByIdService(req.params.id);
+  const userId = req.user ? req.user._id : null;
+  const userRole = req.user ? req.user.role : null;
+  
+  const booking = await getBookingByIdService(req.params.id, userId, userRole);
   res.status(200).json({ success: true, message: 'Lấy booking thành công!', data: booking });
 });
 
@@ -87,9 +90,27 @@ export const checkOut = asyncHandler(async (req, res) => {
 export const getActiveBookingsForStaff = asyncHandler(async (req, res) => {
   const { page, limit, status, startDate, endDate, includeAll } = req.query;
 
+  // Validate pagination parameters
+  const parsedPage = parseInt(page);
+  const parsedLimit = parseInt(limit);
+  
+  if (page && (isNaN(parsedPage) || parsedPage < 1)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid page parameter. Must be a positive integer.'
+    });
+  }
+  
+  if (limit && (isNaN(parsedLimit) || parsedLimit < 1 || parsedLimit > 200)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid limit parameter. Must be between 1 and 200.'
+    });
+  }
+
   const result = await getBookingsForStaffService({
-    page: parseInt(page) || 1,
-    limit: parseInt(limit) || 20,
+    page: parsedPage || 1,
+    limit: parsedLimit || 20,
     status,
     startDate,
     endDate,
