@@ -12,6 +12,7 @@ import { NOTIFICATION_TYPE } from '../utils/constants.js';
 import RoomPolicyService from './roomPolicy.service.js';
 import { createPaymentOptions } from './payment.service.js';
 import { acquireLock, releaseLock } from '../utils/redisLock.js';
+import { sendNoShowEmail } from './email.service.js';
 // #endregion
 
 export const createBooking = async (data) => {
@@ -247,12 +248,100 @@ export const createBooking = async (data) => {
 };
 
 export const getBookingById = async (id) => {
-  const booking = await Booking.findById(id).lean();
+  const booking = await Booking.findById(id)
+    .populate({
+      path: 'userId',
+      select: 'fullName username phone email'
+    })
+    .populate({
+      path: 'scheduleId',
+      populate: {
+        path: 'studioId',
+        select: 'name location area capacity basePricePerHour'
+      }
+    })
+    .populate('promoId', 'name code discountPercentage discountAmount')
+    .lean();
+
   if (!booking) throw new NotFoundError('Booking not found');
 
   // Attach booking details (if any)
-  const details = await BookingDetail.find({ bookingId: booking._id }).lean();
-  return { ...booking, details };
+  const details = await BookingDetail.find({ bookingId: booking._id })
+    .populate('equipmentId', 'name description pricePerHour pricePerDay')
+    .populate('extraServiceId', 'name description pricePerHour pricePerDay')
+    .lean();
+
+  // Format the response similar to getActiveBookingsForStaff
+  const formattedBooking = {
+    _id: booking._id,
+    customer: booking.userId ? {
+      _id: booking.userId._id,
+      fullName: booking.userId.fullName,
+      username: booking.userId.username,
+      phone: booking.userId.phone,
+      email: booking.userId.email
+    } : null,
+    studio: booking.scheduleId?.studioId ? {
+      _id: booking.scheduleId.studioId._id,
+      name: booking.scheduleId.studioId.name,
+      location: booking.scheduleId.studioId.location,
+      area: booking.scheduleId.studioId.area,
+      capacity: booking.scheduleId.studioId.capacity,
+      basePricePerHour: booking.scheduleId.studioId.basePricePerHour
+    } : null,
+    schedule: booking.scheduleId ? {
+      _id: booking.scheduleId._id,
+      startTime: booking.scheduleId.startTime,
+      endTime: booking.scheduleId.endTime,
+      duration: Math.round((new Date(booking.scheduleId.endTime) - new Date(booking.scheduleId.startTime)) / (1000 * 60 * 60) * 10) / 10,
+      date: booking.scheduleId.startTime.toISOString().split('T')[0],
+      timeRange: `${new Date(booking.scheduleId.startTime).toTimeString().slice(0, 5)} - ${new Date(booking.scheduleId.endTime).toTimeString().slice(0, 5)}`
+    } : null,
+    totalBeforeDiscount: booking.totalBeforeDiscount,
+    discountAmount: booking.discountAmount,
+    finalAmount: booking.finalAmount,
+    status: booking.status,
+    payType: booking.payType,
+    promotion: booking.promoId ? {
+      _id: booking.promoId._id,
+      name: booking.promoId.name,
+      code: booking.promoId.code,
+      discountPercentage: booking.promoId.discountPercentage,
+      discountAmount: booking.promoId.discountAmount
+    } : null,
+    details: details.map(detail => ({
+      _id: detail._id,
+      detailType: detail.detailType,
+      description: detail.description,
+      quantity: detail.quantity,
+      pricePerUnit: detail.pricePerUnit,
+      subtotal: detail.subtotal,
+      equipment: detail.equipmentId ? {
+        _id: detail.equipmentId._id,
+        name: detail.equipmentId.name,
+        description: detail.equipmentId.description,
+        pricePerHour: detail.equipmentId.pricePerHour,
+        pricePerDay: detail.equipmentId.pricePerDay
+      } : null,
+      service: detail.extraServiceId ? {
+        _id: detail.extraServiceId._id,
+        name: detail.extraServiceId.name,
+        description: detail.extraServiceId.description,
+        pricePerHour: detail.extraServiceId.pricePerHour,
+        pricePerDay: detail.extraServiceId.pricePerDay
+      } : null
+    })),
+    policySnapshots: booking.policySnapshots,
+    events: booking.events,
+    financials: booking.financials,
+    notes: booking.notes,
+    createdAt: booking.createdAt,
+    updatedAt: booking.updatedAt,
+    checkInAt: booking.checkInAt,
+    checkOutAt: booking.checkOutAt
+  };
+
+  return formattedBooking;
 };
 
 export const getBookings = async ({ userId, page = 1, limit = 20, status } = {}) => {
@@ -604,8 +693,6 @@ export const cancelBooking = async (bookingId) => {
   }
 };
 
-import { sendNoShowEmail } from './email.service.js';
-
 export const markAsNoShow = async (bookingId, checkInTime = null, io = null) => {
   const booking = await Booking.findById(bookingId).populate('scheduleId');
   if (!booking) throw new NotFoundError('Booking not found');
@@ -877,26 +964,39 @@ export const checkOutBooking = async (bookingId, actorId = null) => {
   }
 };
 
-export const getActiveBookingsForStaff = async ({ page = 1, limit = 20, status, startDate, endDate } = {}) => {
+export const getBookingsForStaff = async ({ page = 1, limit = 20, status, startDate, endDate, includeAll = false } = {}) => {
   const safePage = Math.max(parseInt(page) || 1, 1);
   const safeLimit = Math.min(Math.max(parseInt(limit) || 10, 1), 200);
   
   // Build match conditions
   const matchConditions = {};
   
-  // Only get active bookings (confirmed or checked_in)
-  const activeStatuses = [BOOKING_STATUS.CONFIRMED, BOOKING_STATUS.CHECKED_IN];
-  if (status) {
-    if (Array.isArray(status)) {
-      matchConditions.status = { $in: status.filter(s => activeStatuses.includes(s)) };
-    } else if (activeStatuses.includes(status)) {
-      matchConditions.status = status;
+  // Status filtering logic
+  if (includeAll) {
+    // If includeAll is true, allow filtering by any status or get all
+    if (status) {
+      if (Array.isArray(status)) {
+        matchConditions.status = { $in: status };
+      } else {
+        matchConditions.status = status;
+      }
+    }
+    // If no status specified and includeAll=true, get all bookings
+  } else {
+    // Default behavior: only get active bookings (confirmed or checked_in)
+    const activeStatuses = [BOOKING_STATUS.CONFIRMED, BOOKING_STATUS.CHECKED_IN];
+    if (status) {
+      if (Array.isArray(status)) {
+        matchConditions.status = { $in: status.filter(s => activeStatuses.includes(s)) };
+      } else if (activeStatuses.includes(status)) {
+        matchConditions.status = status;
+      } else {
+        // If invalid status provided, default to active statuses
+        matchConditions.status = { $in: activeStatuses };
+      }
     } else {
-      // If invalid status provided, default to active statuses
       matchConditions.status = { $in: activeStatuses };
     }
-  } else {
-    matchConditions.status = { $in: activeStatuses };
   }
 
   // Add date range filter based on schedule startTime
@@ -1080,11 +1180,12 @@ export const getActiveBookingsForStaff = async ({ page = 1, limit = 20, status, 
       totalPages: Math.ceil(total / safeLimit),
     },
     filters: {
-      status: matchConditions.status,
+      status: matchConditions.status || null,
       dateRange: {
         startDate: startDate || null,
         endDate: endDate || null
-      }
+      },
+      includeAll: includeAll || false
     }
   };
 };
@@ -1097,5 +1198,5 @@ export default {
   cancelBooking,
   markAsNoShow,
   confirmBooking,
-  getActiveBookingsForStaff,
+  getBookingsForStaff,
 };

@@ -35,13 +35,14 @@ router.post('/:id/cancel', validateObjectId(), authorize(USER_ROLES.CUSTOMER), c
 
 // Staff/Admin routes
 router.patch('/:id', validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), updateBooking);
+router.get('/:id', validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), getBooking);
 router.post('/:id/confirm', validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), confirmBooking);
 router.post('/:id/no-show', validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), markAsNoShow);
 // Check-in / Check-out (only staff allowed)
 router.post('/:id/checkin', validateObjectId(), authorize(USER_ROLES.STAFF), checkIn);
 router.post('/:id/checkout', validateObjectId(), authorize(USER_ROLES.STAFF), checkOut);
 
-// Staff routes for managing active bookings
-router.get('/staff/active', authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), getActiveBookingsForStaff);
+// Staff routes for managing bookings
+router.get('/staff', authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), getActiveBookingsForStaff);
 
 export default router;
