@@ -10,6 +10,7 @@ import {
   updateBooking as updateBookingService,
   checkInBooking as checkInBookingService,
   checkOutBooking as checkOutBookingService,
+  getActiveBookingsForStaff as getActiveBookingsForStaffService,
 } from '../services/booking.service.js';
 // #endregion
 
@@ -83,6 +84,24 @@ export const checkOut = asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, message: 'Check-out thành công!', data: booking });
 });
 
+export const getActiveBookingsForStaff = asyncHandler(async (req, res) => {
+  const { page, limit, status, startDate, endDate } = req.query;
+
+  const result = await getActiveBookingsForStaffService({
+    page: parseInt(page) || 1,
+    limit: parseInt(limit) || 20,
+    status,
+    startDate,
+    endDate
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'Lấy danh sách booking đang hoạt động thành công!',
+    data: result
+  });
+});
+
 export default {
   createBooking,
   getBookings,
@@ -91,4 +110,5 @@ export default {
   confirmBooking,
   checkIn,
   checkOut,
+  getActiveBookingsForStaff,
 };

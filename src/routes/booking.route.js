@@ -9,6 +9,7 @@ import {
   updateBooking,
   checkIn,
   checkOut,
+  getActiveBookingsForStaff,
 } from '../controllers/booking.controller.js';
 import { createBookingDetailsController } from '../controllers/bookingDetail.controller.js';
 import { protect, authorize } from '../middlewares/auth.js';
@@ -39,5 +40,8 @@ router.post('/:id/no-show', validateObjectId(), authorize(USER_ROLES.STAFF, USER
 // Check-in / Check-out (only staff allowed)
 router.post('/:id/checkin', validateObjectId(), authorize(USER_ROLES.STAFF), checkIn);
 router.post('/:id/checkout', validateObjectId(), authorize(USER_ROLES.STAFF), checkOut);
+
+// Staff routes for managing active bookings
+router.get('/staff/active', authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), getActiveBookingsForStaff);
 
 export default router;

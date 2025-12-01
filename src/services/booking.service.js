@@ -877,6 +877,218 @@ export const checkOutBooking = async (bookingId, actorId = null) => {
   }
 };
 
+export const getActiveBookingsForStaff = async ({ page = 1, limit = 20, status, startDate, endDate } = {}) => {
+  const safePage = Math.max(parseInt(page) || 1, 1);
+  const safeLimit = Math.min(Math.max(parseInt(limit) || 10, 1), 200);
+  
+  // Build match conditions
+  const matchConditions = {};
+  
+  // Only get active bookings (confirmed or checked_in)
+  const activeStatuses = [BOOKING_STATUS.CONFIRMED, BOOKING_STATUS.CHECKED_IN];
+  if (status) {
+    if (Array.isArray(status)) {
+      matchConditions.status = { $in: status.filter(s => activeStatuses.includes(s)) };
+    } else if (activeStatuses.includes(status)) {
+      matchConditions.status = status;
+    } else {
+      // If invalid status provided, default to active statuses
+      matchConditions.status = { $in: activeStatuses };
+    }
+  } else {
+    matchConditions.status = { $in: activeStatuses };
+  }
+
+  // Add date range filter based on schedule startTime
+  let dateFilter = {};
+  if (startDate || endDate) {
+    dateFilter = {};
+    if (startDate) {
+      dateFilter.$gte = new Date(startDate);
+    }
+    if (endDate) {
+      dateFilter.$lte = new Date(endDate);
+    }
+  }
+
+  const skip = (safePage - 1) * safeLimit;
+
+  // Use aggregation pipeline to join with Schedule collection
+  const pipeline = [
+    {
+      $match: matchConditions
+    },
+    {
+      $lookup: {
+        from: 'schedules',
+        localField: 'scheduleId',
+        foreignField: '_id',
+        as: 'schedule'
+      }
+    },
+    {
+      $unwind: {
+        path: '$schedule',
+        preserveNullAndEmptyArrays: false
+      }
+    },
+    // Filter by schedule startTime if date range provided
+    ...(Object.keys(dateFilter).length > 0 ? [{
+      $match: {
+        'schedule.startTime': dateFilter
+      }
+    }] : []),
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'userId',
+        foreignField: '_id',
+        as: 'customer'
+      }
+    },
+    {
+      $unwind: {
+        path: '$customer',
+        preserveNullAndEmptyArrays: false
+      }
+    },
+    {
+      $lookup: {
+        from: 'studios',
+        localField: 'schedule.studioId',
+        foreignField: '_id',
+        as: 'studio'
+      }
+    },
+    {
+      $unwind: {
+        path: '$studio',
+        preserveNullAndEmptyArrays: false
+      }
+    },
+    {
+      $lookup: {
+        from: 'promotions',
+        localField: 'promoId',
+        foreignField: '_id',
+        as: 'promotion'
+      }
+    },
+    {
+      $unwind: {
+        path: '$promotion',
+        preserveNullAndEmptyArrays: true
+      }
+    },
+    {
+      $sort: { createdAt: -1 }
+    },
+    {
+      $skip: skip
+    },
+    {
+      $limit: safeLimit
+    }
+  ];
+
+  // Get total count with same filters
+  const countPipeline = [
+    {
+      $match: matchConditions
+    },
+    {
+      $lookup: {
+        from: 'schedules',
+        localField: 'scheduleId',
+        foreignField: '_id',
+        as: 'schedule'
+      }
+    },
+    {
+      $unwind: {
+        path: '$schedule',
+        preserveNullAndEmptyArrays: false
+      }
+    },
+    // Filter by schedule startTime if date range provided
+    ...(Object.keys(dateFilter).length > 0 ? [{
+      $match: {
+        'schedule.startTime': dateFilter
+      }
+    }] : []),
+    {
+      $count: 'total'
+    }
+  ];
+
+  const [bookingsResult, countResult] = await Promise.all([
+    Booking.aggregate(pipeline),
+    Booking.aggregate(countPipeline)
+  ]);
+
+  const total = countResult[0]?.total || 0;
+
+  // Format the response
+  const formattedBookings = bookingsResult.map(booking => ({
+    _id: booking._id,
+    customer: {
+      _id: booking.customer._id,
+      fullName: booking.customer.fullName,
+      username: booking.customer.username,
+      phone: booking.customer.phone,
+      email: booking.customer.email
+    },
+    studio: {
+      _id: booking.studio._id,
+      name: booking.studio.name,
+      location: booking.studio.location,
+      area: booking.studio.area,
+      capacity: booking.studio.capacity,
+      basePricePerHour: booking.studio.basePricePerHour
+    },
+    schedule: {
+      _id: booking.schedule._id,
+      startTime: booking.schedule.startTime,
+      endTime: booking.schedule.endTime,
+      duration: Math.round((new Date(booking.schedule.endTime) - new Date(booking.schedule.startTime)) / (1000 * 60 * 60) * 10) / 10,
+      date: booking.schedule.startTime.toISOString().split('T')[0],
+      timeRange: `${new Date(booking.schedule.startTime).toTimeString().slice(0, 5)} - ${new Date(booking.schedule.endTime).toTimeString().slice(0, 5)}`
+    },
+    totalBeforeDiscount: booking.totalBeforeDiscount,
+    discountAmount: booking.discountAmount,
+    finalAmount: booking.finalAmount,
+    status: booking.status,
+    payType: booking.payType,
+    promotion: booking.promotion ? {
+      _id: booking.promotion._id,
+      name: booking.promotion.name,
+      code: booking.promotion.code,
+      discountPercentage: booking.promotion.discountPercentage,
+      discountAmount: booking.promotion.discountAmount
+    } : null,
+    createdAt: booking.createdAt,
+    checkInAt: booking.checkInAt,
+    checkOutAt: booking.checkOutAt
+  }));
+
+  return {
+    bookings: formattedBookings,
+    pagination: {
+      total,
+      page: safePage,
+      limit: safeLimit,
+      totalPages: Math.ceil(total / safeLimit),
+    },
+    filters: {
+      status: matchConditions.status,
+      dateRange: {
+        startDate: startDate || null,
+        endDate: endDate || null
+      }
+    }
+  };
+};
+
 export default {
   createBooking,
   getBookingById,
@@ -885,4 +1097,5 @@ export default {
   cancelBooking,
   markAsNoShow,
   confirmBooking,
+  getActiveBookingsForStaff,
 };
