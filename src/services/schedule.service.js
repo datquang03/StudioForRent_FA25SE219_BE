@@ -29,9 +29,10 @@ export const createSchedule = async (data, session = null) => {
       throw new ValidationError('Thời gian kết thúc phải lớn hơn thời gian bắt đầu');
     }
 
-    // Validate not in the past
+    // Validate not in the past (allow 1 minute buffer for clock skew/latency)
     const now = new Date();
-    if (s < now) {
+    const bufferMs = 60 * 1000; // 1 minute buffer
+    if (s.getTime() < (now.getTime() - bufferMs)) {
       throw new ValidationError('Thời gian bắt đầu không được ở quá khứ');
     }
 
