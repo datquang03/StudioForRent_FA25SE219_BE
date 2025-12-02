@@ -159,6 +159,17 @@ export const AI_SET_DESIGN_STATUS = {
 };
 
 // Review & Report
+export const REVIEW_TARGET_TYPES = {
+  STUDIO: "Studio",
+  SET_DESIGN: "SetDesign",
+  SERVICE: "Service",
+};
+
+export const COMMENT_TARGET_TYPES = {
+  STUDIO: "Studio",
+  SET_DESIGN: "SetDesign",
+};
+
 export const REPORT_STATUS = {
   PENDING: "pending", // Changed from OPEN
   RESOLVED: "resolved",

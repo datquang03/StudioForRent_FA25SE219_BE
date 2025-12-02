@@ -1,17 +1,17 @@
 import express from "express";
-import { protect } from "../middlewares/auth.js";
-import { reviewLimiter } from "../middlewares/rateLimiter.js";
-import { createReview, listReviewsByStudio, getReviewForBooking } from "../controllers/review.controller.js";
+import { protect, authorize } from "../middlewares/auth.js";
+import { createReview, getReviews, replyToReview } from "../controllers/review.controller.js";
+import { USER_ROLES } from "../utils/constants.js";
 
 const router = express.Router();
 
-// Create a review for a completed booking (customer to studio)
-router.post("/", protect, reviewLimiter, createReview);
+// Public: Get reviews
+router.get("/", getReviews);
 
-// List reviews for a studio
-router.get("/studio/:studioId", listReviewsByStudio);
+// Protected: Create review (Customer)
+router.post("/", protect, authorize(USER_ROLES.CUSTOMER), createReview);
 
-// Get review by bookingId
-router.get("/booking/:bookingId", getReviewForBooking);
+// Protected: Reply to review (Staff/Admin)
+router.post("/:id/reply", protect, authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), replyToReview);
 
 export default router;

@@ -1,152 +1,136 @@
 import mongoose from "mongoose";
-import { Booking, Review, Studio } from "../models/index.js";
-import { BOOKING_STATUS } from "../utils/constants.js";
+import Review from "../models/Review/review.model.js";
+import Booking from "../models/Booking/booking.model.js";
+import Studio from "../models/Studio/studio.model.js";
+import SetDesign from "../models/SetDesign/setDesign.model.js";
+import Service from "../models/Service/service.model.js";
+import { REVIEW_TARGET_TYPES } from "../utils/constants.js";
 
-export const createReview = async ({ userId, bookingId, rating, title, comment }) => {
-  // Validate required fields
-  if (!userId) {
-    const err = new Error("ID người dùng là bắt buộc");
-    err.status = 400;
-    throw err;
-  }
+/**
+ * Create a new review
+ * @param {Object} data - Review data
+ * @param {string} userId - User ID
+ * @returns {Promise<Object>} Created review
+ */
+export const createReviewService = async (data, userId) => {
+  const { bookingId, targetType, targetId, rating, content, images } = data;
 
-  if (!bookingId) {
-    const err = new Error("ID booking là bắt buộc");
-    err.status = 400;
-    throw err;
-  }
-
-  if (!rating) {
-    const err = new Error("Đánh giá là bắt buộc");
-    err.status = 400;
-    throw err;
-  }
-
-  if (typeof rating !== 'number' || rating < 1 || rating > 5) {
-    const err = new Error("Đánh giá phải là số từ 1 đến 5");
-    err.status = 400;
-    throw err;
-  }
-
-  if (!mongoose.Types.ObjectId.isValid(userId)) {
-    const err = new Error("ID người dùng không hợp lệ");
-    err.status = 400;
-    throw err;
-  }
-
-  if (!mongoose.Types.ObjectId.isValid(bookingId)) {
-    const err = new Error("ID booking không hợp lệ");
-    err.status = 400;
-    throw err;
-  }
-
-  const booking = await Booking.findById(bookingId).populate("scheduleId");
+  // 1. Validate Booking
+  const booking = await Booking.findOne({ _id: bookingId, userId });
   if (!booking) {
-    const err = new Error("Booking không tồn tại");
-    err.status = 404;
-    throw err;
+    throw new Error("Booking not found or does not belong to you.");
   }
 
-  if (!booking.userId.equals(userId)) {
-    const err = new Error("Không có quyền đánh giá booking này");
-    err.status = 403;
-    throw err;
+  if (booking.status !== "completed") {
+    throw new Error("You can only review completed bookings.");
   }
 
-  if (booking.status !== BOOKING_STATUS.COMPLETED) {
-    const err = new Error("Chỉ có thể đánh giá booking đã hoàn thành");
-    err.status = 400;
-    throw err;
+  // 2. Check if already reviewed
+  const existingReview = await Review.findOne({ bookingId, targetId });
+  if (existingReview) {
+    throw new Error("You have already reviewed this item for this booking.");
   }
 
-  // Ensure one review per booking
-  const existing = await Review.findOne({ bookingId });
-  if (existing) {
-    const err = new Error("Đánh giá cho booking này đã tồn tại");
-    err.status = 409;
-    throw err;
-  }
-
-  const schedule = booking.scheduleId || null;
-  const studioId = schedule?.studioId || null;
-
-  if (!studioId) {
-    const err = new Error("Không tìm thấy studio cho booking này");
-    err.status = 400;
-    throw err;
-  }
-
-  const review = new Review({
-    userId,
+  // 3. Create Review
+  const review = await Review.create({
     bookingId,
-    studioId,
+    userId,
+    targetType,
+    targetId,
     rating,
-    title,
-    comment,
+    content,
+    images,
   });
 
-  await review.save();
-
-  // Update studio aggregates using atomic operations to prevent race conditions
-  if (studioId) {
-    await Studio.findByIdAndUpdate(studioId, [
-      {
-        $set: {
-          reviewCount: { $add: ['$reviewCount', 1] },
-          avgRating: {
-            $round: [
-              {
-                $divide: [
-                  { $add: [{ $multiply: ['$avgRating', '$reviewCount'] }, rating] },
-                  { $add: ['$reviewCount', 1] }
-                ]
-              },
-              1
-            ]
-          }
-        }
-      }
-    ]);
-  }
+  // 4. Update Average Rating (Async)
+  await updateAverageRating(targetType, targetId);
 
   return review;
 };
 
-export const getReviewsByStudio = async ({ studioId, limit = 20, skip = 0 }) => {
-  if (!studioId) {
-    const err = new Error("ID studio là bắt buộc");
-    err.status = 400;
-    throw err;
+/**
+ * Get reviews for a specific target
+ * @param {Object} query - Query parameters
+ * @returns {Promise<Object>} Reviews and pagination info
+ */
+export const getReviewsService = async (query) => {
+  const { targetType, targetId, page = 1, limit = 10 } = query;
+
+  if (!targetType || !targetId) {
+    throw new Error("targetType and targetId are required");
   }
 
-  if (!mongoose.Types.ObjectId.isValid(studioId)) {
-    const err = new Error("ID studio không hợp lệ");
-    err.status = 400;
-    throw err;
-  }
+  const filter = { targetType, targetId, isHidden: false };
 
-  const query = { studioId };
-  const reviews = await Review.find(query)
+  const reviews = await Review.find(filter)
+    .populate("userId", "fullName avatar")
     .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(limit)
-    .populate({ path: "userId", select: "fullName email" });
+    .skip((page - 1) * limit)
+    .limit(Number(limit));
 
-  return reviews;
+  const total = await Review.countDocuments(filter);
+
+  return {
+    reviews,
+    pagination: {
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      pages: Math.ceil(total / limit),
+    },
+  };
 };
 
-export const getReviewByBooking = async ({ bookingId }) => {
-  if (!bookingId) {
-    const err = new Error("ID booking là bắt buộc");
-    err.status = 400;
-    throw err;
+/**
+ * Reply to a review
+ * @param {string} reviewId - Review ID
+ * @param {string} content - Reply content
+ * @param {string} userId - Staff/Admin ID
+ * @returns {Promise<Object>} Updated review
+ */
+export const replyToReviewService = async (reviewId, content, userId) => {
+  const review = await Review.findById(reviewId);
+  if (!review) {
+    throw new Error("Review not found");
   }
 
-  if (!mongoose.Types.ObjectId.isValid(bookingId)) {
-    const err = new Error("ID booking không hợp lệ");
-    err.status = 400;
-    throw err;
-  }
+  review.reply = {
+    userId,
+    content,
+    createdAt: new Date(),
+  };
 
-  return Review.findOne({ bookingId }).populate({ path: "userId", select: "fullName email" });
+  await review.save();
+  return review;
+};
+
+/**
+ * Helper function to recalculate average rating
+ * @param {string} targetType - Target type
+ * @param {string} targetId - Target ID
+ */
+const updateAverageRating = async (targetType, targetId) => {
+  const stats = await Review.aggregate([
+    { $match: { targetType, targetId: new mongoose.Types.ObjectId(targetId) } },
+    {
+      $group: {
+        _id: "$targetId",
+        avgRating: { $avg: "$rating" },
+        count: { $sum: 1 },
+      },
+    },
+  ]);
+
+  if (stats.length > 0) {
+    const { avgRating, count } = stats[0];
+    const roundedRating = Math.round(avgRating * 10) / 10;
+
+    if (targetType === REVIEW_TARGET_TYPES.STUDIO) {
+      await Studio.findByIdAndUpdate(targetId, { avgRating: roundedRating, reviewCount: count });
+    } else if (targetType === REVIEW_TARGET_TYPES.SET_DESIGN) {
+      await SetDesign.findByIdAndUpdate(targetId, { ratingAvg: roundedRating, reviewCount: count });
+    } else if (targetType === REVIEW_TARGET_TYPES.SERVICE) {
+      await Service.findByIdAndUpdate(targetId, { avgRating: roundedRating, reviewCount: count });
+    }
+  }
 };
