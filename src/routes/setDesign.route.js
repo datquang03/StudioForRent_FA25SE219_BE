@@ -9,6 +9,10 @@ import {
   addReviewController,
   addCommentController,
   replyToCommentController,
+  updateCommentController,
+  deleteCommentController,
+  updateReplyController,
+  deleteReplyController,
   uploadDesignImagesController,
   getSetDesignsByCategoryController,
   getActiveSetDesignsController,
@@ -60,9 +64,13 @@ router.use(protect);
 // Customer routes
 router.post('/:id/reviews', validateObjectId(), authorize(USER_ROLES.CUSTOMER), addReviewController);
 router.post('/:id/comments', validateObjectId(), authorize(USER_ROLES.CUSTOMER), addCommentController);
+router.patch('/:id/comments/:commentIndex', validateObjectId(), authorize(USER_ROLES.CUSTOMER), updateCommentController);
+router.delete('/:id/comments/:commentIndex', validateObjectId(), authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), deleteCommentController);
 
-// Staff routes
-router.post('/:id/comments/:commentIndex/reply', validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), replyToCommentController);
+// Comment replies - All authenticated users can reply
+router.post('/:id/comments/:commentIndex/reply', validateObjectId(), authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), replyToCommentController);
+router.patch('/:id/comments/:commentIndex/replies/:replyIndex', validateObjectId(), authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), updateReplyController);
+router.delete('/:id/comments/:commentIndex/replies/:replyIndex', validateObjectId(), authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), deleteReplyController);
 
 // Custom design requests management (Staff/Admin)
 router.get('/custom-requests', authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), getCustomDesignRequestsController);

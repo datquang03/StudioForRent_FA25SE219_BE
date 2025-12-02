@@ -1,6 +1,7 @@
 // #region Imports
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import OpenAI from 'openai';
+import mongoose from 'mongoose';
 import SetDesign from '../models/SetDesign/setDesign.model.js';
 import CustomDesignRequest from '../models/CustomDesignRequest/customDesignRequest.model.js';
 import logger from '../utils/logger.js';
@@ -76,7 +77,7 @@ export const getSetDesigns = async (options = {}) => {
         .limit(limit)
         .populate('reviews.customerId', 'name email')
         .populate('comments.customerId', 'name email')
-        .populate('comments.replies.staffId', 'name email'),
+        .populate('comments.replies.userId', 'name email'),
       SetDesign.countDocuments(query)
     ]);
 
@@ -109,7 +110,7 @@ export const getSetDesignById = async (id) => {
     const design = await SetDesign.findById(id)
       .populate('reviews.customerId', 'name email')
       .populate('comments.customerId', 'name email')
-      .populate('comments.replies.staffId', 'name email');
+      .populate('comments.replies.userId', 'name email');
 
     if (!design) {
       throw new NotFoundError('Set design không tồn tại');
@@ -302,19 +303,48 @@ export const addReview = async (designId, customerId, customerName, rating, comm
  */
 export const addComment = async (designId, customerId, customerName, message) => {
   try {
+    // Validate designId
     if (!designId) {
       throw new ValidationError('ID set design là bắt buộc');
     }
+    if (!mongoose.Types.ObjectId.isValid(designId)) {
+      throw new ValidationError('ID set design không hợp lệ');
+    }
+
+    // Validate customerId
     if (!customerId) {
       throw new ValidationError('ID khách hàng là bắt buộc');
     }
-    if (!message || message.trim().length === 0) {
+    if (!mongoose.Types.ObjectId.isValid(customerId)) {
+      throw new ValidationError('ID khách hàng không hợp lệ');
+    }
+
+    // Validate customerName
+    if (!customerName || customerName.trim().length === 0) {
+      throw new ValidationError('Tên khách hàng là bắt buộc');
+    }
+
+    // Validate message
+    if (!message) {
       throw new ValidationError('Nội dung bình luận là bắt buộc');
+    }
+    if (typeof message !== 'string') {
+      throw new ValidationError('Nội dung bình luận phải là chuỗi');
+    }
+    if (message.trim().length === 0) {
+      throw new ValidationError('Nội dung bình luận không được để trống');
+    }
+    if (message.length > 300) {
+      throw new ValidationError('Nội dung bình luẫn không được vượt quá 300 ký tự');
     }
 
     const design = await SetDesign.findById(designId);
     if (!design) {
       throw new NotFoundError('Set design không tồn tại');
+    }
+
+    if (!design.isActive) {
+      throw new ValidationError('Không thể bình luận trên set design đã bị vô hiệu hóa');
     }
 
     await design.addComment(customerId, customerName, message);
@@ -326,20 +356,195 @@ export const addComment = async (designId, customerId, customerName, message) =>
     if (error instanceof ValidationError || error instanceof NotFoundError) {
       throw error;
     }
+    if (error.name === 'CastError') {
+      throw new ValidationError('ID không hợp lệ');
+    }
+    if (error.name === 'ValidationError') {
+      throw new ValidationError(error.message);
+    }
     throw new Error('Lỗi khi thêm bình luận');
   }
 };
 
 /**
- * Reply to a comment on a set design (Staff only)
+ * Reply to a comment on a set design (Staff and Customer)
  * @param {string} designId - Set design ID
  * @param {number} commentIndex - Index of the comment to reply to
- * @param {string} staffId - Staff ID
- * @param {string} staffName - Staff name
+ * @param {string} userId - User ID (staff or customer)
+ * @param {string} userName - User name
+ * @param {string} userRole - User role (customer, staff, admin)
  * @param {string} message - Reply message
  * @returns {Object} Updated set design
  */
-export const replyToComment = async (designId, commentIndex, staffId, staffName, message) => {
+export const replyToComment = async (designId, commentIndex, userId, userName, userRole, message) => {
+  try {
+    // Validate designId
+    if (!designId) {
+      throw new ValidationError('ID set design là bắt buộc');
+    }
+    if (!mongoose.Types.ObjectId.isValid(designId)) {
+      throw new ValidationError('ID set design không hợp lệ');
+    }
+
+    // Validate commentIndex
+    if (commentIndex === undefined || commentIndex === null) {
+      throw new ValidationError('Chỉ số bình luận là bắt buộc');
+    }
+    if (!Number.isInteger(commentIndex) || commentIndex < 0) {
+      throw new ValidationError('Chỉ số bình luận không hợp lệ');
+    }
+
+    // Validate userId
+    if (!userId) {
+      throw new ValidationError('ID người dùng là bắt buộc');
+    }
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      throw new ValidationError('ID người dùng không hợp lệ');
+    }
+
+    // Validate userName
+    if (!userName || userName.trim().length === 0) {
+      throw new ValidationError('Tên người dùng là bắt buộc');
+    }
+
+    // Validate userRole
+    if (!userRole || !['customer', 'staff', 'admin'].includes(userRole)) {
+      throw new ValidationError('Vai trò người dùng không hợp lệ');
+    }
+
+    // Validate message
+    if (!message) {
+      throw new ValidationError('Nội dung phản hồi là bắt buộc');
+    }
+    if (typeof message !== 'string') {
+      throw new ValidationError('Nội dung phản hồi phải là chuỗi');
+    }
+    if (message.trim().length === 0) {
+      throw new ValidationError('Nội dung phản hồi không được để trống');
+    }
+    if (message.length > 300) {
+      throw new ValidationError('Nội dung phản hồi không được vượt quá 300 ký tự');
+    }
+
+    const design = await SetDesign.findById(designId);
+    if (!design) {
+      throw new NotFoundError('Set design không tồn tại');
+    }
+
+    if (!design.isActive) {
+      throw new ValidationError('Không thể phản hồi trên set design đã bị vô hiệu hóa');
+    }
+
+    if (commentIndex >= design.comments.length) {
+      throw new ValidationError('Bình luận không tồn tại');
+    }
+
+    await design.replyToComment(commentIndex, userId, userName, userRole, message);
+
+    logger.info(`Reply added to comment on set design: ${design.name} by user: ${userId}`);
+    return design;
+  } catch (error) {
+    logger.error('Error replying to comment:', error);
+    if (error instanceof ValidationError || error instanceof NotFoundError) {
+      throw error;
+    }
+    if (error.name === 'CastError') {
+      throw new ValidationError('ID không hợp lệ');
+    }
+    if (error.name === 'ValidationError') {
+      throw new ValidationError(error.message);
+    }
+    throw new Error('Lỗi khi thêm phản hồi');
+  }
+};
+
+/**
+ * Update a comment on a set design
+ * @param {string} designId - Set design ID
+ * @param {number} commentIndex - Index of the comment
+ * @param {string} customerId - Customer ID (for ownership verification)
+ * @param {string} newMessage - New message content
+ * @returns {Object} Updated set design
+ */
+export const updateComment = async (designId, commentIndex, customerId, newMessage) => {
+  try {
+    // Validate designId
+    if (!designId) {
+      throw new ValidationError('ID set design là bắt buộc');
+    }
+    if (!mongoose.Types.ObjectId.isValid(designId)) {
+      throw new ValidationError('ID set design không hợp lệ');
+    }
+
+    // Validate commentIndex
+    if (commentIndex === undefined || commentIndex === null) {
+      throw new ValidationError('Chỉ số bình luận là bắt buộc');
+    }
+    if (!Number.isInteger(commentIndex) || commentIndex < 0) {
+      throw new ValidationError('Chỉ số bình luận không hợp lệ');
+    }
+
+    // Validate customerId
+    if (!customerId) {
+      throw new ValidationError('ID khách hàng là bắt buộc');
+    }
+    if (!mongoose.Types.ObjectId.isValid(customerId)) {
+      throw new ValidationError('ID khách hàng không hợp lệ');
+    }
+
+    // Validate newMessage
+    if (!newMessage) {
+      throw new ValidationError('Nội dung bình luận mới là bắt buộc');
+    }
+    if (typeof newMessage !== 'string') {
+      throw new ValidationError('Nội dung bình luận phải là chuỗi');
+    }
+    if (newMessage.trim().length === 0) {
+      throw new ValidationError('Nội dung bình luận không được để trống');
+    }
+    if (newMessage.length > 300) {
+      throw new ValidationError('Nội dung bình luẫn không được vượt quá 300 ký tự');
+    }
+
+    const design = await SetDesign.findById(designId);
+    if (!design) {
+      throw new NotFoundError('Set design không tồn tại');
+    }
+
+    if (commentIndex >= design.comments.length) {
+      throw new ValidationError('Bình luận không tồn tại');
+    }
+
+    // Verify ownership
+    if (design.comments[commentIndex].customerId.toString() !== customerId.toString()) {
+      throw new ValidationError('Bạn không có quyền chỉnh sửa bình luận này');
+    }
+
+    await design.updateComment(commentIndex, newMessage);
+
+    logger.info(`Comment updated on set design: ${design.name} by customer: ${customerId}`);
+    return design;
+  } catch (error) {
+    logger.error('Error updating comment:', error);
+    if (error instanceof ValidationError || error instanceof NotFoundError) {
+      throw error;
+    }
+    if (error.name === 'CastError') {
+      throw new ValidationError('ID không hợp lệ');
+    }
+    throw new Error('Lỗi khi cập nhật bình luận');
+  }
+};
+
+/**
+ * Delete a comment on a set design
+ * @param {string} designId - Set design ID
+ * @param {number} commentIndex - Index of the comment
+ * @param {string} userId - User ID (customer or staff/admin)
+ * @param {string} userRole - User role
+ * @returns {Object} Updated set design
+ */
+export const deleteComment = async (designId, commentIndex, userId, userRole) => {
   try {
     if (!designId) {
       throw new ValidationError('ID set design là bắt buộc');
@@ -347,11 +552,8 @@ export const replyToComment = async (designId, commentIndex, staffId, staffName,
     if (commentIndex === undefined || commentIndex === null) {
       throw new ValidationError('Chỉ số bình luận là bắt buộc');
     }
-    if (!staffId) {
-      throw new ValidationError('ID staff là bắt buộc');
-    }
-    if (!message || message.trim().length === 0) {
-      throw new ValidationError('Nội dung phản hồi là bắt buộc');
+    if (!userId) {
+      throw new ValidationError('ID người dùng là bắt buộc');
     }
 
     const design = await SetDesign.findById(designId);
@@ -363,16 +565,269 @@ export const replyToComment = async (designId, commentIndex, staffId, staffName,
       throw new ValidationError('Bình luận không tồn tại');
     }
 
-    await design.replyToComment(commentIndex, staffId, staffName, message);
+    // Verify ownership or admin/staff role
+    const isOwner = design.comments[commentIndex].customerId.toString() === userId.toString();
+    const isStaffOrAdmin = userRole === 'staff' || userRole === 'admin';
+    
+    if (!isOwner && !isStaffOrAdmin) {
+      throw new ValidationError('Bạn không có quyền xóa bình luận này');
+    }
 
-    logger.info(`Reply added to comment on set design: ${design.name} by staff: ${staffId}`);
+    await design.deleteComment(commentIndex);
+
+    logger.info(`Comment deleted from set design: ${design.name} by user: ${userId}`);
     return design;
   } catch (error) {
-    logger.error('Error replying to comment:', error);
+    logger.error('Error deleting comment:', error);
     if (error instanceof ValidationError || error instanceof NotFoundError) {
       throw error;
     }
-    throw new Error('Lỗi khi thêm phản hồi');
+    throw new Error('Lỗi khi xóa bình luận');
+  }
+};
+
+/**
+ * Update a reply on a comment
+ * @param {string} designId - Set design ID
+ * @param {number} commentIndex - Index of the comment
+ * @param {number} replyIndex - Index of the reply
+ * @param {string} userId - User ID (for ownership verification)
+ * @param {string} newMessage - New message content
+ * @returns {Object} Updated set design
+ */
+export const updateReply = async (designId, commentIndex, replyIndex, userId, newMessage) => {
+  try {
+    if (!designId) {
+      throw new ValidationError('ID set design là bắt buộc');
+    }
+    if (commentIndex === undefined || commentIndex === null) {
+      throw new ValidationError('Chỉ số bình luận là bắt buộc');
+    }
+    if (replyIndex === undefined || replyIndex === null) {
+      throw new ValidationError('Chỉ số phản hồi là bắt buộc');
+    }
+    if (!userId) {
+      throw new ValidationError('ID người dùng là bắt buộc');
+    }
+    if (!newMessage || newMessage.trim().length === 0) {
+      throw new ValidationError('Nội dung phản hồi mới là bắt buộc');
+    }
+
+    const design = await SetDesign.findById(designId);
+    if (!design) {
+      throw new NotFoundError('Set design không tồn tại');
+    }
+
+    if (commentIndex < 0 || commentIndex >= design.comments.length) {
+      throw new ValidationError('Bình luận không tồn tại');
+    }
+
+    const comment = design.comments[commentIndex];
+    if (replyIndex < 0 || replyIndex >= comment.replies.length) {
+      throw new ValidationError('Phản hồi không tồn tại');
+    }
+
+    // Verify ownership
+    if (comment.replies[replyIndex].userId.toString() !== userId.toString()) {
+      throw new ValidationError('Bạn không có quyền chỉnh sửa phản hồi này');
+    }
+
+    await design.updateReply(commentIndex, replyIndex, newMessage);
+
+    logger.info(`Reply updated on set design: ${design.name} by user: ${userId}`);
+    return design;
+  } catch (error) {
+    logger.error('Error updating reply:', error);
+    if (error instanceof ValidationError || error instanceof NotFoundError) {
+      throw error;
+    }
+    throw new Error('Lỗi khi cập nhật phản hồi');
+  }
+};
+
+/**
+ * Delete a reply on a comment
+ * @param {string} designId - Set design ID
+ * @param {number} commentIndex - Index of the comment
+ * @param {number} replyIndex - Index of the reply
+ * @param {string} userId - User ID
+ * @param {string} userRole - User role
+ * @returns {Object} Updated set design
+ */
+export const deleteReply = async (designId, commentIndex, replyIndex, userId, userRole) => {
+  try {
+    if (!designId) {
+      throw new ValidationError('ID set design là bắt buộc');
+    }
+    if (commentIndex === undefined || commentIndex === null) {
+      throw new ValidationError('Chỉ số bình luận là bắt buộc');
+    }
+    if (replyIndex === undefined || replyIndex === null) {
+      throw new ValidationError('Chỉ số phản hồi là bắt buộc');
+    }
+    if (!userId) {
+      throw new ValidationError('ID người dùng là bắt buộc');
+    }
+
+    const design = await SetDesign.findById(designId);
+    if (!design) {
+      throw new NotFoundError('Set design không tồn tại');
+    }
+
+    if (commentIndex < 0 || commentIndex >= design.comments.length) {
+      throw new ValidationError('Bình luận không tồn tại');
+    }
+
+    const comment = design.comments[commentIndex];
+    if (replyIndex < 0 || replyIndex >= comment.replies.length) {
+      throw new ValidationError('Phản hồi không tồn tại');
+    }
+
+    // Verify ownership or admin/staff role
+    const isOwner = comment.replies[replyIndex].userId.toString() === userId.toString();
+    const isStaffOrAdmin = userRole === 'staff' || userRole === 'admin';
+    
+    if (!isOwner && !isStaffOrAdmin) {
+      throw new ValidationError('Bạn không có quyền xóa phản hồi này');
+    }
+
+    await design.deleteReply(commentIndex, replyIndex);
+
+    logger.info(`Reply deleted from set design: ${design.name} by user: ${userId}`);
+    return design;
+  } catch (error) {
+    logger.error('Error deleting reply:', error);
+    if (error instanceof ValidationError || error instanceof NotFoundError) {
+      throw error;
+    }
+    throw new Error('Lỗi khi xóa phản hồi');
+  }
+};
+
+/**
+ * Like a comment on a set design
+ * @param {string} commentId - Comment ObjectId (_id from MongoDB)
+ * @param {string} userId - User ID who is liking
+ * @returns {Object} Updated comment with likes
+ */
+export const likeComment = async (commentId, userId) => {
+  try {
+    // Validate inputs
+    if (!commentId || typeof commentId !== 'string' || commentId.trim().length === 0) {
+      throw new ValidationError('ID bình luận là bắt buộc');
+    }
+    if (!mongoose.Types.ObjectId.isValid(commentId)) {
+      throw new ValidationError('ID bình luận không hợp lệ');
+    }
+    if (!userId) {
+      throw new ValidationError('ID người dùng là bắt buộc');
+    }
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      throw new ValidationError('ID người dùng không hợp lệ');
+    }
+
+    // Find design that contains this comment
+    const design = await SetDesign.findOne({ 'comments._id': commentId });
+    if (!design) {
+      throw new NotFoundError('Bình luận không tồn tại');
+    }
+    if (!design.isActive) {
+      throw new ValidationError('Set design đã bị vô hiệu hóa');
+    }
+
+    // Find comment
+    const comment = design.comments.id(commentId);
+    if (!comment) {
+      throw new NotFoundError('Bình luận không tồn tại');
+    }
+
+    // Check if user already liked
+    const alreadyLiked = comment.likes.some(id => id.toString() === userId.toString());
+    if (alreadyLiked) {
+      throw new ValidationError('Bạn đã thích bình luận này rồi');
+    }
+
+    // Add like
+    comment.likes.push(userId);
+    await design.save();
+
+    logger.info(`Comment ${commentId} liked by user ${userId}`);
+    return {
+      commentId,
+      likes: comment.likes,
+      likesCount: comment.likes.length
+    };
+  } catch (error) {
+    logger.error('Error liking comment:', error);
+    if (error instanceof ValidationError || error instanceof NotFoundError) {
+      throw error;
+    }
+    if (error.name === 'CastError') {
+      throw new ValidationError('ID không hợp lệ');
+    }
+    throw new Error('Lỗi khi thích bình luận');
+  }
+};
+
+/**
+ * Unlike a comment on a set design
+ * @param {string} commentId - Comment ObjectId (_id from MongoDB)
+ * @param {string} userId - User ID who is unliking
+ * @returns {Object} Updated comment with likes
+ */
+export const unlikeComment = async (commentId, userId) => {
+  try {
+    // Validate inputs
+    if (!commentId || typeof commentId !== 'string' || commentId.trim().length === 0) {
+      throw new ValidationError('ID bình luận là bắt buộc');
+    }
+    if (!mongoose.Types.ObjectId.isValid(commentId)) {
+      throw new ValidationError('ID bình luận không hợp lệ');
+    }
+    if (!userId) {
+      throw new ValidationError('ID người dùng là bắt buộc');
+    }
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      throw new ValidationError('ID người dùng không hợp lệ');
+    }
+
+    // Find design that contains this comment
+    const design = await SetDesign.findOne({ 'comments._id': commentId });
+    if (!design) {
+      throw new NotFoundError('Bình luận không tồn tại');
+    }
+
+    // Find comment
+    const comment = design.comments.id(commentId);
+    if (!comment) {
+      throw new NotFoundError('Bình luận không tồn tại');
+    }
+
+    // Check if user has liked
+    const likeIndex = comment.likes.findIndex(id => id.toString() === userId.toString());
+    if (likeIndex === -1) {
+      throw new ValidationError('Bạn chưa thích bình luận này');
+    }
+
+    // Remove like
+    comment.likes.splice(likeIndex, 1);
+    await design.save();
+
+    logger.info(`Comment ${commentId} unliked by user ${userId}`);
+    return {
+      commentId,
+      likes: comment.likes,
+      likesCount: comment.likes.length
+    };
+  } catch (error) {
+    logger.error('Error unliking comment:', error);
+    if (error instanceof ValidationError || error instanceof NotFoundError) {
+      throw error;
+    }
+    if (error.name === 'CastError') {
+      throw new ValidationError('ID không hợp lệ');
+    }
+    throw new Error('Lỗi khi bỏ thích bình luận');
   }
 };
 

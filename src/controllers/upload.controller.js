@@ -108,7 +108,7 @@ export const uploadMultipleImagesController = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: `${results.length} images uploaded successfully`,
+      message: `Tải lên ${results.length} hình ảnh thành công`,
       data: {
         images: results
       }
@@ -209,7 +209,7 @@ export const uploadReviewImagesController = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: `${results.length} review images uploaded successfully`,
+      message: `Tải lên ${results.length} hình ảnh đánh giá thành công`,
       data: {
         images: results
       }
@@ -237,7 +237,7 @@ export const uploadSetDesignImagesController = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: `${results.length} set design images uploaded successfully`,
+      message: `Tải lên ${results.length} hình ảnh thiết kế thành công`,
       data: {
         images: results
       }
@@ -266,7 +266,11 @@ export const deleteImageController = async (req, res) => {
     if (success) {
       res.status(200).json({
         success: true,
-        message: 'Xóa file thành công'
+        message: 'Xóa file thành công',
+        data: {
+          publicId,
+          deleted: true
+        }
       });
     } else {
       throw new NotFoundError('File not found or already deleted');

@@ -98,19 +98,31 @@ const setDesignSchema = new mongoose.Schema(
           required: true,
           maxlength: [300, "Comment cannot exceed 300 characters"],
         },
+        likes: {
+          type: [{
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+          }],
+          default: [],
+        },
         createdAt: {
           type: Date,
           default: Date.now,
         },
         replies: {
           type: [{
-            staffId: {
+            userId: {
               type: mongoose.Schema.Types.ObjectId,
               ref: "User",
               required: true,
             },
-            staffName: {
+            userName: {
               type: String,
+              required: true,
+            },
+            userRole: {
+              type: String,
+              enum: ['customer', 'staff', 'admin'],
               required: true,
             },
             message: {
@@ -211,18 +223,55 @@ setDesignSchema.methods.addComment = function(customerId, customerName, message)
   return this.save();
 };
 
-// Instance method to reply to comment
-setDesignSchema.methods.replyToComment = function(commentIndex, staffId, staffName, message) {
+// Instance method to reply to comment (both staff and customer)
+setDesignSchema.methods.replyToComment = function(commentIndex, userId, userName, userRole, message) {
   if (this.comments[commentIndex]) {
     this.comments[commentIndex].replies.push({
-      staffId,
-      staffName,
+      userId,
+      userName,
+      userRole,
       message,
       createdAt: new Date(),
     });
     return this.save();
   }
   throw new Error('Comment not found');
+};
+
+// Instance method to update comment
+setDesignSchema.methods.updateComment = function(commentIndex, newMessage) {
+  if (this.comments[commentIndex]) {
+    this.comments[commentIndex].message = newMessage;
+    return this.save();
+  }
+  throw new Error('Comment not found');
+};
+
+// Instance method to delete comment
+setDesignSchema.methods.deleteComment = function(commentIndex) {
+  if (this.comments[commentIndex]) {
+    this.comments.splice(commentIndex, 1);
+    return this.save();
+  }
+  throw new Error('Comment not found');
+};
+
+// Instance method to update reply
+setDesignSchema.methods.updateReply = function(commentIndex, replyIndex, newMessage) {
+  if (this.comments[commentIndex] && this.comments[commentIndex].replies[replyIndex]) {
+    this.comments[commentIndex].replies[replyIndex].message = newMessage;
+    return this.save();
+  }
+  throw new Error('Reply not found');
+};
+
+// Instance method to delete reply
+setDesignSchema.methods.deleteReply = function(commentIndex, replyIndex) {
+  if (this.comments[commentIndex] && this.comments[commentIndex].replies[replyIndex]) {
+    this.comments[commentIndex].replies.splice(replyIndex, 1);
+    return this.save();
+  }
+  throw new Error('Reply not found');
 };
 
 const SetDesign = mongoose.model("SetDesign", setDesignSchema);
