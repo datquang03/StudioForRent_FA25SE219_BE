@@ -5,6 +5,7 @@ import {
   getStudioById,
   createStudio,
   updateStudio,
+  addStudioImages,
   changeStudioStatus,
   deleteStudio,
   getActiveStudios,
@@ -171,37 +172,89 @@ export const uploadStudioMedia = asyncHandler(async (req, res) => {
     video: null
   };
 
+  // Safety check for req.files
+  const files = req.files || {};
+
   // Handle images
-  if (req.files.images && req.files.images.length > 0) {
-    const imageResults = await uploadMultipleImages(req.files.images, {
+  if (files.images && files.images.length > 0) {
+    const imageResults = await uploadMultipleImages(files.images, {
       folder: `studio-rental/studios/${id}`
     });
     uploadedMedia.images = imageResults;
   }
 
   // Handle video
-  if (req.files.video && req.files.video.length > 0) {
-    const videoResult = await uploadVideo(req.files.video[0], {
+  if (files.video && files.video.length > 0) {
+    const videoResult = await uploadVideo(files.video[0], {
       folder: `studio-rental/studios/${id}/videos`
     });
     uploadedMedia.video = videoResult;
   }
 
   if (uploadedMedia.images.length === 0 && !uploadedMedia.video) {
-    res.status(400);
-    throw new Error('Không có file media nào được cung cấp!');
+    // Check if we are just updating keptImages (deleting old ones without adding new ones)
+    // If keptImages is present in body, we might still want to proceed even if no NEW files are uploaded
+    // But usually this endpoint is for "Upload". 
+    // However, if the user deletes all images and uploads nothing, keptImages would be [] or undefined.
+    // If the intent is purely to delete images, they should probably use an update endpoint, 
+    // but supporting it here is flexible.
+    // For now, we keep the requirement that at least some file activity or explicit image management is happening.
+    if (req.body.keptImages === undefined) {
+       res.status(400);
+       throw new Error('Không có file media nào được cung cấp!');
+    }
   }
 
   // Update studio with new media URLs
+  let studio;
+  const newImageUrls = uploadedMedia.images.map(img => img.url);
+  
+  // Prepare update data
   const updateData = {};
-  if (uploadedMedia.images.length > 0) {
-    updateData.images = uploadedMedia.images.map(img => img.url);
-  }
   if (uploadedMedia.video) {
     updateData.video = uploadedMedia.video.url;
   }
 
-  const studio = await updateStudio(id, updateData);
+  // Logic for Images
+  if (req.body.keptImages !== undefined) {
+    // Case 1: Explicit list of images to keep (Edit Mode)
+    let keptImages = req.body.keptImages;
+    
+    // Normalize to array
+    if (!Array.isArray(keptImages)) {
+      keptImages = [keptImages];
+    }
+    
+    // Filter valid strings
+    keptImages = keptImages.filter(item => typeof item === 'string' && item.length > 0);
+    
+    // Combine kept old images with new uploaded images
+    updateData.images = [...keptImages, ...newImageUrls];
+    
+    // Perform single atomic update for both images and video (if any)
+    studio = await updateStudio(id, updateData);
+
+  } else {
+    // Case 2: Append Mode (Add Only) or Video Only
+    
+    // If we have new images to append or a video to update
+    if (newImageUrls.length > 0 || updateData.video) {
+      // Fetch current studio to get existing images
+      const currentStudio = await getStudioById(id);
+      const updatePayload = {};
+      if (newImageUrls.length > 0) {
+        updatePayload.images = [...(currentStudio.images || []), ...newImageUrls];
+      }
+      if (updateData.video) {
+        updatePayload.video = updateData.video;
+      }
+      studio = await updateStudio(id, updatePayload);
+    }
+  }
+  
+  if (!studio) {
+    studio = await getStudioById(id);
+  }
 
   res.status(200).json({
     success: true,

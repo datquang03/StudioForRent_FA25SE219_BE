@@ -15,6 +15,8 @@ import { acquireLock, releaseLock } from '../utils/redisLock.js';
 import { sendNoShowEmail } from './email.service.js';
 // #endregion
 
+// #region Core CRUD Operations
+
 export const createBooking = async (data) => {
   const { userId } = data;
   if (!userId) throw new ValidationError('Missing userId');
@@ -54,8 +56,8 @@ export const createBooking = async (data) => {
           throw new ConflictError('Schedule is not available');
         }
       } else {
-    // Expect schedule details: studioId, startTime, endTime
-    const { studioId, startTime, endTime } = data;
+        // Expect schedule details: studioId, startTime, endTime
+        const { studioId, startTime, endTime } = data;
 
         const s = new Date(startTime);
         const e = new Date(endTime);
@@ -93,150 +95,150 @@ export const createBooking = async (data) => {
         userId,
         scheduleId: schedule._id,
         totalBeforeDiscount: data.totalBeforeDiscount || 0,
-    discountAmount: data.discountAmount || 0,
-    finalAmount: data.finalAmount || 0,
-    promoId: data.promoId,
-    payType: data.payType,
-    notes: data.notes,
-    status: BOOKING_STATUS.PENDING,
-  };
+        discountAmount: data.discountAmount || 0,
+        finalAmount: data.finalAmount || 0,
+        promoId: data.promoId,
+        payType: data.payType,
+        notes: data.notes,
+        status: BOOKING_STATUS.PENDING,
+      };
 
-    const [bookingDoc] = await Booking.create([bookingData], { session });
-    const booking = bookingDoc;
+      const [bookingDoc] = await Booking.create([bookingData], { session });
+      const booking = bookingDoc;
 
-  // Mark schedule booked and link
-    await markScheduleBookedService(schedule._id, booking._id, session);
+      // Mark schedule booked and link
+      await markScheduleBookedService(schedule._id, booking._id, session);
 
-  // Create booking details if provided, and compute totals (details + base studio price)
-  let detailsTotal = 0;
-    if (Array.isArray(data.details) && data.details.length > 0) {
-      const { total } = await createBookingDetailsService(booking._id, data.details, session);
-      detailsTotal = total;
-    }
+      // Create booking details if provided, and compute totals (details + base studio price)
+      let detailsTotal = 0;
+      if (Array.isArray(data.details) && data.details.length > 0) {
+        const { total } = await createBookingDetailsService(booking._id, data.details, session);
+        detailsTotal = total;
+      }
 
-  // Compute base price from studio and duration
-    const studio = await Studio.findById(schedule.studioId).session(session);
-  if (!studio) {
-    // rollback created resources
-    await Booking.findByIdAndDelete(booking._id);
-    try {
-      await freeScheduleService(schedule._id);
-    } catch (freeErr) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to free schedule after studio not found', freeErr);
-    }
-    throw new NotFoundError('Studio not found for schedule');
-  }
+      // Compute base price from studio and duration
+      const studio = await Studio.findById(schedule.studioId).session(session);
+      if (!studio) {
+        // rollback created resources
+        await Booking.findByIdAndDelete(booking._id);
+        try {
+          await freeScheduleService(schedule._id);
+        } catch (freeErr) {
+          // eslint-disable-next-line no-console
+          console.error('Failed to free schedule after studio not found', freeErr);
+        }
+        throw new NotFoundError('Studio not found for schedule');
+      }
 
-  // Get global default policies (company-wide policies)
-    const defaultCancellationPolicy = await RoomPolicy.findOne({
-    type: 'CANCELLATION',
-    category: 'STANDARD',
-    isActive: true
-    }).session(session);
+      // Get global default policies (company-wide policies)
+      const defaultCancellationPolicy = await RoomPolicy.findOne({
+        type: 'CANCELLATION',
+        category: 'STANDARD',
+        isActive: true
+      }).session(session);
 
-    const defaultNoShowPolicy = await RoomPolicy.findOne({
-    type: 'NO_SHOW',
-    category: 'STANDARD',
-    isActive: true
-    }).session(session);
+      const defaultNoShowPolicy = await RoomPolicy.findOne({
+        type: 'NO_SHOW',
+        category: 'STANDARD',
+        isActive: true
+      }).session(session);
 
-  if (!defaultCancellationPolicy || !defaultNoShowPolicy) {
-    // rollback created resources
-    await Booking.findByIdAndDelete(booking._id);
-    try {
-      await freeScheduleService(schedule._id);
-    } catch (freeErr) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to free schedule during policy validation', freeErr);
-    }
-    throw new ValidationError('Default policies not configured. Please run seedPolicies.js first.');
-  }
+      if (!defaultCancellationPolicy || !defaultNoShowPolicy) {
+        // rollback created resources
+        await Booking.findByIdAndDelete(booking._id);
+        try {
+          await freeScheduleService(schedule._id);
+        } catch (freeErr) {
+          // eslint-disable-next-line no-console
+          console.error('Failed to free schedule during policy validation', freeErr);
+        }
+        throw new ValidationError('Default policies not configured. Please run seedPolicies.js first.');
+      }
 
-  // Create policy snapshots (immutable copy of global policies at booking time)
-  booking.policySnapshots = {
-    cancellation: {
-      _id: defaultCancellationPolicy._id,
-      name: defaultCancellationPolicy.name,
-      type: defaultCancellationPolicy.type,
-      category: defaultCancellationPolicy.category,
-      refundTiers: defaultCancellationPolicy.refundTiers,
-      isActive: defaultCancellationPolicy.isActive,
-      createdAt: defaultCancellationPolicy.createdAt
-    },
-    noShow: {
-      _id: defaultNoShowPolicy._id,
-      name: defaultNoShowPolicy.name,
-      type: defaultNoShowPolicy.type,
-      category: defaultNoShowPolicy.category,
-      noShowRules: defaultNoShowPolicy.noShowRules,
-      isActive: defaultNoShowPolicy.isActive,
-      createdAt: defaultNoShowPolicy.createdAt
-    }
-  };
+      // Create policy snapshots (immutable copy of global policies at booking time)
+      booking.policySnapshots = {
+        cancellation: {
+          _id: defaultCancellationPolicy._id,
+          name: defaultCancellationPolicy.name,
+          type: defaultCancellationPolicy.type,
+          category: defaultCancellationPolicy.category,
+          refundTiers: defaultCancellationPolicy.refundTiers,
+          isActive: defaultCancellationPolicy.isActive,
+          createdAt: defaultCancellationPolicy.createdAt
+        },
+        noShow: {
+          _id: defaultNoShowPolicy._id,
+          name: defaultNoShowPolicy.name,
+          type: defaultNoShowPolicy.type,
+          category: defaultNoShowPolicy.category,
+          noShowRules: defaultNoShowPolicy.noShowRules,
+          isActive: defaultNoShowPolicy.isActive,
+          createdAt: defaultNoShowPolicy.createdAt
+        }
+      };
 
-  // Initialize financials
-  booking.financials = {
-    originalAmount: 0,
-    refundAmount: 0,
-    chargeAmount: 0,
-    netAmount: 0
-  };
+      // Initialize financials
+      booking.financials = {
+        originalAmount: 0,
+        refundAmount: 0,
+        chargeAmount: 0,
+        netAmount: 0
+      };
 
-  const durationMs = new Date(schedule.endTime).getTime() - new Date(schedule.startTime).getTime();
-  const hours = Math.round((durationMs / (1000 * 60 * 60)) * 100) / 100; // rounded to 2 decimals
-  const baseTotal = (studio.basePricePerHour || 0) * hours;
+      const durationMs = new Date(schedule.endTime).getTime() - new Date(schedule.startTime).getTime();
+      const hours = Math.round((durationMs / (1000 * 60 * 60)) * 100) / 100; // rounded to 2 decimals
+      const baseTotal = (studio.basePricePerHour || 0) * hours;
 
-  const totalBeforeDiscount = Math.round((baseTotal + detailsTotal) * 100) / 100;
+      const totalBeforeDiscount = Math.round((baseTotal + detailsTotal) * 100) / 100;
 
-  // Calculate discount: prefer promoId if provided and valid, otherwise use discountAmount from request
-  let discountAmount = 0;
-  if (data.promoId) {
-    const promo = await Promotion.findById(data.promoId);
-    if (promo && promo.isValid()) {
-      discountAmount = promo.calculateDiscount(totalBeforeDiscount);
-      // increment usage count
-      promo.usageCount = (promo.usageCount || 0) + 1;
-      await promo.save();
-    } else {
-      // invalid promo -> ignore
-      discountAmount = 0;
-    }
-  } else {
-    discountAmount = data.discountAmount || 0;
-  }
+      // Calculate discount: prefer promoId if provided and valid, otherwise use discountAmount from request
+      let discountAmount = 0;
+      if (data.promoId) {
+        const promo = await Promotion.findById(data.promoId);
+        if (promo && promo.isValid()) {
+          discountAmount = promo.calculateDiscount(totalBeforeDiscount);
+          // increment usage count
+          promo.usageCount = (promo.usageCount || 0) + 1;
+          await promo.save();
+        } else {
+          // invalid promo -> ignore
+          discountAmount = 0;
+        }
+      } else {
+        discountAmount = data.discountAmount || 0;
+      }
 
-    booking.totalBeforeDiscount = totalBeforeDiscount;
-    booking.discountAmount = Math.round(discountAmount * 100) / 100;
-    booking.finalAmount = Math.max(0, booking.totalBeforeDiscount - booking.discountAmount);
-    await booking.save({ session });
+      booking.totalBeforeDiscount = totalBeforeDiscount;
+      booking.discountAmount = Math.round(discountAmount * 100) / 100;
+      booking.finalAmount = Math.max(0, booking.totalBeforeDiscount - booking.discountAmount);
+      await booking.save({ session });
 
-  // Send notification to customer
-  try {
-    await createAndSendNotification(
-      userId,
-      NOTIFICATION_TYPE.CONFIRMATION,
-      'Booking đã được tạo',
-      `Booking của bạn đã được tạo thành công. Tổng tiền: ${booking.finalAmount.toLocaleString('vi-VN')} VND`,
-      true, // Send email
-      null, // io
-      booking._id
-    );
-  } catch (notifyErr) {
-    // eslint-disable-next-line no-console
-    console.error('Failed to send booking confirmation notification:', notifyErr);
-  }
+      // Send notification to customer
+      try {
+        await createAndSendNotification(
+          userId,
+          NOTIFICATION_TYPE.CONFIRMATION,
+          'Booking đã được tạo',
+          `Booking của bạn đã được tạo thành công. Tổng tiền: ${booking.finalAmount.toLocaleString('vi-VN')} VND`,
+          true, // Send email
+          null, // io
+          booking._id
+        );
+      } catch (notifyErr) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to send booking confirmation notification:', notifyErr);
+      }
 
-  // Create payment options
-  let paymentOptions = [];
-  try {
-    paymentOptions = await createPaymentOptions(booking._id);
-  } catch (paymentErr) {
-    // Log error but don't fail booking creation
-    console.error('Failed to create payment options:', paymentErr);
-  }
+      // Create payment options
+      let paymentOptions = [];
+      try {
+        paymentOptions = await createPaymentOptions(booking._id);
+      } catch (paymentErr) {
+        // Log error but don't fail booking creation
+        console.error('Failed to create payment options:', paymentErr);
+      }
 
-  return { booking, paymentOptions };
+      return { booking, paymentOptions };
     }, { writeConcern: { w: 'majority' }, readConcern: { level: 'majority' } });
   } finally {
     session.endSession();
@@ -247,8 +249,16 @@ export const createBooking = async (data) => {
   }
 };
 
-export const getBookingById = async (id) => {
-  const booking = await Booking.findById(id)
+export const getBookingById = async (id, userId = null, userRole = null) => {
+  // Build query with authorization check
+  const query = { _id: id };
+  
+  // If customer, only allow viewing their own bookings
+  if (userRole === 'customer' && userId) {
+    query.userId = userId;
+  }
+
+  const booking = await Booking.findOne(query)
     .populate({
       path: 'userId',
       select: 'fullName username phone email'
@@ -261,15 +271,18 @@ export const getBookingById = async (id) => {
       }
     })
     .populate('promoId', 'name code discountPercentage discountAmount')
-    .lean();
+    .lean()
+    .maxTimeMS(5000); // Add timeout to prevent slow queries
 
   if (!booking) throw new NotFoundError('Booking not found');
 
-  // Attach booking details (if any)
+  // Attach booking details (if any) with limit to prevent memory issues
   const details = await BookingDetail.find({ bookingId: booking._id })
+    .limit(100) // Limit to prevent memory issues
     .populate('equipmentId', 'name description pricePerHour pricePerDay')
     .populate('extraServiceId', 'name description pricePerHour pricePerDay')
-    .lean();
+    .lean()
+    .maxTimeMS(3000);
 
   // Format the response similar to getActiveBookingsForStaff
   const formattedBooking = {
@@ -693,100 +706,9 @@ export const cancelBooking = async (bookingId) => {
   }
 };
 
-export const markAsNoShow = async (bookingId, checkInTime = null, io = null) => {
-  const booking = await Booking.findById(bookingId).populate('scheduleId');
-  if (!booking) throw new NotFoundError('Booking not found');
+// #endregion
 
-  if (booking.status !== BOOKING_STATUS.CONFIRMED) {
-    throw new ConflictError('Only confirmed bookings can be marked as no-show');
-  }
-
-  // Calculate no-show charge using policy snapshot
-  let chargeResult = null;
-  if (booking.policySnapshots?.noShow && booking.scheduleId) {
-    try {
-      // Count previous no-shows for this user (simplified - in real app might need more complex logic)
-      const previousNoShows = await Booking.countDocuments({
-        userId: booking.userId,
-        'events.type': 'NO_SHOW',
-        _id: { $ne: booking._id }
-      });
-
-      chargeResult = RoomPolicyService.calculateNoShowCharge(
-        booking.policySnapshots.noShow,
-        new Date(booking.scheduleId.startTime),
-        checkInTime ? new Date(checkInTime) : null,
-        booking.finalAmount,
-        previousNoShows
-      );
-
-      // Update financials
-      booking.financials.originalAmount = booking.finalAmount;
-      booking.financials.chargeAmount = chargeResult.chargeAmount;
-      booking.financials.netAmount = chargeResult.chargeAmount; // Amount to charge
-
-      // Add no-show event
-      booking.events.push({
-        type: 'NO_SHOW',
-        timestamp: new Date(),
-        details: {
-          chargeType: chargeResult.chargeType,
-          chargePercentage: chargeResult.chargePercentage,
-          minutesLate: chargeResult.minutesLate,
-          previousNoShowCount: chargeResult.previousNoShowCount,
-          forgiven: chargeResult.forgiven,
-          isNoShow: chargeResult.isNoShow
-        },
-        amount: chargeResult.chargeAmount
-      });
-
-    } catch (policyError) {
-      // Log policy calculation error but don't block no-show marking
-      console.error('Failed to calculate no-show charge:', policyError);
-    }
-  }
-
-  booking.status = BOOKING_STATUS.COMPLETED; // Mark as completed with no-show
-  await booking.save();
-
-  // Send notification about no-show (in-app + email + realtime if io provided)
-  try {
-    const chargeText = chargeResult?.chargeAmount > 0
-      ? `Bạn sẽ bị tính phí ${chargeResult.chargeAmount.toLocaleString('vi-VN')} VND do no-show.`
-      : 'Không có phí no-show được áp dụng.';
-
-    await createAndSendNotification(
-      booking.userId,
-      NOTIFICATION_TYPE.WARNING,
-      'No-show được ghi nhận',
-      `Booking của bạn đã được đánh dấu là no-show. ${chargeText}`,
-      true, // Send email
-      io, // io for real-time
-      booking._id
-    );
-
-    // Send dedicated no-show email template (best-effort)
-    try {
-      const user = await (await import('../models/index.js')).User.findById(booking.userId).select('email name');
-      if (user && user.email) {
-        await sendNoShowEmail(user.email, {
-          bookingId: booking._id,
-          date: booking.scheduleId?.startTime ? new Date(booking.scheduleId.startTime).toLocaleDateString('vi-VN') : undefined,
-          time: booking.scheduleId?.startTime ? new Date(booking.scheduleId.startTime).toLocaleTimeString('vi-VN') : undefined,
-          chargeAmount: chargeResult?.chargeAmount || 0
-        });
-      }
-    } catch (emailErr) {
-      // log and continue
-      // eslint-disable-next-line no-console
-      console.error('Failed to send dedicated no-show email:', emailErr);
-    }
-  } catch (notifyErr) {
-    console.error('Failed to send no-show notification:', notifyErr);
-  }
-
-  return booking;
-};
+// #region Workflow Actions
 
 export const confirmBooking = async (bookingId) => {
   const booking = await Booking.findById(bookingId);
@@ -964,172 +886,266 @@ export const checkOutBooking = async (bookingId, actorId = null) => {
   }
 };
 
+export const markAsNoShow = async (bookingId, checkInTime = null, io = null) => {
+  const booking = await Booking.findById(bookingId).populate('scheduleId');
+  if (!booking) throw new NotFoundError('Booking not found');
+
+  if (booking.status !== BOOKING_STATUS.CONFIRMED) {
+    throw new ConflictError('Only confirmed bookings can be marked as no-show');
+  }
+
+  // Calculate no-show charge using policy snapshot
+  let chargeResult = null;
+  if (booking.policySnapshots?.noShow && booking.scheduleId) {
+    try {
+      // Count previous no-shows for this user (simplified - in real app might need more complex logic)
+      const previousNoShows = await Booking.countDocuments({
+        userId: booking.userId,
+        'events.type': 'NO_SHOW',
+        _id: { $ne: booking._id }
+      });
+
+      chargeResult = RoomPolicyService.calculateNoShowCharge(
+        booking.policySnapshots.noShow,
+        new Date(booking.scheduleId.startTime),
+        checkInTime ? new Date(checkInTime) : null,
+        booking.finalAmount,
+        previousNoShows
+      );
+
+      // Update financials
+      booking.financials.originalAmount = booking.finalAmount;
+      booking.financials.chargeAmount = chargeResult.chargeAmount;
+      booking.financials.netAmount = chargeResult.chargeAmount; // Amount to charge
+
+      // Add no-show event
+      booking.events.push({
+        type: 'NO_SHOW',
+        timestamp: new Date(),
+        details: {
+          chargeType: chargeResult.chargeType,
+          chargePercentage: chargeResult.chargePercentage,
+          minutesLate: chargeResult.minutesLate,
+          previousNoShowCount: chargeResult.previousNoShowCount,
+          forgiven: chargeResult.forgiven,
+          isNoShow: chargeResult.isNoShow
+        },
+        amount: chargeResult.chargeAmount
+      });
+
+    } catch (policyError) {
+      // Log policy calculation error but don't block no-show marking
+      console.error('Failed to calculate no-show charge:', policyError);
+    }
+  }
+
+  booking.status = BOOKING_STATUS.COMPLETED; // Mark as completed with no-show
+  await booking.save();
+
+  // Send notification about no-show (in-app + email + realtime if io provided)
+  try {
+    const chargeText = chargeResult?.chargeAmount > 0
+      ? `Bạn sẽ bị tính phí ${chargeResult.chargeAmount.toLocaleString('vi-VN')} VND do no-show.`
+      : 'Không có phí no-show được áp dụng.';
+
+    await createAndSendNotification(
+      booking.userId,
+      NOTIFICATION_TYPE.WARNING,
+      'No-show được ghi nhận',
+      `Booking của bạn đã được đánh dấu là no-show. ${chargeText}`,
+      true, // Send email
+      io, // io for real-time
+      booking._id
+    );
+
+    // Send dedicated no-show email template (best-effort)
+    try {
+      const user = await (await import('../models/index.js')).User.findById(booking.userId).select('email name');
+      if (user && user.email) {
+        await sendNoShowEmail(user.email, {
+          bookingId: booking._id,
+          date: booking.scheduleId?.startTime ? new Date(booking.scheduleId.startTime).toLocaleDateString('vi-VN') : undefined,
+          time: booking.scheduleId?.startTime ? new Date(booking.scheduleId.startTime).toLocaleTimeString('vi-VN') : undefined,
+          chargeAmount: chargeResult?.chargeAmount || 0
+        });
+      }
+    } catch (emailErr) {
+      // log and continue
+      // eslint-disable-next-line no-console
+      console.error('Failed to send dedicated no-show email:', emailErr);
+    }
+  } catch (notifyErr) {
+    console.error('Failed to send no-show notification:', notifyErr);
+  }
+
+  return booking;
+};
+
+// #endregion
+
+// #region Specialized Operations
+
 export const getBookingsForStaff = async ({ page = 1, limit = 20, status, startDate, endDate, includeAll = false } = {}) => {
+  // Validate pagination
   const safePage = Math.max(parseInt(page) || 1, 1);
   const safeLimit = Math.min(Math.max(parseInt(limit) || 10, 1), 200);
-  
-  // Build match conditions
-  const matchConditions = {};
-  
-  // Status filtering logic
-  if (includeAll) {
-    // If includeAll is true, allow filtering by any status or get all
-    if (status) {
-      if (Array.isArray(status)) {
-        matchConditions.status = { $in: status };
-      } else {
-        matchConditions.status = status;
-      }
-    }
-    // If no status specified and includeAll=true, get all bookings
-  } else {
-    // Default behavior: only get active bookings (confirmed or checked_in)
-    const activeStatuses = [BOOKING_STATUS.CONFIRMED, BOOKING_STATUS.CHECKED_IN];
-    if (status) {
-      if (Array.isArray(status)) {
-        matchConditions.status = { $in: status.filter(s => activeStatuses.includes(s)) };
-      } else if (activeStatuses.includes(status)) {
-        matchConditions.status = status;
-      } else {
-        // If invalid status provided, default to active statuses
-        matchConditions.status = { $in: activeStatuses };
-      }
-    } else {
-      matchConditions.status = { $in: activeStatuses };
-    }
-  }
-
-  // Add date range filter based on schedule startTime
-  let dateFilter = {};
-  if (startDate || endDate) {
-    dateFilter = {};
-    if (startDate) {
-      dateFilter.$gte = new Date(startDate);
-    }
-    if (endDate) {
-      dateFilter.$lte = new Date(endDate);
-    }
-  }
-
   const skip = (safePage - 1) * safeLimit;
+  
+  // 1. Validate và chuẩn bị filters
+  const { validStartDate, validEndDate } = validateDates(startDate, endDate);
+  
+  const matchConditions = {};
+  const statusFilter = buildStatusFilter(status, includeAll);
+  if (statusFilter) matchConditions.status = statusFilter;
+  
+  const dateFilter = buildDateFilter(validStartDate, validEndDate);
+  const dateMatch = dateFilter ? { 'schedule.startTime': dateFilter } : null;
 
-  // Use aggregation pipeline to join with Schedule collection
-  const pipeline = [
-    {
-      $match: matchConditions
-    },
-    {
-      $lookup: {
-        from: 'schedules',
-        localField: 'scheduleId',
-        foreignField: '_id',
-        as: 'schedule'
-      }
-    },
-    {
-      $unwind: {
-        path: '$schedule',
-        preserveNullAndEmptyArrays: false
-      }
-    },
-    // Filter by schedule startTime if date range provided
-    ...(Object.keys(dateFilter).length > 0 ? [{
-      $match: {
-        'schedule.startTime': dateFilter
-      }
-    }] : []),
-    {
-      $lookup: {
-        from: 'users',
-        localField: 'userId',
-        foreignField: '_id',
-        as: 'customer'
-      }
-    },
-    {
-      $unwind: {
-        path: '$customer',
-        preserveNullAndEmptyArrays: false
-      }
-    },
-    {
-      $lookup: {
-        from: 'studios',
-        localField: 'schedule.studioId',
-        foreignField: '_id',
-        as: 'studio'
-      }
-    },
-    {
-      $unwind: {
-        path: '$studio',
-        preserveNullAndEmptyArrays: false
-      }
-    },
-    {
-      $lookup: {
-        from: 'promotions',
-        localField: 'promoId',
-        foreignField: '_id',
-        as: 'promotion'
-      }
-    },
-    {
-      $unwind: {
-        path: '$promotion',
-        preserveNullAndEmptyArrays: true
-      }
-    },
-    {
-      $sort: { createdAt: -1 }
-    },
-    {
-      $skip: skip
-    },
-    {
-      $limit: safeLimit
-    }
+  // 2. Xây dựng aggregation pipeline
+  const basePipeline = [
+    { $match: matchConditions },
+    ...buildLookupStages(),
+    ...(dateMatch ? [{ $match: dateMatch }] : [])
   ];
 
-  // Get total count with same filters
+  const dataPipeline = [
+    ...basePipeline,
+    { $sort: { createdAt: -1 } },
+    { $skip: skip },
+    { $limit: safeLimit }
+  ];
+
   const countPipeline = [
-    {
-      $match: matchConditions
-    },
-    {
-      $lookup: {
-        from: 'schedules',
-        localField: 'scheduleId',
-        foreignField: '_id',
-        as: 'schedule'
-      }
-    },
-    {
-      $unwind: {
-        path: '$schedule',
-        preserveNullAndEmptyArrays: false
-      }
-    },
-    // Filter by schedule startTime if date range provided
-    ...(Object.keys(dateFilter).length > 0 ? [{
-      $match: {
-        'schedule.startTime': dateFilter
-      }
-    }] : []),
-    {
-      $count: 'total'
-    }
+    ...basePipeline,
+    { $count: 'total' }
   ];
 
+  // 3. Thực thi queries song song
   const [bookingsResult, countResult] = await Promise.all([
-    Booking.aggregate(pipeline),
-    Booking.aggregate(countPipeline)
+    Booking.aggregate(dataPipeline).option({ allowDiskUse: true, maxTimeMS: 10000 }),
+    Booking.aggregate(countPipeline).option({ allowDiskUse: true, maxTimeMS: 5000 })
   ]);
 
   const total = countResult[0]?.total || 0;
 
-  // Format the response
-  const formattedBookings = bookingsResult.map(booking => ({
+  // 4. Format kết quả trả về
+  const formattedBookings = bookingsResult.map(formatBookingResponse);
+
+  return {
+    bookings: formattedBookings,
+    pagination: {
+      total,
+      page: safePage,
+      limit: safeLimit,
+      totalPages: Math.ceil(total / safeLimit),
+    },
+    filters: {
+      status: matchConditions.status || null,
+      dateRange: {
+        startDate: validStartDate ? validStartDate.toISOString() : null,
+        endDate: validEndDate ? validEndDate.toISOString() : null
+      },
+      includeAll: includeAll || false
+    }
+  };
+};
+
+// #endregion
+
+// #region Helper Functions
+
+// Helper function: Validate dates
+const validateDates = (startDate, endDate) => {
+  let validStartDate = null;
+  let validEndDate = null;
+  
+  if (startDate) {
+    validStartDate = new Date(startDate);
+    if (isNaN(validStartDate.getTime())) {
+      throw new ValidationError('Invalid startDate format');
+    }
+  }
+  
+  if (endDate) {
+    validEndDate = new Date(endDate);
+    if (isNaN(validEndDate.getTime())) {
+      throw new ValidationError('Invalid endDate format');
+    }
+  }
+  
+  return { validStartDate, validEndDate };
+};
+
+// Helper function: Build status filter
+const buildStatusFilter = (status, includeAll) => {
+  if (includeAll) {
+    // Allow filtering by any status or get all
+    if (status) {
+      return Array.isArray(status) ? { $in: status } : status;
+    }
+    return null; // No filter
+  }
+  
+  // Default: only active bookings
+  const activeStatuses = [BOOKING_STATUS.CONFIRMED, BOOKING_STATUS.CHECKED_IN];
+  if (status) {
+    const statusArray = Array.isArray(status) ? status : [status];
+    const validStatuses = statusArray.filter(s => activeStatuses.includes(s));
+    return validStatuses.length > 0 ? { $in: validStatuses } : { $in: activeStatuses };
+  }
+  return { $in: activeStatuses };
+};
+
+// Helper function: Build date filter
+const buildDateFilter = (validStartDate, validEndDate) => {
+  if (!validStartDate && !validEndDate) return null;
+  
+  const dateFilter = {};
+  if (validStartDate) dateFilter.$gte = validStartDate;
+  if (validEndDate) dateFilter.$lte = validEndDate;
+  return dateFilter;
+};
+
+// Helper function: Build lookup stages
+const buildLookupStages = () => {
+  return [
+    // Join với Schedule để lấy thông tin thời gian
+    { $lookup: { from: 'schedules', localField: 'scheduleId', foreignField: '_id', as: 'schedule' } },
+    { $unwind: { path: '$schedule', preserveNullAndEmptyArrays: false } },
+    
+    // Join với User để lấy thông tin khách hàng
+    { $lookup: { from: 'users', localField: 'userId', foreignField: '_id', as: 'customer' } },
+    { $unwind: { path: '$customer', preserveNullAndEmptyArrays: false } },
+    
+    // Join với Studio để lấy thông tin phòng
+    { $lookup: { from: 'studios', localField: 'schedule.studioId', foreignField: '_id', as: 'studio' } },
+    { $unwind: { path: '$studio', preserveNullAndEmptyArrays: false } },
+    
+    // Join với Promotion (optional)
+    { $lookup: { from: 'promotions', localField: 'promoId', foreignField: '_id', as: 'promotion' } },
+    { $unwind: { path: '$promotion', preserveNullAndEmptyArrays: true } }
+  ];
+};
+
+// Helper function: Calculate schedule details
+const calculateScheduleDetails = (schedule) => {
+  const startTime = new Date(schedule.startTime);
+  const endTime = new Date(schedule.endTime);
+  const durationInHours = Math.round((endTime - startTime) / (1000 * 60 * 60) * 10) / 10;
+  
+  return {
+    _id: schedule._id,
+    startTime: schedule.startTime,
+    endTime: schedule.endTime,
+    duration: durationInHours,
+    date: startTime.toISOString().split('T')[0],
+    timeRange: `${startTime.toTimeString().slice(0, 5)} - ${endTime.toTimeString().slice(0, 5)}`
+  };
+};
+
+// Helper function: Format booking response
+const formatBookingResponse = (booking) => {
+  return {
     _id: booking._id,
     customer: {
       _id: booking.customer._id,
@@ -1146,14 +1162,7 @@ export const getBookingsForStaff = async ({ page = 1, limit = 20, status, startD
       capacity: booking.studio.capacity,
       basePricePerHour: booking.studio.basePricePerHour
     },
-    schedule: {
-      _id: booking.schedule._id,
-      startTime: booking.schedule.startTime,
-      endTime: booking.schedule.endTime,
-      duration: Math.round((new Date(booking.schedule.endTime) - new Date(booking.schedule.startTime)) / (1000 * 60 * 60) * 10) / 10,
-      date: booking.schedule.startTime.toISOString().split('T')[0],
-      timeRange: `${new Date(booking.schedule.startTime).toTimeString().slice(0, 5)} - ${new Date(booking.schedule.endTime).toTimeString().slice(0, 5)}`
-    },
+    schedule: calculateScheduleDetails(booking.schedule),
     totalBeforeDiscount: booking.totalBeforeDiscount,
     discountAmount: booking.discountAmount,
     finalAmount: booking.finalAmount,
@@ -1169,26 +1178,10 @@ export const getBookingsForStaff = async ({ page = 1, limit = 20, status, startD
     createdAt: booking.createdAt,
     checkInAt: booking.checkInAt,
     checkOutAt: booking.checkOutAt
-  }));
-
-  return {
-    bookings: formattedBookings,
-    pagination: {
-      total,
-      page: safePage,
-      limit: safeLimit,
-      totalPages: Math.ceil(total / safeLimit),
-    },
-    filters: {
-      status: matchConditions.status || null,
-      dateRange: {
-        startDate: startDate || null,
-        endDate: endDate || null
-      },
-      includeAll: includeAll || false
-    }
   };
 };
+
+// #endregion
 
 export default {
   createBooking,
@@ -1198,5 +1191,7 @@ export default {
   cancelBooking,
   markAsNoShow,
   confirmBooking,
+  checkInBooking,
+  checkOutBooking,
   getBookingsForStaff,
 };

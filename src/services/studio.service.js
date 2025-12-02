@@ -119,6 +119,26 @@ export const updateStudio = async (studioId, updateData) => {
   
   return studio;
 };
+
+export const addStudioImages = async (studioId, newImages) => {
+  const studio = await Studio.findById(studioId);
+  
+  if (!studio) {
+    throw new NotFoundError('Studio không tồn tại!');
+  }
+  
+  if (newImages && newImages.length > 0) {
+    // Append new images to existing array
+    studio.images = [...studio.images, ...newImages];
+    await studio.save();
+    
+    // Invalidate cache
+    const cacheKey = `studio:${studioId}`;
+    await cacheSet(cacheKey, null);
+  }
+  
+  return studio;
+};
 // #endregion
 
 // #region Change Status & Delete
@@ -168,7 +188,18 @@ export const deleteStudio = async (studioId) => {
   if (!studio) {
     throw new NotFoundError('Studio không tồn tại!');
   }
-  
+
+  // Check for future bookings
+  const futureBookings = await Schedule.exists({
+    studioId,
+    status: { $in: [SCHEDULE_STATUS.BOOKED, SCHEDULE_STATUS.ONGOING] },
+    startTime: { $gt: new Date() }
+  }).hint({ studioId: 1, status: 1, startTime: 1 });
+
+  if (futureBookings) {
+    throw new ValidationError('Không thể xóa studio đang có lịch đặt trong tương lai! Hãy hủy lịch hoặc chuyển trạng thái sang bảo trì.');
+  }
+
   await Studio.findByIdAndDelete(studioId);
   
   // Invalidate cache after delete
