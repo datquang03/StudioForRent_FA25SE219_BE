@@ -429,7 +429,7 @@ export const getAllTransactionsController = async (req, res) => {
 export const getTransactionByIdController = async (req, res) => {
   try {
     const { transactionId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user._id;
     const userRole = req.user.role;
 
     if (!transactionId || !isValidObjectId(transactionId)) {
