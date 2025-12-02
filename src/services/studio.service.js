@@ -194,7 +194,7 @@ export const deleteStudio = async (studioId) => {
     studioId,
     status: { $in: [SCHEDULE_STATUS.BOOKED, SCHEDULE_STATUS.ONGOING] },
     startTime: { $gt: new Date() }
-  });
+  }).hint({ studioId: 1, status: 1, startTime: 1 });
 
   if (futureBookings) {
     throw new ValidationError('Không thể xóa studio đang có lịch đặt trong tương lai! Hãy hủy lịch hoặc chuyển trạng thái sang bảo trì.');

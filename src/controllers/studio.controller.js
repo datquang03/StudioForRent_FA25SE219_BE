@@ -237,18 +237,18 @@ export const uploadStudioMedia = asyncHandler(async (req, res) => {
   } else {
     // Case 2: Append Mode (Add Only) or Video Only
     
-    // If we have new images to append
-    if (newImageUrls.length > 0) {
-      // We use the helper to append images
-      studio = await addStudioImages(id, newImageUrls);
-      
-      // If we ALSO have a video to update, we need a second call
-      if (updateData.video) {
-        studio = await updateStudio(id, { video: updateData.video });
+    // If we have new images to append or a video to update
+    if (newImageUrls.length > 0 || updateData.video) {
+      // Fetch current studio to get existing images
+      const currentStudio = await getStudioById(id);
+      const updatePayload = {};
+      if (newImageUrls.length > 0) {
+        updatePayload.images = [...(currentStudio.images || []), ...newImageUrls];
       }
-    } else if (updateData.video) {
-      // Only video update
-      studio = await updateStudio(id, updateData);
+      if (updateData.video) {
+        updatePayload.video = updateData.video;
+      }
+      studio = await updateStudio(id, updatePayload);
     }
   }
   
