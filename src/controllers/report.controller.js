@@ -8,12 +8,16 @@ import {
 } from '../services/report.service.js';
 
 export const createReportController = asyncHandler(async (req, res) => {
-  const report = await createReport(req.body);
+  const reportData = {
+    ...req.body,
+    reporterId: req.user._id
+  };
+  const report = await createReport(reportData);
   res.status(201).json({ success: true, data: report });
 });
 
 export const getReportsController = asyncHandler(async (req, res) => {
-  const reports = await getReports();
+  const reports = await getReports(req.query);
   res.status(200).json({ success: true, data: reports });
 });
 

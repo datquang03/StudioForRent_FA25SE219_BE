@@ -1,6 +1,9 @@
 import Report from '../models/Report/report.model.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
 import { Booking } from '../models/index.js';
+import Review from '../models/Review/review.model.js';
+import Comment from '../models/Comment/comment.model.js';
+import { REPORT_TARGET_TYPES, REPORT_ISSUE_TYPE, REPORT_STATUS } from '../utils/constants.js';
 
 export const createReport = async (data) => {
   try {
@@ -8,9 +11,22 @@ export const createReport = async (data) => {
     if (!data.reporterId) {
       throw new ValidationError('ID người báo cáo là bắt buộc');
     }
-    if (!data.bookingId) {
-      throw new ValidationError('ID booking là bắt buộc');
+    
+    // Handle targetType and targetId
+    if (!data.targetType) {
+      // Backward compatibility: if bookingId is present, assume Booking target
+      if (data.bookingId) {
+        data.targetType = REPORT_TARGET_TYPES.BOOKING;
+        data.targetId = data.bookingId;
+      } else {
+        throw new ValidationError('Loại đối tượng báo cáo là bắt buộc');
+      }
     }
+
+    if (!data.targetId) {
+      throw new ValidationError('ID đối tượng báo cáo là bắt buộc');
+    }
+
     if (!data.issueType) {
       throw new ValidationError('Loại vấn đề là bắt buộc');
     }
@@ -19,7 +35,7 @@ export const createReport = async (data) => {
     }
 
     // Validate issueType
-    const validIssueTypes = ['DAMAGE', 'COMPLAINT', 'MISSING_ITEM', 'OTHER'];
+    const validIssueTypes = Object.values(REPORT_ISSUE_TYPE);
     if (!validIssueTypes.includes(data.issueType)) {
       throw new ValidationError(`Loại vấn đề không hợp lệ. Chọn từ: ${validIssueTypes.join(', ')}`);
     }
@@ -34,7 +50,7 @@ export const createReport = async (data) => {
 
     // Validate status if provided
     if (data.status) {
-      const validStatuses = ['PENDING', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'];
+      const validStatuses = Object.values(REPORT_STATUS);
       if (!validStatuses.includes(data.status)) {
         throw new ValidationError(`Trạng thái không hợp lệ. Chọn từ: ${validStatuses.join(', ')}`);
       }
@@ -45,10 +61,23 @@ export const createReport = async (data) => {
       throw new ValidationError('Số tiền bồi thường phải là số không âm');
     }
 
-    // Check if booking exists
-    const booking = await Booking.findById(data.bookingId);
-    if (!booking) {
-      throw new NotFoundError('Booking không tồn tại');
+    // Check if target exists
+    let targetExists = false;
+    if (data.targetType === REPORT_TARGET_TYPES.BOOKING) {
+      const booking = await Booking.findById(data.targetId);
+      if (booking) targetExists = true;
+      // Sync bookingId for legacy support
+      data.bookingId = data.targetId;
+    } else if (data.targetType === REPORT_TARGET_TYPES.REVIEW) {
+      const review = await Review.findById(data.targetId);
+      if (review) targetExists = true;
+    } else if (data.targetType === REPORT_TARGET_TYPES.COMMENT) {
+      const comment = await Comment.findById(data.targetId);
+      if (comment) targetExists = true;
+    }
+
+    if (!targetExists) {
+      throw new NotFoundError(`${data.targetType} không tồn tại`);
     }
 
     const report = new Report(data);
@@ -66,7 +95,7 @@ export const getReports = async (filter = {}, options = {}) => {
   try {
     // Validate status filter if provided
     if (filter.status) {
-      const validStatuses = ['PENDING', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'];
+      const validStatuses = Object.values(REPORT_STATUS);
       if (!validStatuses.includes(filter.status)) {
         throw new ValidationError(`Trạng thái không hợp lệ. Chọn từ: ${validStatuses.join(', ')}`);
       }
@@ -74,7 +103,7 @@ export const getReports = async (filter = {}, options = {}) => {
 
     // Validate issueType filter if provided
     if (filter.issueType) {
-      const validIssueTypes = ['DAMAGE', 'COMPLAINT', 'MISSING_ITEM', 'OTHER'];
+      const validIssueTypes = Object.values(REPORT_ISSUE_TYPE);
       if (!validIssueTypes.includes(filter.issueType)) {
         throw new ValidationError(`Loại vấn đề không hợp lệ. Chọn từ: ${validIssueTypes.join(', ')}`);
       }
@@ -89,7 +118,7 @@ export const getReports = async (filter = {}, options = {}) => {
     }
 
     return await Report.find(filter, null, options)
-      .populate('bookingId')
+      .populate('bookingId') // Keep for legacy
       .populate('reporterId', 'name email')
       .populate('resolvedBy', 'name email')
       .exec();
@@ -140,7 +169,7 @@ export const updateReport = async (id, update) => {
 
     // Validate status if provided
     if (update.status) {
-      const validStatuses = ['PENDING', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'];
+      const validStatuses = Object.values(REPORT_STATUS);
       if (!validStatuses.includes(update.status)) {
         throw new ValidationError(`Trạng thái không hợp lệ. Chọn từ: ${validStatuses.join(', ')}`);
       }

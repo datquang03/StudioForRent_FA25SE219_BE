@@ -6,28 +6,30 @@ import {
   updateReportController,
   deleteReportController
 } from '../controllers/report.controller.js';
-import { protect } from '../middlewares/auth.js';
+import { protect, authorize } from '../middlewares/auth.js';
 import { sanitizeInput, validateObjectId } from '../middlewares/validate.js';
 import { generalLimiter } from '../middlewares/rateLimiter.js';
+import { USER_ROLES } from '../utils/constants.js';
 
 const router = express.Router();
 
 router.use(sanitizeInput);
 router.use(generalLimiter);
+router.use(protect);
 
-// Public create (or add protect if needed)
-router.post('/', protect, createReportController);
+// Create report (Any authenticated user)
+router.post('/', createReportController);
 
-// List all reports (admin/staff only in real app)
-router.get('/', protect, getReportsController);
+// List all reports (Staff/Admin only)
+router.get('/', authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), getReportsController);
 
-// Get single report
-router.get('/:id', protect, validateObjectId(), getReportByIdController);
+// Get single report (Staff/Admin only - or owner, but for now restricted to staff/admin for simplicity)
+router.get('/:id', authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), validateObjectId(), getReportByIdController);
 
-// Update report
-router.patch('/:id', protect, validateObjectId(), updateReportController);
+// Update report (Staff/Admin only)
+router.patch('/:id', authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), validateObjectId(), updateReportController);
 
-// Delete report
-router.delete('/:id', protect, validateObjectId(), deleteReportController);
+// Delete report (Admin only)
+router.delete('/:id', authorize(USER_ROLES.ADMIN), validateObjectId(), deleteReportController);
 
 export default router;

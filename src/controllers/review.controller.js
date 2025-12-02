@@ -3,6 +3,9 @@ import {
   createReviewService,
   getReviewsService,
   replyToReviewService,
+  updateReviewService,
+  toggleReviewVisibilityService,
+  updateReviewReplyService,
 } from "../services/review.service.js";
 
 /**
@@ -28,7 +31,7 @@ export const createReview = asyncHandler(async (req, res) => {
  */
 export const getReviews = asyncHandler(async (req, res) => {
   try {
-    const result = await getReviewsService(req.query);
+    const result = await getReviewsService(req.query, req.user);
     res.status(200).json({
       success: true,
       data: result.reviews,
@@ -47,6 +50,57 @@ export const getReviews = asyncHandler(async (req, res) => {
 export const replyToReview = asyncHandler(async (req, res) => {
   try {
     const review = await replyToReviewService(req.params.id, req.body.content, req.user._id);
+    res.status(200).json({
+      success: true,
+      data: review,
+    });
+  } catch (error) {
+    res.status(400);
+    throw new Error(error.message);
+  }
+});
+
+/**
+ * Update a review reply (Staff/Admin only)
+ * PUT /api/reviews/:id/reply
+ */
+export const updateReviewReply = asyncHandler(async (req, res) => {
+  try {
+    const review = await updateReviewReplyService(req.params.id, req.body.content, req.user._id);
+    res.status(200).json({
+      success: true,
+      data: review,
+    });
+  } catch (error) {
+    res.status(400);
+    throw new Error(error.message);
+  }
+});
+
+/**
+ * Update a review (Customer only)
+ * PUT /api/reviews/:id
+ */
+export const updateReview = asyncHandler(async (req, res) => {
+  try {
+    const review = await updateReviewService(req.params.id, req.body, req.user._id);
+    res.status(200).json({
+      success: true,
+      data: review,
+    });
+  } catch (error) {
+    res.status(400);
+    throw new Error(error.message);
+  }
+});
+
+/**
+ * Toggle review visibility (Admin only)
+ * PATCH /api/reviews/:id/visibility
+ */
+export const toggleReviewVisibility = asyncHandler(async (req, res) => {
+  try {
+    const review = await toggleReviewVisibilityService(req.params.id);
     res.status(200).json({
       success: true,
       data: review,

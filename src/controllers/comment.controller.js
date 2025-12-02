@@ -3,6 +3,7 @@ import {
   createCommentService,
   getCommentsService,
   replyToCommentService,
+  updateCommentService,
   deleteCommentService,
 } from "../services/comment.service.js";
 
@@ -29,7 +30,7 @@ export const createComment = asyncHandler(async (req, res) => {
  */
 export const getComments = asyncHandler(async (req, res) => {
   try {
-    const result = await getCommentsService(req.query);
+    const result = await getCommentsService(req.query, req.user);
     res.status(200).json({
       success: true,
       data: result.comments,
@@ -64,7 +65,24 @@ export const replyToComment = asyncHandler(async (req, res) => {
 });
 
 /**
- * Delete a comment (Admin or Owner)
+ * Update a comment (Owner only)
+ * PUT /api/comments/:id
+ */
+export const updateComment = asyncHandler(async (req, res) => {
+  try {
+    const comment = await updateCommentService(req.params.id, req.body.content, req.user._id);
+    res.status(200).json({
+      success: true,
+      data: comment,
+    });
+  } catch (error) {
+    res.status(400);
+    throw new Error(error.message);
+  }
+});
+
+/**
+ * Delete a comment (Admin, Staff or Owner)
  * DELETE /api/comments/:id
  */
 export const deleteComment = asyncHandler(async (req, res) => {

@@ -172,7 +172,9 @@ export const COMMENT_TARGET_TYPES = {
 
 export const REPORT_STATUS = {
   PENDING: "pending", // Changed from OPEN
+  IN_PROGRESS: "in_progress",
   RESOLVED: "resolved",
+  CLOSED: "closed",
 };
 
 export const REPORT_ISSUE_TYPE = {
@@ -180,6 +182,16 @@ export const REPORT_ISSUE_TYPE = {
   STUDIO: "studio",
   STAFF: "staff",
   OTHER: "other",
+  DAMAGE: "damage",
+  COMPLAINT: "complaint",
+  MISSING_ITEM: "missing_item",
+  INAPPROPRIATE_CONTENT: "inappropriate_content", // For reporting reviews/comments
+};
+
+export const REPORT_TARGET_TYPES = {
+  BOOKING: "Booking",
+  REVIEW: "Review",
+  COMMENT: "Comment",
 };
 
 // Notifications
@@ -191,6 +203,9 @@ export const NOTIFICATION_TYPE = {
   CONFIRMATION: "confirmation",
   CHANGE: "change",
   REMINDER: "reminder",
+  NEW_REVIEW: "new_review",
+  REPLY_REVIEW: "reply_review",
+  REPLY_COMMENT: "reply_comment",
 };
 
 // #endregion
