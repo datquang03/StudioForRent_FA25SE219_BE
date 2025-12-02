@@ -515,7 +515,7 @@ export const getTransactionHistoryController = async (req, res) => {
   try {
     const { userId, startDate, endDate, status, groupBy, page, limit } = req.query;
     const userRole = req.user.role;
-    const currentUserId = req.user.id;
+    const currentUserId = req.user._id;
 
     // If customer, only allow viewing own history
     const targetUserId = userRole === USER_ROLES.CUSTOMER ? currentUserId : userId;
