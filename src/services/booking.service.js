@@ -1138,7 +1138,7 @@ const calculateScheduleDetails = (schedule) => {
     startTime: schedule.startTime,
     endTime: schedule.endTime,
     duration: durationInHours,
-    date: schedule.startTime.toISOString().split('T')[0],
+    date: startTime.toISOString().split('T')[0],
     timeRange: `${startTime.toTimeString().slice(0, 5)} - ${endTime.toTimeString().slice(0, 5)}`
   };
 };
