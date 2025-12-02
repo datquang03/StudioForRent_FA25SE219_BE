@@ -67,13 +67,27 @@ export const createPaymentOptions = async (bookingId) => {
   session.startTransaction();
 
   try {
+    // Validate bookingId
+    if (!bookingId || !mongoose.Types.ObjectId.isValid(bookingId)) {
+      throw new ValidationError('ID booking không hợp lệ');
+    }
+
     // Lock booking to prevent concurrent payment option creation
     const booking = await Booking.findById(bookingId)
       .populate('userId', 'username email')
       .session(session);
 
     if (!booking) {
-      throw new NotFoundError('Booking not found');
+      throw new NotFoundError('Booking không tồn tại');
+    }
+
+    // Validate booking status
+    if (booking.status === BOOKING_STATUS.CANCELLED) {
+      throw new ValidationError('Không thể tạo thanh toán cho booking đã hủy');
+    }
+
+    if (booking.status === BOOKING_STATUS.COMPLETED) {
+      throw new ValidationError('Booking đã hoàn thành, không thể tạo thanh toán mới');
     }
 
     // Check if payment options already exist
@@ -81,6 +95,12 @@ export const createPaymentOptions = async (bookingId) => {
       bookingId,
       status: { $in: [PAYMENT_STATUS.PENDING, PAYMENT_STATUS.PAID] }
     }).session(session);
+
+    // Check if already has paid payment
+    const paidPayment = existingPayments.find(p => p.status === PAYMENT_STATUS.PAID);
+    if (paidPayment) {
+      throw new ValidationError('Booking đã có thanh toán thành công, không thể tạo mới');
+    }
 
     if (existingPayments.length > 0) {
       await session.commitTransaction();
@@ -91,8 +111,12 @@ export const createPaymentOptions = async (bookingId) => {
     const totalAmount = booking.finalAmount;
 
     // Validate amount
+    if (!totalAmount || totalAmount <= 0) {
+      throw new ValidationError('Số tiền booking phải lớn hơn 0');
+    }
+
     if (totalAmount < 1000) {
-      throw new ValidationError('Booking amount must be at least 1,000 VND for payment');
+      throw new ValidationError('Số tiền booking tối thiểu là 1,000 VNĐ');
     }
 
     const options = [
@@ -234,12 +258,15 @@ export const createPaymentOptions = async (bookingId) => {
 
   } catch (error) {
     await session.abortTransaction();
+    if (error instanceof ValidationError || error instanceof NotFoundError) {
+      throw error;
+    }
     logger.error('Create payment options failed:', {
       bookingId,
       error: error.message,
       stack: error.stack
     });
-    throw error;
+    throw new Error('Lỗi khi tạo tùy chọn thanh toán');
   } finally {
     session.endSession();
   }
@@ -255,6 +282,11 @@ export const handlePaymentWebhook = async (webhookPayload) => {
   session.startTransaction();
 
   try {
+    // Validate webhook payload
+    if (!webhookPayload) {
+      throw new ValidationError('Dữ liệu webhook không hợp lệ');
+    }
+
     // Accept either raw body or an object { body, headers }
     const incoming = webhookPayload && webhookPayload.body ? webhookPayload : { body: webhookPayload, headers: {} };
     const body = incoming.body || {};
@@ -326,7 +358,7 @@ export const handlePaymentWebhook = async (webhookPayload) => {
     if (!payment) {
       await session.commitTransaction();
       logger.warn(`Payment not found for orderCode: ${orderCode}`);
-      return { success: false, message: 'Payment not found' };
+      throw new NotFoundError('Không tìm thấy giao dịch thanh toán');
     }
 
     // Check if already processed to prevent duplicate processing
@@ -354,6 +386,12 @@ export const handlePaymentWebhook = async (webhookPayload) => {
 
       // Update booking status
       const booking = await Booking.findById(payment.bookingId).session(session);
+      
+      if (!booking) {
+        logger.error(`Booking not found for payment: ${payment._id}`);
+        await session.abortTransaction();
+        throw new NotFoundError('Không tìm thấy booking cho giao dịch này');
+      }
       
       if (booking) {
         // Calculate total paid amount using find for accuracy
@@ -407,11 +445,14 @@ export const handlePaymentWebhook = async (webhookPayload) => {
 
   } catch (error) {
     await session.abortTransaction();
+    if (error instanceof ValidationError || error instanceof NotFoundError) {
+      throw error;
+    }
     logger.error('Webhook processing error:', {
       error: error.message,
       stack: error.stack
     });
-    throw error;
+    throw new Error('Lỗi khi xử lý webhook thanh toán');
   } finally {
     session.endSession();
   }
@@ -422,15 +463,27 @@ export const handlePaymentWebhook = async (webhookPayload) => {
  * @param {string} paymentId
  */
 export const getPaymentStatus = async (paymentId) => {
-  const payment = await Payment.findById(paymentId)
-    .populate('bookingId')
-    .lean();
+  try {
+    if (!paymentId || !mongoose.Types.ObjectId.isValid(paymentId)) {
+      throw new ValidationError('ID thanh toán không hợp lệ');
+    }
 
-  if (!payment) {
-    throw new NotFoundError('Payment not found');
+    const payment = await Payment.findById(paymentId)
+      .populate('bookingId')
+      .lean();
+
+    if (!payment) {
+      throw new NotFoundError('Thanh toán không tồn tại');
+    }
+
+    return payment;
+  } catch (error) {
+    if (error instanceof ValidationError || error instanceof NotFoundError) {
+      throw error;
+    }
+    logger.error('Error getting payment status:', error);
+    throw new Error('Lỗi khi lấy trạng thái thanh toán');
   }
-
-  return payment;
 };
 
 /**
@@ -439,6 +492,10 @@ export const getPaymentStatus = async (paymentId) => {
  */
 export const checkPaymentStatusWithPayOS = async (orderCode) => {
   try {
+    if (!orderCode) {
+      throw new ValidationError('Mã đơn hàng là bắt buộc');
+    }
+
     if (payos && typeof payos.getPaymentLinkInformation === 'function') {
       const paymentInfo = await payos.getPaymentLinkInformation(Number(orderCode));
 
@@ -455,11 +512,14 @@ export const checkPaymentStatusWithPayOS = async (orderCode) => {
 
     throw new Error('PayOS client does not support getPaymentLinkInformation');
   } catch (error) {
+    if (error instanceof ValidationError) {
+      throw error;
+    }
     logger.error('Failed to check PayOS payment status:', {
       orderCode,
       error: error.message
     });
-    throw error;
+    throw new Error('Lỗi khi kiểm tra trạng thái thanh toán với PayOS');
   }
 };
 
@@ -469,15 +529,28 @@ export const checkPaymentStatusWithPayOS = async (orderCode) => {
  * @param {string} reason
  */
 export const cancelPayment = async (paymentId, reason = 'User cancelled') => {
-  const payment = await Payment.findById(paymentId);
+  try {
+    if (!paymentId || !mongoose.Types.ObjectId.isValid(paymentId)) {
+      throw new ValidationError('ID thanh toán không hợp lệ');
+    }
 
-  if (!payment) {
-    throw new NotFoundError('Payment not found');
-  }
+    const payment = await Payment.findById(paymentId);
 
-  if (payment.status !== PAYMENT_STATUS.PENDING) {
-    throw new ValidationError('Can only cancel pending payments');
-  }
+    if (!payment) {
+      throw new NotFoundError('Thanh toán không tồn tại');
+    }
+
+    if (payment.status === PAYMENT_STATUS.PAID) {
+      throw new ValidationError('Không thể hủy thanh toán đã hoàn thành');
+    }
+
+    if (payment.status === PAYMENT_STATUS.CANCELLED) {
+      throw new ValidationError('Thanh toán đã được hủy trước đó');
+    }
+
+    if (payment.status !== PAYMENT_STATUS.PENDING) {
+      throw new ValidationError('Chỉ có thể hủy thanh toán đang chờ xử lý');
+    }
 
   // Cancel with PayOS if not mock
   const useMock = (process.env.PAYMENT_USE_MOCK || 'false').toLowerCase() === 'true';
@@ -512,6 +585,13 @@ export const cancelPayment = async (paymentId, reason = 'User cancelled') => {
   await payment.save();
 
   return payment;
+  } catch (error) {
+    if (error instanceof ValidationError || error instanceof NotFoundError) {
+      throw error;
+    }
+    logger.error('Error canceling payment:', error);
+    throw new Error('Lỗi khi hủy thanh toán');
+  }
 };
 
 /**
@@ -523,17 +603,29 @@ export const createPaymentForOption = async (bookingId, opts = {}) => {
   session.startTransaction();
 
   try {
+    if (!bookingId || !mongoose.Types.ObjectId.isValid(bookingId)) {
+      throw new ValidationError('ID booking không hợp lệ');
+    }
+
     const booking = await Booking.findById(bookingId)
       .populate('userId', 'username email')
       .session(session);
 
     if (!booking) {
-      throw new NotFoundError('Booking not found');
+      throw new NotFoundError('Booking không tồn tại');
+    }
+
+    if (booking.status === BOOKING_STATUS.CANCELLED) {
+      throw new ValidationError('Không thể tạo thanh toán cho booking đã hủy');
     }
 
     const totalAmount = booking.finalAmount;
+    if (!totalAmount || totalAmount <= 0) {
+      throw new ValidationError('Số tiền booking phải lớn hơn 0');
+    }
+
     if (totalAmount < 1000) {
-      throw new ValidationError('Booking amount must be at least 1,000 VND for payment');
+      throw new ValidationError('Số tiền booking tối thiểu là 1,000 VNĐ');
     }
 
     // Determine payType and amount
@@ -545,7 +637,7 @@ export const createPaymentForOption = async (bookingId, opts = {}) => {
     };
     const payType = opts.payType || payTypeMap[perc];
     if (!payType) {
-      throw new ValidationError('Invalid percentage or payType');
+      throw new ValidationError('Phần trăm hoặc loại thanh toán không hợp lệ. Chọn: 30, 50, hoặc 100');
     }
 
     const amount = payType === PAY_TYPE.FULL ? totalAmount : Math.round(totalAmount * (payType === PAY_TYPE.PREPAY_30 ? 0.3 : 0.5));
@@ -603,8 +695,11 @@ export const createPaymentForOption = async (bookingId, opts = {}) => {
 
   } catch (error) {
     await session.abortTransaction();
+    if (error instanceof ValidationError || error instanceof NotFoundError) {
+      throw error;
+    }
     logger.error('Create single payment failed:', { bookingId, error: error.message });
-    throw error;
+    throw new Error('Lỗi khi tạo thanh toán');
   } finally {
     session.endSession();
   }
@@ -618,12 +713,20 @@ export const createPaymentForRemaining = async (bookingId, opts = {}) => {
   session.startTransaction();
 
   try {
+    if (!bookingId || !mongoose.Types.ObjectId.isValid(bookingId)) {
+      throw new ValidationError('ID booking không hợp lệ');
+    }
+
     const booking = await Booking.findById(bookingId)
       .populate('userId', 'username email')
       .session(session);
 
     if (!booking) {
-      throw new NotFoundError('Booking not found');
+      throw new NotFoundError('Booking không tồn tại');
+    }
+
+    if (booking.status === BOOKING_STATUS.CANCELLED) {
+      throw new ValidationError('Không thể tạo thanh toán cho booking đã hủy');
     }
 
     // Sum completed payments
@@ -638,12 +741,16 @@ export const createPaymentForRemaining = async (bookingId, opts = {}) => {
     // Do not allow creating remaining payment after checkout/completion
     if (booking.status === BOOKING_STATUS.COMPLETED) {
       await session.commitTransaction();
-      throw new ValidationError('Cannot create remaining payment after checkout');
+      throw new ValidationError('Không thể tạo thanh toán sau khi hoàn thành booking');
     }
 
     if (remaining <= 0) {
       await session.commitTransaction();
-      throw new ValidationError('No remaining amount to pay');
+      throw new ValidationError('Không còn số tiền nào cần thanh toán');
+    }
+
+    if (remaining < 1000) {
+      throw new ValidationError('Số tiền còn lại tối thiểu là 1,000 VNĐ');
     }
 
     // Idempotency: check existing pending 'full' payment created as remaining
@@ -726,8 +833,11 @@ export const createPaymentForRemaining = async (bookingId, opts = {}) => {
     return payment[0];
   } catch (error) {
     await session.abortTransaction();
+    if (error instanceof ValidationError || error instanceof NotFoundError) {
+      throw error;
+    }
     logger.error('Create remaining payment failed:', { bookingId, error: error.message });
-    throw error;
+    throw new Error('Lỗi khi tạo thanh toán số tiền còn lại');
   } finally {
     session.endSession();
   }
@@ -760,17 +870,32 @@ export const createRefund = async (paymentId, opts = {}) => {
  * @returns {object} Paginated payment history
  */
 export const getStaffPaymentHistory = async (filters = {}) => {
-  const {
-    status,
-    studioId,
-    startDate,
-    endDate,
-    page = 1,
-    limit = 10
-  } = filters;
+  try {
+    const {
+      status,
+      studioId,
+      startDate,
+      endDate,
+      page = 1,
+      limit = 10
+    } = filters;
 
-  // Build base query
-  let query = {};
+    // Validate status if provided
+    if (status && !Object.values(PAYMENT_STATUS).includes(status)) {
+      throw new ValidationError(`Trạng thái không hợp lệ. Chọn từ: ${Object.values(PAYMENT_STATUS).join(', ')}`);
+    }
+
+    // Validate studioId if provided
+    if (studioId && !mongoose.Types.ObjectId.isValid(studioId)) {
+      throw new ValidationError('ID studio không hợp lệ');
+    }
+
+    // Validate pagination
+    const safePage = Math.max(parseInt(page) || 1, 1);
+    const safeLimit = Math.min(Math.max(parseInt(limit) || 10, 1), 100);
+
+    // Build base query
+    let query = {};
 
   if (status) {
     query.status = status;
@@ -834,10 +959,490 @@ export const getStaffPaymentHistory = async (filters = {}) => {
   return {
     payments: enrichedPayments,
     pagination: {
-      page: parseInt(page),
-      limit: parseInt(limit),
+      page: safePage,
+      limit: safeLimit,
       total,
-      pages: Math.ceil(total / limit)
+      pages: Math.ceil(total / safeLimit)
     }
   };
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      throw error;
+    }
+    logger.error('Error getting staff payment history:', error);
+    throw new Error('Lỗi khi lấy lịch sử thanh toán');
+  }
+};
+
+/**
+ * Get transactions for customer (my transactions)
+ * @param {string} userId - Customer user ID
+ * @param {object} filters - Filter options
+ * @returns {object} Customer's transaction history
+ */
+export const getMyTransactions = async (userId, filters = {}) => {
+  try {
+    if (!userId) {
+      throw new ValidationError('ID người dùng là bắt buộc');
+    }
+
+    const {
+      status,
+      startDate,
+      endDate,
+      page = 1,
+      limit = 20
+    } = filters;
+
+    // Validate status if provided
+    if (status && !Object.values(PAYMENT_STATUS).includes(status)) {
+      throw new ValidationError(`Trạng thái không hợp lệ. Chọn từ: ${Object.values(PAYMENT_STATUS).join(', ')}`);
+    }
+
+    // Get all bookings for this user
+    const userBookings = await Booking.find({ userId })
+      .select('_id')
+      .lean();
+
+    const bookingIds = userBookings.map(b => b._id);
+
+    if (bookingIds.length === 0) {
+      return {
+        transactions: [],
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total: 0,
+          pages: 0
+        }
+      };
+    }
+
+    // Build query
+    const query = {
+      bookingId: { $in: bookingIds }
+    };
+
+    if (status) {
+      query.status = status;
+    }
+
+    if (startDate || endDate) {
+      query.createdAt = {};
+      if (startDate) query.createdAt.$gte = new Date(startDate);
+      if (endDate) query.createdAt.$lte = new Date(endDate);
+    }
+
+    const total = await Payment.countDocuments(query);
+
+    const transactions = await Payment.find(query)
+      .populate({
+        path: 'bookingId',
+        populate: {
+          path: 'scheduleId',
+          populate: { path: 'studioId', select: 'name location images' }
+        }
+      })
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean();
+
+    return {
+      transactions,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    };
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      throw error;
+    }
+    logger.error('Error in getMyTransactions:', error);
+    throw new Error('Lỗi khi lấy lịch sử giao dịch');
+  }
+};
+
+/**
+ * Get all transactions for staff/admin
+ * @param {object} filters - Filter options
+ * @returns {object} All transactions with details
+ */
+export const getAllTransactions = async (filters = {}) => {
+  try {
+    const {
+      status,
+      payType,
+      bookingId,
+      userId,
+      startDate,
+      endDate,
+      minAmount,
+      maxAmount,
+      page = 1,
+      limit = 20
+    } = filters;
+
+    // Validate status if provided
+    if (status && !Object.values(PAYMENT_STATUS).includes(status)) {
+      throw new ValidationError(`Trạng thái không hợp lệ. Chọn từ: ${Object.values(PAYMENT_STATUS).join(', ')}`);
+    }
+
+    // Validate payType if provided
+    if (payType && !Object.values(PAY_TYPE).includes(payType)) {
+      throw new ValidationError(`Loại thanh toán không hợp lệ. Chọn từ: ${Object.values(PAY_TYPE).join(', ')}`);
+    }
+
+    // Build query
+    const query = {};
+
+    if (status) query.status = status;
+    if (payType) query.payType = payType;
+    if (bookingId) query.bookingId = bookingId;
+
+    if (startDate || endDate) {
+      query.createdAt = {};
+      if (startDate) query.createdAt.$gte = new Date(startDate);
+      if (endDate) query.createdAt.$lte = new Date(endDate);
+    }
+
+    if (minAmount !== undefined || maxAmount !== undefined) {
+      query.amount = {};
+      if (minAmount !== undefined && !isNaN(minAmount)) query.amount.$gte = Number(minAmount);
+      if (maxAmount !== undefined && !isNaN(maxAmount)) query.amount.$lte = Number(maxAmount);
+    }
+
+    // If filtering by userId, get their bookings first
+    if (userId) {
+      const userBookings = await Booking.find({ userId }).select('_id').lean();
+      const bookingIds = userBookings.map(b => b._id);
+      query.bookingId = { $in: bookingIds };
+    }
+
+    const total = await Payment.countDocuments(query);
+
+    const transactions = await Payment.find(query)
+      .populate({
+        path: 'bookingId',
+        populate: [
+          { path: 'userId', select: 'fullName email phone username' },
+          {
+            path: 'scheduleId',
+            populate: { path: 'studioId', select: 'name location images basePricePerHour' }
+          }
+        ]
+      })
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean();
+
+    return {
+      transactions,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / limit)
+      },
+      summary: {
+        totalTransactions: total,
+        filters: {
+          status,
+          payType,
+          bookingId,
+          userId,
+          dateRange: startDate || endDate ? {
+            startDate: startDate || null,
+            endDate: endDate || null
+          } : null
+        }
+      }
+    };
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      throw error;
+    }
+    logger.error('Error in getAllTransactions:', error);
+    throw new Error('Lỗi khi lấy tất cả giao dịch');
+  }
+};
+
+/**
+ * Get transaction by ID
+ * @param {string} transactionId - Payment/Transaction ID
+ * @param {string} userId - User ID (optional, for customer access control)
+ * @param {string} userRole - User role (customer, staff, admin)
+ * @returns {object} Transaction details
+ */
+export const getTransactionById = async (transactionId, userId = null, userRole = null) => {
+  try {
+    if (!transactionId) {
+      throw new ValidationError('ID giao dịch là bắt buộc');
+    }
+
+    const transaction = await Payment.findById(transactionId)
+      .populate({
+        path: 'bookingId',
+        populate: [
+          { path: 'userId', select: 'fullName email phone username' },
+          {
+            path: 'scheduleId',
+            populate: { path: 'studioId', select: 'name location images basePricePerHour capacity area' }
+          }
+        ]
+      })
+      .lean();
+
+    if (!transaction) {
+      throw new NotFoundError('Giao dịch không tồn tại');
+    }
+
+    // Access control: customers can only view their own transactions
+    if (userRole === 'customer' && userId) {
+      const booking = transaction.bookingId;
+      if (!booking || booking.userId?._id?.toString() !== userId.toString()) {
+        throw new ValidationError('Không có quyền xem giao dịch này');
+      }
+    }
+
+    return transaction;
+  } catch (error) {
+    if (error instanceof ValidationError || error instanceof NotFoundError) {
+      throw error;
+    }
+    logger.error('Error in getTransactionById:', error);
+    throw new Error('Lỗi khi lấy thông tin giao dịch');
+  }
+};
+
+/**
+ * Delete transaction (staff/admin only)
+ * @param {string} transactionId - Transaction ID to delete
+ * @returns {object} Deleted transaction
+ */
+export const deleteTransaction = async (transactionId) => {
+  try {
+    if (!transactionId) {
+      throw new ValidationError('ID giao dịch là bắt buộc');
+    }
+
+    const transaction = await Payment.findById(transactionId);
+
+    if (!transaction) {
+      throw new NotFoundError('Giao dịch không tồn tại');
+    }
+
+    // Only allow deletion of cancelled or failed transactions
+    if (transaction.status === PAYMENT_STATUS.PAID) {
+      throw new ValidationError('Không thể xóa giao dịch đã thanh toán. Vui lòng tạo hoàn tiền thay vì xóa.');
+    }
+
+    await Payment.findByIdAndDelete(transactionId);
+
+    logger.info(`Transaction deleted: ${transactionId}`);
+
+    return transaction;
+  } catch (error) {
+    if (error instanceof ValidationError || error instanceof NotFoundError) {
+      throw error;
+    }
+    logger.error('Error in deleteTransaction:', error);
+    throw new Error('Lỗi khi xóa giao dịch');
+  }
+};
+
+/**
+ * Delete all cancelled/failed transactions (staff/admin only)
+ * @param {object} filters - Filter options
+ * @returns {object} Delete result
+ */
+export const deleteAllCancelledTransactions = async (filters = {}) => {
+  try {
+    const { beforeDate, bookingId } = filters;
+
+    // Build query - only allow deletion of cancelled/failed transactions
+    const query = {
+      status: { $in: [PAYMENT_STATUS.CANCELLED, PAYMENT_STATUS.FAILED] }
+    };
+
+    if (beforeDate) {
+      query.createdAt = { $lt: new Date(beforeDate) };
+    }
+
+    if (bookingId) {
+      query.bookingId = bookingId;
+    }
+
+    const count = await Payment.countDocuments(query);
+
+    if (count === 0) {
+      return {
+        success: true,
+        deletedCount: 0,
+        message: 'Không có giao dịch nào để xóa'
+      };
+    }
+
+    const result = await Payment.deleteMany(query);
+
+    logger.info(`Bulk delete transactions: ${result.deletedCount} transactions deleted`);
+
+    return {
+      success: true,
+      deletedCount: result.deletedCount,
+      message: `Đã xóa ${result.deletedCount} giao dịch đã hủy/thất bại`
+    };
+  } catch (error) {
+    logger.error('Error in deleteAllCancelledTransactions:', error);
+    throw new Error('Lỗi khi xóa các giao dịch');
+  }
+};
+
+/**
+ * Get transaction history with statistics
+ * @param {object} filters - Filter options
+ * @returns {object} Transaction history with stats
+ */
+export const getTransactionHistory = async (filters = {}) => {
+  try {
+    const {
+      userId,
+      startDate,
+      endDate,
+      status,
+      groupBy = 'day', // day, week, month
+      page = 1,
+      limit = 50
+    } = filters;
+
+    // Build base query
+    const query = {};
+
+    if (userId) {
+      const userBookings = await Booking.find({ userId }).select('_id').lean();
+      const bookingIds = userBookings.map(b => b._id);
+      query.bookingId = { $in: bookingIds };
+    }
+
+    if (status) {
+      if (!Object.values(PAYMENT_STATUS).includes(status)) {
+        throw new ValidationError(`Trạng thái không hợp lệ. Chọn từ: ${Object.values(PAYMENT_STATUS).join(', ')}`);
+      }
+      query.status = status;
+    }
+
+    if (startDate || endDate) {
+      query.createdAt = {};
+      if (startDate) query.createdAt.$gte = new Date(startDate);
+      if (endDate) query.createdAt.$lte = new Date(endDate);
+    }
+
+    // Get transactions
+    const total = await Payment.countDocuments(query);
+
+    const transactions = await Payment.find(query)
+      .populate({
+        path: 'bookingId',
+        populate: {
+          path: 'scheduleId',
+          populate: { path: 'studioId', select: 'name' }
+        }
+      })
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean();
+
+    // Calculate statistics
+    const allTransactions = await Payment.find(query).select('amount status createdAt payType').lean();
+
+    const stats = {
+      totalAmount: 0,
+      paidAmount: 0,
+      pendingAmount: 0,
+      cancelledAmount: 0,
+      totalPaidTransactions: 0,
+      totalPendingTransactions: 0,
+      totalCancelledTransactions: 0,
+      byPayType: {}
+    };
+
+    allTransactions.forEach(t => {
+      stats.totalAmount += t.amount || 0;
+      
+      if (t.status === PAYMENT_STATUS.PAID) {
+        stats.paidAmount += t.amount || 0;
+        stats.totalPaidTransactions++;
+      } else if (t.status === PAYMENT_STATUS.PENDING) {
+        stats.pendingAmount += t.amount || 0;
+        stats.totalPendingTransactions++;
+      } else if (t.status === PAYMENT_STATUS.CANCELLED) {
+        stats.cancelledAmount += t.amount || 0;
+        stats.totalCancelledTransactions++;
+      }
+
+      // Group by payType
+      if (t.payType) {
+        if (!stats.byPayType[t.payType]) {
+          stats.byPayType[t.payType] = { count: 0, amount: 0 };
+        }
+        stats.byPayType[t.payType].count++;
+        stats.byPayType[t.payType].amount += t.amount || 0;
+      }
+    });
+
+    // Group by time period
+    const groupedData = {};
+    allTransactions.forEach(t => {
+      if (!t.createdAt) return;
+
+      const date = new Date(t.createdAt);
+      let key;
+
+      if (groupBy === 'day') {
+        key = date.toISOString().split('T')[0];
+      } else if (groupBy === 'week') {
+        const weekStart = new Date(date);
+        weekStart.setDate(date.getDate() - date.getDay());
+        key = weekStart.toISOString().split('T')[0];
+      } else if (groupBy === 'month') {
+        key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      }
+
+      if (!groupedData[key]) {
+        groupedData[key] = { count: 0, amount: 0, paid: 0, pending: 0, cancelled: 0 };
+      }
+
+      groupedData[key].count++;
+      groupedData[key].amount += t.amount || 0;
+      
+      if (t.status === PAYMENT_STATUS.PAID) groupedData[key].paid++;
+      else if (t.status === PAYMENT_STATUS.PENDING) groupedData[key].pending++;
+      else if (t.status === PAYMENT_STATUS.CANCELLED) groupedData[key].cancelled++;
+    });
+
+    return {
+      transactions,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / limit)
+      },
+      statistics: stats,
+      timeline: Object.entries(groupedData)
+        .map(([period, data]) => ({ period, ...data }))
+        .sort((a, b) => b.period.localeCompare(a.period))
+    };
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      throw error;
+    }
+    logger.error('Error in getTransactionHistory:', error);
+    throw new Error('Lỗi khi lấy lịch sử giao dịch');
+  }
 };

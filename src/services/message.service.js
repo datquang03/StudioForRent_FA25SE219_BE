@@ -19,18 +19,37 @@ import mongoose from 'mongoose';
  */
 export const createMessage = async (fromUserId, toUserId, content, bookingId = null, io = null) => {
   try {
+    // Validate fromUserId
+    if (!fromUserId) {
+      throw new Error('ID người gửi là bắt buộc');
+    }
+    if (!mongoose.Types.ObjectId.isValid(fromUserId)) {
+      throw new Error('ID người gửi không hợp lệ');
+    }
+
     // Validate toUserId
-    if (!toUserId || !mongoose.Types.ObjectId.isValid(toUserId)) {
-      throw new Error('toUserId không hợp lệ');
+    if (!toUserId) {
+      throw new Error('ID người nhận là bắt buộc');
+    }
+    if (!mongoose.Types.ObjectId.isValid(toUserId)) {
+      throw new Error('ID người nhận không hợp lệ');
     }
 
     // Validate content
+    if (!content) {
+      throw new Error('Nội dung tin nhắn là bắt buộc');
+    }
     if (typeof content !== 'string' || content.trim().length === 0) {
       throw new Error('Nội dung tin nhắn không được để trống');
     }
     const MAX_CONTENT_LENGTH = 5000;
     if (content.length > MAX_CONTENT_LENGTH) {
       throw new Error(`Nội dung tin nhắn không được vượt quá ${MAX_CONTENT_LENGTH} ký tự`);
+    }
+
+    // Validate bookingId nếu được cung cấp
+    if (bookingId && !mongoose.Types.ObjectId.isValid(bookingId)) {
+      throw new Error('ID booking không hợp lệ');
     }
 
     const message = new Message({
@@ -90,6 +109,13 @@ export const createMessage = async (fromUserId, toUserId, content, bookingId = n
  */
 export const getConversations = async (userId) => {
   try {
+    if (!userId) {
+      throw new Error('ID người dùng là bắt buộc');
+    }
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      throw new Error('ID người dùng không hợp lệ');
+    }
+
     // Lấy conversations theo booking (nếu có booking module)
     const bookingMessages = await Message.find({
       $or: [{ fromUserId: userId }, { toUserId: userId }],
@@ -179,6 +205,27 @@ export const getConversations = async (userId) => {
  */
 export const getMessagesInConversation = async (bookingId, userId, { page = 1, limit = 20 } = {}) => {
   try {
+    if (!bookingId) {
+      throw new Error('ID booking là bắt buộc');
+    }
+    if (!mongoose.Types.ObjectId.isValid(bookingId)) {
+      throw new Error('ID booking không hợp lệ');
+    }
+    if (!userId) {
+      throw new Error('ID người dùng là bắt buộc');
+    }
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      throw new Error('ID người dùng không hợp lệ');
+    }
+
+    // Validate pagination
+    if (page < 1) {
+      throw new Error('Số trang phải lớn hơn 0');
+    }
+    if (limit < 1 || limit > 100) {
+      throw new Error('Giới hạn phải từ 1 đến 100');
+    }
+
     // Verify user is participant in booking (placeholder - cần check Booking model)
     // For now, assume access if user has messages in conversation
 
@@ -217,6 +264,19 @@ export const getMessagesInConversation = async (bookingId, userId, { page = 1, l
  */
 export const markMessageAsRead = async (messageId, userId) => {
   try {
+    if (!messageId) {
+      throw new Error('ID tin nhắn là bắt buộc');
+    }
+    if (!mongoose.Types.ObjectId.isValid(messageId)) {
+      throw new Error('ID tin nhắn không hợp lệ');
+    }
+    if (!userId) {
+      throw new Error('ID người dùng là bắt buộc');
+    }
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      throw new Error('ID người dùng không hợp lệ');
+    }
+
     const message = await Message.findOneAndUpdate(
       { _id: messageId, toUserId: userId },
       { isRead: true },
@@ -224,7 +284,7 @@ export const markMessageAsRead = async (messageId, userId) => {
     );
 
     if (!message) {
-      throw new Error('Message not found or not owned by user');
+      throw new Error('Tin nhắn không tồn tại hoặc bạn không có quyền truy cập');
     }
 
     logger.info(`Message ${messageId} marked as read`);
@@ -242,13 +302,26 @@ export const markMessageAsRead = async (messageId, userId) => {
  */
 export const deleteMessage = async (messageId, userId) => {
   try {
+    if (!messageId) {
+      throw new Error('ID tin nhắn là bắt buộc');
+    }
+    if (!mongoose.Types.ObjectId.isValid(messageId)) {
+      throw new Error('ID tin nhắn không hợp lệ');
+    }
+    if (!userId) {
+      throw new Error('ID người dùng là bắt buộc');
+    }
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      throw new Error('ID người dùng không hợp lệ');
+    }
+
     const message = await Message.findOneAndDelete({
       _id: messageId,
       $or: [{ fromUserId: userId }, { toUserId: userId }]
     });
 
     if (!message) {
-      throw new Error('Message not found or not owned by user');
+      throw new Error('Tin nhắn không tồn tại hoặc bạn không có quyền truy cập');
     }
 
     logger.info(`Message ${messageId} deleted`);

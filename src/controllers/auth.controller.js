@@ -92,7 +92,7 @@ export const googleLoginController = asyncHandler(async (req, res) => {
 
   if (!idToken) {
     res.status(400);
-    throw new Error('idToken is required');
+    throw new Error('idToken là bắt buộc');
   }
 
   const ipAddress = req.ip || req.connection.remoteAddress;
@@ -100,7 +100,7 @@ export const googleLoginController = asyncHandler(async (req, res) => {
 
   res.status(200).json({
     success: true,
-    message: 'Login with Google successful',
+    message: 'Đăng nhập với Google thành công',
     data: { user, accessToken, refreshToken },
   });
 });
@@ -110,7 +110,7 @@ export const refreshTokenController = asyncHandler(async (req, res) => {
 
   if (!refreshToken) {
     res.status(400);
-    throw new ValidationError('Refresh token is required!');
+    throw new ValidationError('Refresh token là bắt buộc!');
   }
 
   const ipAddress = req.ip || req.connection.remoteAddress;
@@ -118,7 +118,7 @@ export const refreshTokenController = asyncHandler(async (req, res) => {
 
   res.status(200).json({
     success: true,
-    message: 'Token refreshed successfully!',
+    message: 'Làm mới token thành công!',
     data: tokens,
   });
 });

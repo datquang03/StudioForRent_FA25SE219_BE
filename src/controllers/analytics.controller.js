@@ -17,7 +17,7 @@ export const getDashboardStatsController = asyncHandler(async (req, res) => {
 
   res.status(200).json({
     success: true,
-    message: 'Dashboard statistics retrieved successfully',
+    message: 'Lấy thống kê dashboard thành công',
     data: stats
   });
 });

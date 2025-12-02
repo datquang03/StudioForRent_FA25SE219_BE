@@ -79,55 +79,109 @@ export const getStudioById = async (studioId) => {
 
 // #region Create & Update Studios
 export const createStudio = async (studioData) => {
-  const { name, description, area, location, basePricePerHour, capacity, images, video } = studioData;
-  
-  const studio = await Studio.create({
-    name,
-    description,
-    area,
-    location,
-    basePricePerHour,
-    capacity,
-    images: images || [],
-    video: video || null,
-    status: STUDIO_STATUS.ACTIVE,
-  });
-  
-  return studio;
+  try {
+    const { name, description, area, location, basePricePerHour, capacity, images, video } = studioData;
+    
+    // Validation
+    if (!name || !description || !area || !location || !basePricePerHour || !capacity) {
+      throw new ValidationError('Thiếu thông tin bắt buộc: name, description, area, location, basePricePerHour, capacity');
+    }
+    
+    if (basePricePerHour < 0) {
+      throw new ValidationError('Giá thuê phải lớn hơn hoặc bằng 0');
+    }
+    
+    if (capacity < 1) {
+      throw new ValidationError('Sức chứa phải lớn hơn 0');
+    }
+    
+    if (area < 0) {
+      throw new ValidationError('Diện tích phải lớn hơn hoặc bằng 0');
+    }
+    
+    const studio = await Studio.create({
+      name,
+      description,
+      area,
+      location,
+      basePricePerHour,
+      capacity,
+      images: images || [],
+      video: video || null,
+      status: STUDIO_STATUS.ACTIVE,
+    });
+    
+    return studio;
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      throw error;
+    }
+    throw new Error(`Không thể tạo studio: ${error.message}`);
+  }
 };
 
 export const updateStudio = async (studioId, updateData) => {
-  const studio = await Studio.findById(studioId);
-  
-  if (!studio) {
-    throw new NotFoundError('Studio không tồn tại!');
-  }
-  
-  const allowedUpdates = ['name', 'description', 'area', 'location', 'basePricePerHour', 'capacity', 'images', 'video'];
-  
-  allowedUpdates.forEach((field) => {
-    if (updateData[field] !== undefined) {
-      studio[field] = updateData[field];
+  try {
+    const studio = await Studio.findById(studioId);
+    
+    if (!studio) {
+      throw new NotFoundError('Studio không tồn tại!');
     }
-  });
-  
-  await studio.save();
-  
-  // Invalidate cache after update
-  const cacheKey = `studio:${studioId}`;
-  await cacheSet(cacheKey, null); // Delete cache
-  
-  return studio;
+    
+    // Validate numeric fields
+    if (updateData.basePricePerHour !== undefined && updateData.basePricePerHour < 0) {
+      throw new ValidationError('Giá thuê phải lớn hơn hoặc bằng 0');
+    }
+    
+    if (updateData.capacity !== undefined && updateData.capacity < 1) {
+      throw new ValidationError('Sức chứa phải lớn hơn 0');
+    }
+    
+    if (updateData.area !== undefined && updateData.area < 0) {
+      throw new ValidationError('Diện tích phải lớn hơn hoặc bằng 0');
+    }
+    
+    const allowedUpdates = ['name', 'description', 'area', 'location', 'basePricePerHour', 'capacity', 'images', 'video'];
+    
+    allowedUpdates.forEach((field) => {
+      if (updateData[field] !== undefined) {
+        studio[field] = updateData[field];
+      }
+    });
+    
+    await studio.save();
+    
+    // Invalidate cache after update
+    const cacheKey = `studio:${studioId}`;
+    await cacheSet(cacheKey, null); // Delete cache
+    
+    return studio;
+  } catch (error) {
+    if (error instanceof NotFoundError || error instanceof ValidationError) {
+      throw error;
+    }
+    throw new Error(`Không thể cập nhật studio: ${error.message}`);
+  }
 };
 
 export const addStudioImages = async (studioId, newImages) => {
-  const studio = await Studio.findById(studioId);
-  
-  if (!studio) {
-    throw new NotFoundError('Studio không tồn tại!');
-  }
-  
-  if (newImages && newImages.length > 0) {
+  try {
+    const studio = await Studio.findById(studioId);
+    
+    if (!studio) {
+      throw new NotFoundError('Studio không tồn tại!');
+    }
+    
+    if (!newImages || newImages.length === 0) {
+      throw new ValidationError('Không có ảnh nào để thêm');
+    }
+    
+    // Validate image URLs
+    const invalidImages = newImages.filter(img => !img || typeof img !== 'string' || img.trim() === '');
+    if (invalidImages.length > 0) {
+      throw new ValidationError('URL ảnh không hợp lệ');
+    }
+    
     // Append new images to existing array
     studio.images = [...studio.images, ...newImages];
     await studio.save();
@@ -135,26 +189,36 @@ export const addStudioImages = async (studioId, newImages) => {
     // Invalidate cache
     const cacheKey = `studio:${studioId}`;
     await cacheSet(cacheKey, null);
+    
+    return studio;
+  } catch (error) {
+    if (error instanceof NotFoundError || error instanceof ValidationError) {
+      throw error;
+    }
+    throw new Error(`Không thể thêm ảnh studio: ${error.message}`);
   }
-  
-  return studio;
 };
 // #endregion
 
 // #region Change Status & Delete
 export const changeStudioStatus = async (studioId, newStatus) => {
-  if (!Object.values(STUDIO_STATUS).includes(newStatus)) {
-    throw new ValidationError('Status không hợp lệ!');
-  }
-  
-  const studio = await Studio.findById(studioId);
-  
-  if (!studio) {
-    throw new NotFoundError('Studio không tồn tại!');
-  }
-  
-  studio.status = newStatus;
-  await studio.save();
+  try {
+    if (!newStatus) {
+      throw new ValidationError('Trạng thái mới là bắt buộc');
+    }
+    
+    if (!Object.values(STUDIO_STATUS).includes(newStatus)) {
+      throw new ValidationError(`Status không hợp lệ! Các giá trị hợp lệ: ${Object.values(STUDIO_STATUS).join(', ')}`);
+    }
+    
+    const studio = await Studio.findById(studioId);
+    
+    if (!studio) {
+      throw new NotFoundError('Studio không tồn tại!');
+    }
+    
+    studio.status = newStatus;
+    await studio.save();
 
   // Invalidate cache after status change
   const cacheKey = `studio:${studioId}`;
@@ -164,49 +228,62 @@ export const changeStudioStatus = async (studioId, newStatus) => {
   const { User } = await import('../models/index.js');
   const staff = await User.find({ role: { $in: ['staff', 'admin'] }, isActive: true }).select('_id');
 
-  staff.forEach(async (user) => {
-    try {
-      await createAndSendNotification(
-        user._id,
-        NOTIFICATION_TYPE.CHANGE,
-        'Studio Status Updated',
-        `Studio "${studio.name}" has been changed to status: ${newStatus}.`,
-        false,
-        null
-      );
-    } catch (error) {
-      console.error(`Failed to notify staff ${user._id}:`, error);
-    }
-  });
+    staff.forEach(async (user) => {
+      try {
+        await createAndSendNotification(
+          user._id,
+          NOTIFICATION_TYPE.CHANGE,
+          'Studio Status Updated',
+          `Studio "${studio.name}" has been changed to status: ${newStatus}.`,
+          false,
+          null
+        );
+      } catch (error) {
+        console.error(`Failed to notify staff ${user._id}:`, error);
+      }
+    });
 
-  return studio;
+    return studio;
+  } catch (error) {
+    if (error instanceof NotFoundError || error instanceof ValidationError) {
+      throw error;
+    }
+    throw new Error(`Không thể thay đổi trạng thái studio: ${error.message}`);
+  }
 };
 
 export const deleteStudio = async (studioId) => {
-  const studio = await Studio.findById(studioId);
-  
-  if (!studio) {
-    throw new NotFoundError('Studio không tồn tại!');
+  try {
+    const studio = await Studio.findById(studioId);
+    
+    if (!studio) {
+      throw new NotFoundError('Studio không tồn tại!');
+    }
+
+    // Check for future bookings
+    const futureBookings = await Schedule.exists({
+      studioId,
+      status: { $in: [SCHEDULE_STATUS.BOOKED, SCHEDULE_STATUS.ONGOING] },
+      startTime: { $gt: new Date() }
+    }).hint({ studioId: 1, status: 1, startTime: 1 });
+
+    if (futureBookings) {
+      throw new ValidationError('Không thể xóa studio đang có lịch đặt trong tương lai! Hãy hủy lịch hoặc chuyển trạng thái sang bảo trì.');
+    }
+
+    await Studio.findByIdAndDelete(studioId);
+    
+    // Invalidate cache after delete
+    const cacheKey = `studio:${studioId}`;
+    await cacheSet(cacheKey, null); // Delete cache
+    
+    return { message: 'Xóa studio thành công!' };
+  } catch (error) {
+    if (error instanceof NotFoundError || error instanceof ValidationError) {
+      throw error;
+    }
+    throw new Error(`Không thể xóa studio: ${error.message}`);
   }
-
-  // Check for future bookings
-  const futureBookings = await Schedule.exists({
-    studioId,
-    status: { $in: [SCHEDULE_STATUS.BOOKED, SCHEDULE_STATUS.ONGOING] },
-    startTime: { $gt: new Date() }
-  }).hint({ studioId: 1, status: 1, startTime: 1 });
-
-  if (futureBookings) {
-    throw new ValidationError('Không thể xóa studio đang có lịch đặt trong tương lai! Hãy hủy lịch hoặc chuyển trạng thái sang bảo trì.');
-  }
-
-  await Studio.findByIdAndDelete(studioId);
-  
-  // Invalidate cache after delete
-  const cacheKey = `studio:${studioId}`;
-  await cacheSet(cacheKey, null); // Delete cache
-  
-  return { message: 'Xóa studio thành công!' };
 };
 // #endregion
 
@@ -943,6 +1020,116 @@ export const getStudiosBookedSchedules = async (options = {}) => {
     studios: studiosWithBookings,
     pagination: studiosResult.pagination
   };
+};
+
+/**
+ * Get studio availability for a date range
+ * @param {string} studioId - Studio ID
+ * @param {Date} startDate - Start date for availability check
+ * @param {Date} endDate - End date for availability check
+ * @returns {object} Available and booked time slots
+ */
+export const getStudioAvailability = async (studioId, startDate, endDate) => {
+  try {
+    // Validate studioId
+    if (!studioId) {
+      throw new ValidationError('ID studio là bắt buộc');
+    }
+
+    // Validate studio exists
+    const studio = await Studio.findById(studioId).lean();
+    if (!studio) {
+      throw new NotFoundError('Studio không tồn tại');
+    }
+
+    // Validate dates
+    const start = startDate ? new Date(startDate) : new Date();
+    const end = endDate ? new Date(endDate) : new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000); // Default 7 days
+
+    if (isNaN(start.getTime())) {
+      throw new ValidationError('Ngày bắt đầu không hợp lệ');
+    }
+
+    if (isNaN(end.getTime())) {
+      throw new ValidationError('Ngày kết thúc không hợp lệ');
+    }
+
+    if (end <= start) {
+      throw new ValidationError('Ngày kết thúc phải sau ngày bắt đầu');
+    }
+
+    // Limit date range to prevent performance issues (max 30 days)
+    const MAX_RANGE_DAYS = 30;
+    const rangeDays = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24);
+    if (rangeDays > MAX_RANGE_DAYS) {
+      throw new ValidationError(`Khoảng thời gian tối đa là ${MAX_RANGE_DAYS} ngày`);
+    }
+
+    // Get all schedules for this studio in the date range
+    const schedules = await Schedule.find({
+      studioId,
+      startTime: { $lte: end },
+      endTime: { $gte: start }
+    })
+    .sort({ startTime: 1 })
+    .lean();
+
+    // Separate available and booked schedules
+    const availableSlots = [];
+    const bookedSlots = [];
+
+    schedules.forEach(schedule => {
+      const slot = {
+        scheduleId: schedule._id,
+        startTime: schedule.startTime,
+        endTime: schedule.endTime,
+        status: schedule.status,
+        duration: (new Date(schedule.endTime) - new Date(schedule.startTime)) / (1000 * 60 * 60), // hours
+        bookingId: schedule.bookingId || null
+      };
+
+      if (schedule.status === SCHEDULE_STATUS.AVAILABLE) {
+        availableSlots.push(slot);
+      } else if (schedule.status === SCHEDULE_STATUS.BOOKED) {
+        bookedSlots.push(slot);
+      }
+    });
+
+    // Calculate summary statistics
+    const totalSlots = schedules.length;
+    const availableCount = availableSlots.length;
+    const bookedCount = bookedSlots.length;
+    const availabilityRate = totalSlots > 0 ? Math.round((availableCount / totalSlots) * 100) : 100;
+
+    return {
+      studio: {
+        _id: studio._id,
+        name: studio.name,
+        location: studio.location,
+        basePricePerHour: studio.basePricePerHour,
+        capacity: studio.capacity,
+        status: studio.status
+      },
+      dateRange: {
+        startDate: start,
+        endDate: end,
+        days: Math.ceil(rangeDays)
+      },
+      summary: {
+        totalSlots,
+        availableSlots: availableCount,
+        bookedSlots: bookedCount,
+        availabilityRate: `${availabilityRate}%`
+      },
+      availableSlots,
+      bookedSlots
+    };
+  } catch (error) {
+    if (error instanceof ValidationError || error instanceof NotFoundError) {
+      throw error;
+    }
+    throw new Error('Lỗi khi lấy thông tin availability của studio');
+  }
 };
 
 // #endregion

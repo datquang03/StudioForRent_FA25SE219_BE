@@ -52,7 +52,7 @@ export const uploadAvatar = asyncHandler(async (req, res) => {
 
   res.status(200).json({
     success: true,
-    message: 'Avatar updated successfully',
+    message: 'Cập nhật avatar thành công',
     data: { avatar: result }
   });
 });

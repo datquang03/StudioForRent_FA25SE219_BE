@@ -21,7 +21,7 @@ export const getReportByIdController = asyncHandler(async (req, res) => {
   const report = await getReportById(req.params.id);
   if (!report) {
     res.status(404);
-    throw new Error('Report not found');
+    throw new Error('Báo cáo không tồn tại');
   }
   res.status(200).json({ success: true, data: report });
 });
@@ -30,7 +30,7 @@ export const updateReportController = asyncHandler(async (req, res) => {
   const report = await updateReport(req.params.id, req.body);
   if (!report) {
     res.status(404);
-    throw new Error('Report not found');
+    throw new Error('Báo cáo không tồn tại');
   }
   res.status(200).json({ success: true, data: report });
 });
@@ -39,7 +39,7 @@ export const deleteReportController = asyncHandler(async (req, res) => {
   const report = await deleteReport(req.params.id);
   if (!report) {
     res.status(404);
-    throw new Error('Report not found');
+    throw new Error('Báo cáo không tồn tại');
   }
-  res.status(200).json({ success: true, message: 'Report deleted' });
+  res.status(200).json({ success: true, message: 'Xóa báo cáo thành công' });
 });

@@ -17,6 +17,7 @@ import {
   getStudiosAvailabilityController,
   getStudioBookedHistoryController,
   getStudiosBookedSchedulesController,
+  getStudioAvailabilityController,
 } from '../controllers/studio.controller.js';
 import { protect, authorize } from '../middlewares/auth.js';
 import { USER_ROLES } from '../utils/constants.js';
@@ -38,6 +39,7 @@ router.get('/:id/schedule/date/:date', validateObjectId(), searchLimiter, getStu
 
 // Public availability routes (no auth required)
 router.get('/availability', searchLimiter, getStudiosAvailabilityController);
+router.get('/:id/availability', validateObjectId(), searchLimiter, getStudioAvailabilityController);
 
 // Protected booked history routes (require auth)
 router.get('/booked-schedules', protect, authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), searchLimiter, getStudiosBookedSchedulesController);

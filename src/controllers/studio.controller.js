@@ -16,6 +16,7 @@ import {
   getStudiosAvailability,
   getStudioBookedHistory,
   getStudiosBookedSchedules,
+  getStudioAvailability,
 } from '../services/studio.service.js';
 import { uploadMultipleImages, uploadVideo } from '../services/upload.service.js';
 import { VALIDATION_MESSAGES } from '../utils/constants.js';
@@ -200,8 +201,8 @@ export const uploadStudioMedia = asyncHandler(async (req, res) => {
     // but supporting it here is flexible.
     // For now, we keep the requirement that at least some file activity or explicit image management is happening.
     if (req.body.keptImages === undefined) {
-       res.status(400);
-       throw new Error('Không có file media nào được cung cấp!');
+res.status(400);
+     throw new Error('Không có file media nào được cung cấp!');
     }
   }
 
@@ -434,6 +435,23 @@ export const getStudiosBookedSchedulesController = asyncHandler(async (req, res)
   res.status(200).json({
     success: true,
     message: 'Lấy thông tin booked schedules của các studios thành công!',
+    data: result,
+  });
+});
+
+/**
+ * Get studio availability by studio ID
+ * GET /api/studios/:id/availability
+ */
+export const getStudioAvailabilityController = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { startDate, endDate } = req.query;
+
+  const result = await getStudioAvailability(id, startDate, endDate);
+
+  res.status(200).json({
+    success: true,
+    message: 'Lấy thông tin availability của studio thành công!',
     data: result,
   });
 });

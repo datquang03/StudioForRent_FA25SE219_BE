@@ -26,7 +26,7 @@ export const uploadAvatarController = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'Avatar uploaded successfully',
+      message: 'Tải lên avatar thành công',
       data: {
         avatar: result
       }
@@ -53,7 +53,7 @@ export const uploadImageController = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'Image uploaded successfully',
+      message: 'Tải lên hình ảnh thành công',
       data: {
         image: result
       }
@@ -80,7 +80,7 @@ export const uploadVideoController = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'Video uploaded successfully',
+      message: 'Tải lên video thành công',
       data: {
         video: result,
         thumbnail: getVideoThumbnailUrl(result.public_id)
@@ -108,7 +108,7 @@ export const uploadMultipleImagesController = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: `${results.length} images uploaded successfully`,
+      message: `Tải lên ${results.length} hình ảnh thành công`,
       data: {
         images: results
       }
@@ -152,7 +152,7 @@ export const uploadStudioMediaController = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'Studio media uploaded successfully',
+      message: 'Tải lên media studio thành công',
       data: uploadedMedia
     });
   } catch (error) {
@@ -181,7 +181,7 @@ export const uploadEquipmentImageController = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'Equipment image uploaded successfully',
+      message: 'Tải lên hình ảnh thiết bị thành công',
       data: {
         image: result
       }
@@ -209,7 +209,7 @@ export const uploadReviewImagesController = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: `${results.length} review images uploaded successfully`,
+      message: `Tải lên ${results.length} hình ảnh đánh giá thành công`,
       data: {
         images: results
       }
@@ -237,7 +237,7 @@ export const uploadSetDesignImagesController = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: `${results.length} set design images uploaded successfully`,
+      message: `Tải lên ${results.length} hình ảnh thiết kế thành công`,
       data: {
         images: results
       }
@@ -266,7 +266,11 @@ export const deleteImageController = async (req, res) => {
     if (success) {
       res.status(200).json({
         success: true,
-        message: 'File deleted successfully'
+        message: 'Xóa file thành công',
+        data: {
+          publicId,
+          deleted: true
+        }
       });
     } else {
       throw new NotFoundError('File not found or already deleted');

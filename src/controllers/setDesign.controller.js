@@ -9,6 +9,12 @@ import {
   addReview,
   addComment,
   replyToComment,
+  updateComment,
+  deleteComment,
+  updateReply,
+  deleteReply,
+  likeComment,
+  unlikeComment,
   uploadDesignImage,
   getSetDesignsByCategory,
   getActiveSetDesigns,
@@ -72,7 +78,7 @@ export const createSetDesignController = asyncHandler(async (req, res) => {
   const design = await createSetDesign(designData, req.user);
   res.status(201).json({
     success: true,
-    message: 'Set design created successfully',
+    message: 'Tạo thiết kế set thành công',
     data: design
   });
 });
@@ -87,7 +93,7 @@ export const updateSetDesignController = asyncHandler(async (req, res) => {
   const design = await updateSetDesign(id, updateData, req.user);
   res.status(200).json({
     success: true,
-    message: 'Set design updated successfully',
+    message: 'Cập nhật thiết kế set thành công',
     data: design
   });
 });
@@ -101,7 +107,7 @@ export const deleteSetDesignController = asyncHandler(async (req, res) => {
   const design = await deleteSetDesign(id, req.user);
   res.status(200).json({
     success: true,
-    message: 'Set design deleted successfully',
+    message: 'Xóa thiết kế set thành công',
     data: design
   });
 });
@@ -120,46 +126,217 @@ export const addReviewController = asyncHandler(async (req, res) => {
 
   res.status(201).json({
     success: true,
-    message: 'Review added successfully',
+    message: 'Thêm đánh giá thành công',
     data: design
   });
 });
 
 /**
- * Add a comment to a set design
+ * Add a comment to a set design (Customer only)
  * POST /api/set-designs/:id/comments
  */
 export const addCommentController = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { message } = req.body;
   const customerId = req.user._id;
-  const customerName = req.user.name;
+  const customerName = req.user.fullName || req.user.username;
+
+  if (!message) {
+    res.status(400);
+    throw new Error('Nội dung bình luận là bắt buộc');
+  }
 
   const design = await addComment(id, customerId, customerName, message);
 
   res.status(201).json({
     success: true,
-    message: 'Comment added successfully',
+    message: 'Thêm bình luận thành công',
     data: design
   });
 });
 
 /**
- * Reply to a comment on a set design (Staff only)
+ * Reply to a comment on a set design (Staff and Customer)
  * POST /api/set-designs/:id/comments/:commentIndex/reply
  */
 export const replyToCommentController = asyncHandler(async (req, res) => {
   const { id, commentIndex } = req.params;
   const { message } = req.body;
-  const staffId = req.user._id;
-  const staffName = req.user.name;
+  const userId = req.user._id;
+  const userName = req.user.fullName || req.user.username;
+  const userRole = req.user.role;
 
-  const design = await replyToComment(id, parseInt(commentIndex), staffId, staffName, message);
+  if (!message) {
+    res.status(400);
+    throw new Error('Nội dung phản hồi là bắt buộc');
+  }
+
+  const parsedIndex = parseInt(commentIndex);
+  if (isNaN(parsedIndex)) {
+    res.status(400);
+    throw new Error('Chỉ số bình luận không hợp lệ');
+  }
+
+  const design = await replyToComment(id, parsedIndex, userId, userName, userRole, message);
 
   res.status(201).json({
     success: true,
-    message: 'Reply added successfully',
+    message: 'Thêm phản hồi thành công',
     data: design
+  });
+});
+
+/**
+ * Update a comment on a set design (Customer - own comments only)
+ * PATCH /api/set-designs/:id/comments/:commentIndex
+ */
+export const updateCommentController = asyncHandler(async (req, res) => {
+  const { id, commentIndex } = req.params;
+  const { message } = req.body;
+  const customerId = req.user._id;
+
+  if (!message) {
+    res.status(400);
+    throw new Error('Nội dung bình luận mới là bắt buộc');
+  }
+
+  const parsedIndex = parseInt(commentIndex);
+  if (isNaN(parsedIndex)) {
+    res.status(400);
+    throw new Error('Chỉ số bình luận không hợp lệ');
+  }
+
+  const design = await updateComment(id, parsedIndex, customerId, message);
+
+  res.status(200).json({
+    success: true,
+    message: 'Cập nhật bình luận thành công',
+    data: design
+  });
+});
+
+/**
+ * Delete a comment on a set design (Customer - own comments, Staff/Admin - any comments)
+ * DELETE /api/set-designs/:id/comments/:commentIndex
+ */
+export const deleteCommentController = asyncHandler(async (req, res) => {
+  const { id, commentIndex } = req.params;
+  const userId = req.user._id;
+  const userRole = req.user.role;
+
+  const parsedIndex = parseInt(commentIndex);
+  if (isNaN(parsedIndex)) {
+    res.status(400);
+    throw new Error('Chỉ số bình luận không hợp lệ');
+  }
+
+  const design = await deleteComment(id, parsedIndex, userId, userRole);
+
+  res.status(200).json({
+    success: true,
+    message: 'Xóa bình luận thành công',
+    data: design
+  });
+});
+
+/**
+ * Update a reply on a comment (User - own replies only)
+ * PATCH /api/set-designs/:id/comments/:commentIndex/replies/:replyIndex
+ */
+export const updateReplyController = asyncHandler(async (req, res) => {
+  const { id, commentIndex, replyIndex } = req.params;
+  const { message } = req.body;
+  const userId = req.user._id;
+
+  if (!message) {
+    res.status(400);
+    throw new Error('Nội dung phản hồi mới là bắt buộc');
+  }
+
+  const parsedCommentIndex = parseInt(commentIndex);
+  const parsedReplyIndex = parseInt(replyIndex);
+  
+  if (isNaN(parsedCommentIndex) || isNaN(parsedReplyIndex)) {
+    res.status(400);
+    throw new Error('Chỉ số không hợp lệ');
+  }
+
+  const design = await updateReply(id, parsedCommentIndex, parsedReplyIndex, userId, message);
+
+  res.status(200).json({
+    success: true,
+    message: 'Cập nhật phản hồi thành công',
+    data: design
+  });
+});
+
+/**
+ * Delete a reply on a comment (User - own replies, Staff/Admin - any replies)
+ * DELETE /api/set-designs/:id/comments/:commentIndex/replies/:replyIndex
+ */
+export const deleteReplyController = asyncHandler(async (req, res) => {
+  const { id, commentIndex, replyIndex } = req.params;
+  const userId = req.user._id;
+  const userRole = req.user.role;
+
+  const parsedCommentIndex = parseInt(commentIndex);
+  const parsedReplyIndex = parseInt(replyIndex);
+  
+  if (isNaN(parsedCommentIndex) || isNaN(parsedReplyIndex)) {
+    res.status(400);
+    throw new Error('Chỉ số không hợp lệ');
+  }
+
+  const design = await deleteReply(id, parsedCommentIndex, parsedReplyIndex, userId, userRole);
+
+  res.status(200).json({
+    success: true,
+    message: 'Xóa phản hồi thành công',
+    data: design
+  });
+});
+
+/**
+ * Like a comment
+ * POST /api/comments/:commentId/like
+ */
+export const likeCommentController = asyncHandler(async (req, res) => {
+  const { commentId } = req.params;
+  const userId = req.user._id;
+
+  if (!commentId || commentId.trim() === '') {
+    res.status(400);
+    throw new Error('ID bình luận là bắt buộc');
+  }
+
+  const result = await likeComment(commentId, userId);
+
+  res.status(200).json({
+    success: true,
+    message: 'Đã thích bình luận thành công',
+    data: result
+  });
+});
+
+/**
+ * Unlike a comment
+ * DELETE /api/comments/:commentId/like
+ */
+export const unlikeCommentController = asyncHandler(async (req, res) => {
+  const { commentId } = req.params;
+  const userId = req.user._id;
+
+  if (!commentId || commentId.trim() === '') {
+    res.status(400);
+    throw new Error('ID bình luận là bắt buộc');
+  }
+
+  const result = await unlikeComment(commentId, userId);
+
+  res.status(200).json({
+    success: true,
+    message: 'Đã bỏ thích bình luận thành công',
+    data: result
   });
 });
 
@@ -172,12 +349,12 @@ export const uploadDesignImagesController = asyncHandler(async (req, res) => {
 
   if (!images || !Array.isArray(images) || images.length === 0) {
     res.status(400);
-    throw new Error('Images array is required and must not be empty');
+    throw new Error('Mảng hình ảnh là bắt buộc và không được để trống');
   }
 
   if (images.length > 10) {
     res.status(400);
-    throw new Error('Cannot upload more than 10 images at once');
+    throw new Error('Không thể tải lên nhiều hơn 10 hình ảnh cùng một lúc');
   }
 
   // Validate each image
@@ -301,27 +478,27 @@ export const createCustomDesignRequestController = asyncHandler(async (req, res)
   // Validation
   if (!customerName || !email || !phoneNumber || !description) {
     res.status(400);
-    throw new Error('Customer name, email, phone number, and description are required');
+    throw new Error('Tên khách hàng, email, số điện thoại và mô tả là bắt buộc');
   }
 
   // Validate email format
   const emailRegex = /^\S+@\S+\.\S+$/;
   if (!emailRegex.test(email)) {
     res.status(400);
-    throw new Error('Please provide a valid email address');
+    throw new Error('Vui lòng cung cấp địa chỉ email hợp lệ');
   }
 
   // Validate phone number format
   const phoneRegex = /^[0-9]{10,11}$/;
   if (!phoneRegex.test(phoneNumber)) {
     res.status(400);
-    throw new Error('Please provide a valid phone number (10-11 digits)');
+    throw new Error('Vui lòng cung cấp số điện thoại hợp lệ (10-11 chữ số)');
   }
 
   // Validate description length
   if (description.length < 20) {
     res.status(400);
-    throw new Error('Description must be at least 20 characters');
+    throw new Error('Mô tả phải có ít nhất 20 ký tự');
   }
 
   const requestData = {
@@ -338,7 +515,7 @@ export const createCustomDesignRequestController = asyncHandler(async (req, res)
 
   res.status(201).json({
     success: true,
-    message: 'Custom design request submitted successfully. We will contact you soon!',
+    message: 'Gửi yêu cầu thiết kế tùy chỉnh thành công. Chúng tôi sẽ liên hệ với bạn sớm!',
     data: request
   });
 });
@@ -390,13 +567,13 @@ export const updateCustomDesignRequestStatusController = asyncHandler(async (req
 
   if (!status) {
     res.status(400);
-    throw new Error('Status is required');
+    throw new Error('Trạng thái là bắt buộc');
   }
 
   const validStatuses = ['pending', 'processing', 'completed', 'rejected'];
   if (!validStatuses.includes(status)) {
     res.status(400);
-    throw new Error('Invalid status. Must be one of: pending, processing, completed, rejected');
+    throw new Error('Trạng thái không hợp lệ. Phải là một trong: pending, processing, completed, rejected');
   }
 
   const updateData = { staffNotes, estimatedPrice };
@@ -404,7 +581,7 @@ export const updateCustomDesignRequestStatusController = asyncHandler(async (req
 
   res.status(200).json({
     success: true,
-    message: 'Request status updated successfully',
+    message: 'Cập nhật trạng thái yêu cầu thành công',
     data: request
   });
 });
@@ -419,7 +596,7 @@ export const convertRequestToSetDesignController = asyncHandler(async (req, res)
   const setDesign = await convertRequestToSetDesign(id, designData, req.user);
   res.status(201).json({
     success: true,
-    message: 'Custom request converted to set design successfully',
+    message: 'Chuyển đổi yêu cầu thành thiết kế set thành công',
     data: setDesign
   });
 });
@@ -444,17 +621,17 @@ export const generateImageFromTextController = asyncHandler(async (req, res) => 
 
   if (!description) {
     res.status(400);
-    throw new Error('Description is required');
+    throw new Error('Mô tả là bắt buộc');
   }
 
   if (description.length < 10) {
     res.status(400);
-    throw new Error('Description must be at least 10 characters');
+    throw new Error('Mô tả phải có ít nhất 10 ký tự');
   }
 
   if (description.length > 500) {
     res.status(400);
-    throw new Error('Description cannot exceed 500 characters');
+    throw new Error('Mô tả không được vượt quá 500 ký tự');
   }
 
   // Validate that description is related to studio/photography set design
@@ -501,7 +678,7 @@ export const generateImageFromTextController = asyncHandler(async (req, res) => 
     // Validate numberOfImages
     if (options.numberOfImages < 1 || options.numberOfImages > 4) {
       res.status(400);
-      throw new Error('Number of images must be between 1 and 4 for Getty Images');
+      throw new Error('Số lượng hình ảnh phải từ 1 đến 4 cho Getty Images');
     }
 
     // Validate aspect ratio for Getty
@@ -569,17 +746,17 @@ export const chatWithDesignAIController = asyncHandler(async (req, res) => {
 
   if (!message) {
     res.status(400);
-    throw new Error('Message is required');
+    throw new Error('Tin nhắn là bắt buộc');
   }
 
   if (message.length < 5) {
     res.status(400);
-    throw new Error('Message must be at least 5 characters');
+    throw new Error('Tin nhắn phải có ít nhất 5 ký tự');
   }
 
   if (message.length > 500) {
     res.status(400);
-    throw new Error('Message cannot exceed 500 characters');
+    throw new Error('Tin nhắn không được vượt quá 500 ký tự');
   }
 
   const history = Array.isArray(conversationHistory) ? conversationHistory : [];
@@ -588,7 +765,7 @@ export const chatWithDesignAIController = asyncHandler(async (req, res) => {
 
   res.status(200).json({
     success: true,
-    message: 'AI response generated successfully',
+    message: 'Tạo phản hồi AI thành công',
     data: result
   });
 });
@@ -603,12 +780,12 @@ export const generateCompleteDesignController = asyncHandler(async (req, res) =>
 
   if (!conversationHistory || !Array.isArray(conversationHistory)) {
     res.status(400);
-    throw new Error('Conversation history is required and must be an array');
+    throw new Error('Lịch sử hội thoại là bắt buộc và phải là mảng');
   }
 
   if (conversationHistory.length < 2) {
     res.status(400);
-    throw new Error('At least 2 messages in conversation history are required');
+    throw new Error('Ít nhất 2 tin nhắn trong lịch sử hội thoại là bắt buộc');
   }
 
   const options = imageOptions || {};
@@ -616,24 +793,24 @@ export const generateCompleteDesignController = asyncHandler(async (req, res) =>
   // Validate image options if provided
   if (options.size && !['1024x1024', '1024x1792', '1792x1024'].includes(options.size)) {
     res.status(400);
-    throw new Error('Invalid size. Must be one of: 1024x1024, 1024x1792, 1792x1024');
+    throw new Error('Kích thước không hợp lệ. Phải là một trong: 1024x1024, 1024x1792, 1792x1024');
   }
 
   if (options.quality && !['standard', 'hd'].includes(options.quality)) {
     res.status(400);
-    throw new Error('Invalid quality. Must be either standard or hd');
+    throw new Error('Chất lượng không hợp lệ. Phải là standard hoặc hd');
   }
 
   if (options.style && !['vivid', 'natural'].includes(options.style)) {
     res.status(400);
-    throw new Error('Invalid style. Must be either vivid or natural');
+    throw new Error('Kiểu dáng không hợp lệ. Phải là vivid hoặc natural');
   }
 
   const result = await generateCompleteDesign(conversationHistory, options);
 
   res.status(200).json({
     success: true,
-    message: 'Complete design generated successfully',
+    message: 'Tạo thiết kế hoàn chỉnh thành công',
     data: result
   });
 });

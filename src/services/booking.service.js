@@ -19,7 +19,7 @@ import { sendNoShowEmail } from './email.service.js';
 
 export const createBooking = async (data) => {
   const { userId } = data;
-  if (!userId) throw new ValidationError('Missing userId');
+  if (!userId) throw new ValidationError('ID người dùng là bắt buộc');
 
   // Acquire lock to prevent concurrent bookings for the same schedule/slot
   let lockKey;
@@ -29,7 +29,7 @@ export const createBooking = async (data) => {
   } else {
     const { studioId, startTime, endTime } = data;
     if (!studioId || !startTime || !endTime) {
-      throw new ValidationError('Missing schedule info: studioId, startTime, endTime');
+      throw new ValidationError('Thiếu thông tin lịch: studioId, startTime, endTime là bắt buộc');
     }
     const s = new Date(startTime);
     const e = new Date(endTime);
@@ -38,7 +38,7 @@ export const createBooking = async (data) => {
 
   lockToken = await acquireLock(lockKey);
   if (!lockToken) {
-    throw new ConflictError('Schedule is currently being booked by another user. Please try again.');
+    throw new ConflictError('Lịch đang được đặt bởi người dùng khác. Vui lòng thử lại.');
   }
 
   const session = await mongoose.startSession();
@@ -51,9 +51,9 @@ export const createBooking = async (data) => {
       if (data.scheduleId) {
         schedule = await Schedule.findById(data.scheduleId).session(session);
       
-        if (!schedule) throw new NotFoundError('Schedule not found');
+        if (!schedule) throw new NotFoundError('Lịch không tồn tại');
         if (![SCHEDULE_STATUS.AVAILABLE, BOOKING_STATUS.PENDING].includes(schedule.status)) {
-          throw new ConflictError('Schedule is not available');
+          throw new ConflictError('Lịch không còn trống');
         }
       } else {
         // Expect schedule details: studioId, startTime, endTime
@@ -61,7 +61,7 @@ export const createBooking = async (data) => {
 
         const s = new Date(startTime);
         const e = new Date(endTime);
-        if (!(e > s)) throw new ValidationError('endTime must be greater than startTime');
+        if (!(e > s)) throw new ValidationError('Thời gian kết thúc phải lớn hơn thời gian bắt đầu');
         // Pre-check for exact duplicate or overlapping schedules (respecting minimum gap)
         const MIN_GAP_MS = 30 * 60 * 1000;
 
@@ -69,7 +69,7 @@ export const createBooking = async (data) => {
         const exact = await Schedule.findOne({ studioId, startTime: s, endTime: e }).session(session);
         if (exact) {
           if (exact.status !== SCHEDULE_STATUS.AVAILABLE) {
-            throw new ConflictError('A schedule with the same time already exists and is not available');
+            throw new ConflictError('Lịch cùng thời gian đã tồn tại và không còn trống');
           }
           schedule = exact;
         } else {
@@ -82,7 +82,7 @@ export const createBooking = async (data) => {
 
           if (overlapping) {
             // If overlapping schedule exists (even if status available) we must reject to keep MIN_GAP
-            throw new ConflictError('Another schedule exists that overlaps or is within 30 minutes of the requested time');
+            throw new ConflictError('Lịch bị trùng hoặc quá gần với lịch khác (khoảng cách tối thiểu 30 phút)');
           }
 
           // No conflicts — create a new schedule
@@ -127,7 +127,7 @@ export const createBooking = async (data) => {
           // eslint-disable-next-line no-console
           console.error('Failed to free schedule after studio not found', freeErr);
         }
-        throw new NotFoundError('Studio not found for schedule');
+        throw new NotFoundError('Studio không tồn tại cho lịch này');
       }
 
       // Get global default policies (company-wide policies)
@@ -152,7 +152,7 @@ export const createBooking = async (data) => {
           // eslint-disable-next-line no-console
           console.error('Failed to free schedule during policy validation', freeErr);
         }
-        throw new ValidationError('Default policies not configured. Please run seedPolicies.js first.');
+        throw new ValidationError('Chính sách mặc định chưa được cấu hình. Vui lòng chạy seedPolicies.js trước.');
       }
 
       // Create policy snapshots (immutable copy of global policies at booking time)
@@ -274,7 +274,7 @@ export const getBookingById = async (id, userId = null, userRole = null) => {
     .lean()
     .maxTimeMS(5000); // Add timeout to prevent slow queries
 
-  if (!booking) throw new NotFoundError('Booking not found');
+  if (!booking) throw new NotFoundError('Booking không tồn tại');
 
   // Attach booking details (if any) with limit to prevent memory issues
   const details = await BookingDetail.find({ bookingId: booking._id })
@@ -380,21 +380,21 @@ export const getBookings = async ({ userId, page = 1, limit = 20, status } = {})
  */
 export const updateBooking = async (bookingId, updateData, actorId, actorRole) => {
   const booking = await Booking.findById(bookingId);
-  if (!booking) throw new NotFoundError('Booking not found');
+  if (!booking) throw new NotFoundError('Booking không tồn tại');
 
   // Only allow updates when booking is in PENDING status
   if (booking.status !== BOOKING_STATUS.PENDING) {
-    throw new ConflictError('Only bookings in PENDING status can be updated');
+    throw new ConflictError('Chỉ booking ở trạng thái PENDING mới có thể cập nhật');
   }
 
   // Only staff or admin can update bookings
   if (!actorRole || (actorRole !== USER_ROLES.STAFF && actorRole !== USER_ROLES.ADMIN)) {
-    throw new UnauthorizedError('Only staff or admin can update bookings');
+    throw new UnauthorizedError('Chỉ staff hoặc admin mới có thể cập nhật booking');
   }
 
   // Authorization: owner (customer) or staff/admin can update
   if (actorRole === 'customer' && String(booking.userId) !== String(actorId)) {
-    throw new ValidationError('Not authorized to update this booking');
+    throw new ValidationError('Không có quyền cập nhật booking này');
   }
 
   const useTransaction = Boolean(
@@ -435,10 +435,10 @@ export const updateBooking = async (bookingId, updateData, actorId, actorRole) =
 
         // Continue with total recalculation and promo operations inside session
         const schedule = await Schedule.findById(booking.scheduleId).session(session);
-        if (!schedule) throw new NotFoundError('Schedule not found');
+        if (!schedule) throw new NotFoundError('Lịch không tồn tại');
 
         const studio = await (await import('../models/index.js')).Studio.findById(schedule.studioId).session(session);
-        if (!studio) throw new NotFoundError('Studio not found');
+        if (!studio) throw new NotFoundError('Studio không tồn tại');
 
         const durationMs = new Date(schedule.endTime).getTime() - new Date(schedule.startTime).getTime();
         const hours = Math.round((durationMs / (1000 * 60 * 60)) * 100) / 100; // 2 decimals
@@ -542,10 +542,10 @@ export const updateBooking = async (bookingId, updateData, actorId, actorRole) =
 
   // 4) Recalculate totals: compute base price + sum(details)
   const schedule = await Schedule.findById(booking.scheduleId);
-  if (!schedule) throw new NotFoundError('Schedule not found');
+  if (!schedule) throw new NotFoundError('Lịch không tồn tại');
 
   const studio = await (await import('../models/index.js')).Studio.findById(schedule.studioId);
-  if (!studio) throw new NotFoundError('Studio not found');
+  if (!studio) throw new NotFoundError('Studio không tồn tại');
 
   const durationMs = new Date(schedule.endTime).getTime() - new Date(schedule.startTime).getTime();
   const hours = Math.round((durationMs / (1000 * 60 * 60)) * 100) / 100; // 2 decimals
@@ -627,10 +627,10 @@ export const cancelBooking = async (bookingId) => {
   try {
     return await session.withTransaction(async () => {
       const booking = await Booking.findById(bookingId).session(session);
-      if (!booking) throw new NotFoundError('Booking not found');
+      if (!booking) throw new NotFoundError('Booking không tồn tại');
 
       if ([BOOKING_STATUS.CANCELLED, BOOKING_STATUS.COMPLETED].includes(booking.status)) {
-        throw new ConflictError('Booking cannot be cancelled');
+        throw new ConflictError('Booking không thể hủy');
       }
 
       // Calculate refund using policy snapshot
@@ -712,7 +712,7 @@ export const cancelBooking = async (bookingId) => {
 
 export const confirmBooking = async (bookingId) => {
   const booking = await Booking.findById(bookingId);
-  if (!booking) throw new NotFoundError('Booking not found');
+  if (!booking) throw new NotFoundError('Booking không tồn tại');
   booking.status = BOOKING_STATUS.CONFIRMED;
   await booking.save();
 
@@ -747,7 +747,7 @@ export const checkInBooking = async (bookingId, actorId = null) => {
   try {
     return await session.withTransaction(async () => {
       const booking = await Booking.findById(bookingId).session(session);
-      if (!booking) throw new NotFoundError('Booking not found');
+      if (!booking) throw new NotFoundError('Booking không tồn tại');
 
       // If already checked-in, return
       if (booking.checkInAt) {
@@ -763,7 +763,7 @@ export const checkInBooking = async (bookingId, actorId = null) => {
       const totalPaid = paidPayments.reduce((sum, payment) => sum + payment.amount, 0);
       const required = Math.round(booking.finalAmount * 0.3);
       if (totalPaid < required) {
-        throw new ValidationError('Deposit 30% is required before check-in');
+        throw new ValidationError('Cần thanh toán tối thiểu 30% trước khi check-in');
       }
 
       // Update booking status and checkInAt
@@ -821,7 +821,7 @@ export const checkOutBooking = async (bookingId, actorId = null) => {
   try {
     return await session.withTransaction(async () => {
       const booking = await Booking.findById(bookingId).session(session);
-      if (!booking) throw new NotFoundError('Booking not found');
+      if (!booking) throw new NotFoundError('Booking không tồn tại');
 
       if (booking.checkOutAt) {
         return booking;
@@ -888,10 +888,10 @@ export const checkOutBooking = async (bookingId, actorId = null) => {
 
 export const markAsNoShow = async (bookingId, checkInTime = null, io = null) => {
   const booking = await Booking.findById(bookingId).populate('scheduleId');
-  if (!booking) throw new NotFoundError('Booking not found');
+  if (!booking) throw new NotFoundError('Booking không tồn tại');
 
   if (booking.status !== BOOKING_STATUS.CONFIRMED) {
-    throw new ConflictError('Only confirmed bookings can be marked as no-show');
+    throw new ConflictError('Chỉ booking đã xác nhận mới có thể đánh dấu no-show');
   }
 
   // Calculate no-show charge using policy snapshot
@@ -1062,14 +1062,14 @@ const validateDates = (startDate, endDate) => {
   if (startDate) {
     validStartDate = new Date(startDate);
     if (isNaN(validStartDate.getTime())) {
-      throw new ValidationError('Invalid startDate format');
+      throw new ValidationError('Định dạng startDate không hợp lệ');
     }
   }
   
   if (endDate) {
     validEndDate = new Date(endDate);
     if (isNaN(validEndDate.getTime())) {
-      throw new ValidationError('Invalid endDate format');
+      throw new ValidationError('Định dạng endDate không hợp lệ');
     }
   }
   

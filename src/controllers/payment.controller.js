@@ -1,5 +1,18 @@
 //#region Imports
-import { createPaymentOptions, handlePaymentWebhook, getPaymentStatus, createPaymentForRemaining, getStaffPaymentHistory, createPaymentForOption } from '../services/payment.service.js';
+import { 
+  createPaymentOptions, 
+  handlePaymentWebhook, 
+  getPaymentStatus, 
+  createPaymentForRemaining, 
+  getStaffPaymentHistory, 
+  createPaymentForOption,
+  getMyTransactions,
+  getAllTransactions,
+  getTransactionById,
+  deleteTransaction,
+  deleteAllCancelledTransactions,
+  getTransactionHistory
+} from '../services/payment.service.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
 import Payment from '../models/Payment/payment.model.js';
 import Schedule from '../models/Schedule/schedule.model.js';
@@ -17,21 +30,21 @@ export const createPaymentOptionsController = async (req, res) => {
     const { bookingId } = req.params;
 
     if (!bookingId || !isValidObjectId(bookingId)) {
-      throw new ValidationError('Valid Booking ID is required');
+      throw new ValidationError('ID booking không hợp lệ');
     }
 
     const paymentOptions = await createPaymentOptions(bookingId);
 
     res.status(200).json({
       success: true,
-      message: 'Payment options created successfully',
+      message: 'Tạo tùy chọn thanh toán thành công',
       data: paymentOptions
     });
   } catch (error) {
-    logger.error('Create payment options error:', error);
+    logger.error('Create remaining payment error:', error);
     res.status(error.statusCode || 500).json({
       success: false,
-      message: error.message || 'Internal server error'
+      message: error.message || 'Lỗi máy chủ nội bộ'
     });
   }
 };
@@ -50,7 +63,7 @@ export const paymentWebhookController = async (req, res) => {
   } catch (error) {
     logger.error('Payment webhook error:', error);
     // In development return the error message for easier debugging
-    const msg = (process.env.NODE_ENV || 'development') === 'production' ? 'Webhook processing failed' : (error.message || 'Webhook processing failed');
+    const msg = (process.env.NODE_ENV || 'development') === 'production' ? 'Xử lý webhook thất bại' : (error.message || 'Xử lý webhook thất bại');
     res.status(500).json({ success: false, message: msg });
   }
 };
@@ -64,7 +77,7 @@ export const getPaymentStatusController = async (req, res) => {
     const { paymentId } = req.params;
 
     if (!paymentId || !isValidObjectId(paymentId)) {
-      throw new ValidationError('Valid Payment ID is required');
+      throw new ValidationError('ID thanh toán không hợp lệ');
     }
 
     const payment = await getPaymentStatus(paymentId);
@@ -77,7 +90,7 @@ export const getPaymentStatusController = async (req, res) => {
     logger.error('Get payment status error:', error);
     res.status(error.statusCode || 500).json({
       success: false,
-      message: error.message || 'Internal server error'
+      message: error.message || 'Lỗi máy chủ nội bộ'
     });
   }
 };
@@ -92,12 +105,12 @@ export const createSinglePaymentController = async (req, res) => {
     const { percentage, payType } = req.body;
 
     if (!bookingId || !isValidObjectId(bookingId)) {
-      throw new ValidationError('Valid Booking ID is required');
+      throw new ValidationError('ID booking không hợp lệ');
     }
 
     // Either percentage or payType must be provided
     if (!percentage && !payType) {
-      throw new ValidationError('percentage or payType is required');
+      throw new ValidationError('Phần trăm hoặc loại thanh toán là bắt buộc');
     }
 
     const payment = await createPaymentForOption(bookingId, { percentage, payType });
@@ -127,17 +140,17 @@ export const createRemainingPaymentController = async (req, res) => {
 
     if (req.user && req.user.role === USER_ROLES.CUSTOMER) {
       if (!booking.userId || booking.userId.toString() !== req.user._id.toString()) {
-        return res.status(403).json({ success: false, message: 'Forbidden: not owner of booking' });
+        return res.status(403).json({ success: false, message: 'Không có quyền: không phải chủ sở hữu booking' });
       }
     }
 
     // Pass actorId for audit (who created the remaining payment)
     const payment = await createPaymentForRemaining(bookingId, { actorId: req.user?._id });
 
-    res.status(200).json({ success: true, message: 'Remaining payment created', data: payment });
+    res.status(200).json({ success: true, message: 'Tạo thanh toán số tiền còn lại thành công', data: payment });
   } catch (error) {
     logger.error('Create remaining payment error:', error);
-    res.status(error.statusCode || 500).json({ success: false, message: error.message || 'Internal server error' });
+    res.status(error.statusCode || 500).json({ success: false, message: error.message || 'Lỗi máy chủ nội bộ' });
   }
 };
 
@@ -211,7 +224,7 @@ export const getCustomerPaymentHistoryController = async (req, res) => {
     logger.error('Get customer payment history error:', error);
     res.status(error.statusCode || 500).json({
       success: false,
-      message: error.message || 'Internal server error'
+      message: error.message || 'Lỗi máy chủ nội bộ'
     });
   }
 };
@@ -229,21 +242,21 @@ export const getStaffPaymentHistoryController = async (req, res) => {
     const limitNum = parseInt(limit, 10);
 
     if (pageNum < 1 || limitNum < 1 || limitNum > 100) {
-      throw new ValidationError('Invalid pagination parameters');
+      throw new ValidationError('Tham số phân trang không hợp lệ');
     }
 
     // Validate dates if provided
     if (startDate && isNaN(Date.parse(startDate))) {
-      throw new ValidationError('Invalid startDate format');
+      throw new ValidationError('Định dạng ngày bắt đầu không hợp lệ');
     }
 
     if (endDate && isNaN(Date.parse(endDate))) {
-      throw new ValidationError('Invalid endDate format');
+      throw new ValidationError('Định dạng ngày kết thúc không hợp lệ');
     }
 
     // Validate studioId if provided
     if (studioId && !isValidObjectId(studioId)) {
-      throw new ValidationError('Invalid studioId format');
+      throw new ValidationError('ID studio không hợp lệ');
     }
 
     const result = await getStaffPaymentHistory({
@@ -263,7 +276,7 @@ export const getStaffPaymentHistoryController = async (req, res) => {
     logger.error('Get staff payment history error:', error);
     res.status(error.statusCode || 500).json({
       success: false,
-      message: error.message || 'Internal server error'
+      message: error.message || 'Lỗi máy chủ nội bộ'
     });
   }
 };
@@ -280,24 +293,24 @@ export const createRefundController = async (req, res) => {
 
     // Validate paymentId
     if (!paymentId || !isValidObjectId(paymentId)) {
-      throw new ValidationError('Valid Payment ID is required');
+      throw new ValidationError('ID thanh toán không hợp lệ');
     }
 
     // Validate amount if provided
     if (amount !== undefined) {
       if (!isPositiveNumber(amount)) {
-        throw new ValidationError('Refund amount must be a positive number');
+        throw new ValidationError('Số tiền hoàn lại phải là số dương');
       }
     }
 
     // Validate reason
     if (reason && (typeof reason !== 'string' || reason.trim().length === 0)) {
-      throw new ValidationError('Refund reason must be a non-empty string');
+      throw new ValidationError('Lý do hoàn tiền không được để trống');
     }
 
     // Validate actorId
     if (!actorId || !isValidObjectId(actorId)) {
-      throw new ValidationError('Invalid user authentication');
+      throw new ValidationError('Xác thực người dùng không hợp lệ');
     }
 
     // Import refund service function
@@ -306,14 +319,14 @@ export const createRefundController = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: 'Refund request created successfully',
+      message: 'Tạo yêu cầu hoàn tiền thành công',
       data: refund
     });
   } catch (error) {
     logger.error('Create refund error:', error);
     res.status(error.statusCode || 500).json({
       success: false,
-      message: error.message || 'Internal server error'
+      message: error.message || 'Lỗi máy chủ nội bộ'
     });
   }
 };
@@ -338,7 +351,195 @@ export const getRefundStatusController = async (req, res) => {
     logger.error('Get refund status error:', error);
     res.status(error.statusCode || 500).json({
       success: false,
-      message: error.message || 'Internal server error'
+      message: error.message || 'Lỗi máy chủ nội bộ'
+    });
+  }
+};
+
+/**
+ * Get my transactions (for customers)
+ * GET /api/payments/my-transactions
+ */
+export const getMyTransactionsController = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { status, startDate, endDate, page, limit } = req.query;
+
+    const result = await getMyTransactions(userId, {
+      status,
+      startDate,
+      endDate,
+      page: parseInt(page) || 1,
+      limit: parseInt(limit) || 20
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Lấy lịch sử giao dịch thành công',
+      data: result
+    });
+  } catch (error) {
+    logger.error('Get my transactions error:', error);
+    res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message || 'Lỗi khi lấy lịch sử giao dịch'
+    });
+  }
+};
+
+/**
+ * Get all transactions (for staff/admin)
+ * GET /api/payments/transactions
+ */
+export const getAllTransactionsController = async (req, res) => {
+  try {
+    const { status, payType, bookingId, userId, startDate, endDate, minAmount, maxAmount, page, limit } = req.query;
+
+    const result = await getAllTransactions({
+      status,
+      payType,
+      bookingId,
+      userId,
+      startDate,
+      endDate,
+      minAmount,
+      maxAmount,
+      page: parseInt(page) || 1,
+      limit: parseInt(limit) || 20
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Lấy tất cả giao dịch thành công',
+      data: result
+    });
+  } catch (error) {
+    logger.error('Get all transactions error:', error);
+    res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message || 'Lỗi khi lấy tất cả giao dịch'
+    });
+  }
+};
+
+/**
+ * Get transaction by ID
+ * GET /api/payments/transactions/:transactionId
+ */
+export const getTransactionByIdController = async (req, res) => {
+  try {
+    const { transactionId } = req.params;
+    const userId = req.user._id;
+    const userRole = req.user.role;
+
+    if (!transactionId || !isValidObjectId(transactionId)) {
+      throw new ValidationError('ID giao dịch không hợp lệ');
+    }
+
+    const transaction = await getTransactionById(transactionId, userId, userRole);
+
+    res.status(200).json({
+      success: true,
+      message: 'Lấy chi tiết giao dịch thành công',
+      data: transaction
+    });
+  } catch (error) {
+    logger.error('Get transaction by ID error:', error);
+    res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message || 'Lỗi khi lấy chi tiết giao dịch'
+    });
+  }
+};
+
+/**
+ * Delete transaction (staff/admin only)
+ * DELETE /api/payments/transactions/:transactionId
+ */
+export const deleteTransactionController = async (req, res) => {
+  try {
+    const { transactionId } = req.params;
+
+    if (!transactionId || !isValidObjectId(transactionId)) {
+      throw new ValidationError('ID giao dịch không hợp lệ');
+    }
+
+    const deletedTransaction = await deleteTransaction(transactionId);
+
+    res.status(200).json({
+      success: true,
+      message: 'Xóa giao dịch thành công',
+      data: deletedTransaction
+    });
+  } catch (error) {
+    logger.error('Delete transaction error:', error);
+    res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message || 'Lỗi khi xóa giao dịch'
+    });
+  }
+};
+
+/**
+ * Delete all cancelled transactions (staff/admin only)
+ * DELETE /api/payments/transactions
+ */
+export const deleteAllTransactionsController = async (req, res) => {
+  try {
+    const { beforeDate, bookingId } = req.query;
+
+    const result = await deleteAllCancelledTransactions({
+      beforeDate,
+      bookingId
+    });
+
+    res.status(200).json({
+      success: true,
+      message: result.message,
+      data: result
+    });
+  } catch (error) {
+    logger.error('Delete all transactions error:', error);
+    res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message || 'Lỗi khi xóa các giao dịch'
+    });
+  }
+};
+
+/**
+ * Get transaction history with statistics
+ * GET /api/payments/transaction-history
+ */
+export const getTransactionHistoryController = async (req, res) => {
+  try {
+    const { userId, startDate, endDate, status, groupBy, page, limit } = req.query;
+    const userRole = req.user.role;
+    const currentUserId = req.user._id;
+
+    // If customer, only allow viewing own history
+    const targetUserId = userRole === USER_ROLES.CUSTOMER ? currentUserId : userId;
+
+    const result = await getTransactionHistory({
+      userId: targetUserId,
+      startDate,
+      endDate,
+      status,
+      groupBy,
+      page: parseInt(page) || 1,
+      limit: parseInt(limit) || 50
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Lấy lịch sử giao dịch thành công',
+      data: result
+    });
+  } catch (error) {
+    logger.error('Get transaction history error:', error);
+    res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message || 'Lỗi khi lấy lịch sử giao dịch'
     });
   }
 };
