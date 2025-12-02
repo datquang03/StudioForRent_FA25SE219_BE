@@ -10,19 +10,19 @@ export const createBookingDetailsController = asyncHandler(async (req, res) => {
 
   if (!details || !Array.isArray(details) || details.length === 0) {
     res.status(400);
-    throw new ValidationError('details is required and must be a non-empty array');
+    throw new ValidationError('Chi tiết là bắt buộc và phải là mảng không rỗng');
   }
 
   const booking = await Booking.findById(bookingId);
   if (!booking) {
     res.status(404);
-    throw new NotFoundError('Booking not found');
+    throw new NotFoundError('Booking không tồn tại');
   }
 
   // Ensure owner (customers can only modify their own booking)
   if (String(booking.userId) !== String(userId)) {
     res.status(403);
-    throw new ValidationError('Not allowed to modify this booking');
+    throw new ValidationError('Không có quyền chỉnh sửa booking này');
   }
 
   const result = await createBookingDetails(bookingId, details);
@@ -40,7 +40,7 @@ export const createBookingDetailsController = asyncHandler(async (req, res) => {
   booking.finalAmount = Math.max(0, booking.totalBeforeDiscount - booking.discountAmount);
   await booking.save();
 
-  res.status(201).json({ success: true, message: 'Booking details added', data: result });
+  res.status(201).json({ success: true, message: 'Thêm chi tiết booking thành công', data: result });
 });
 
 export default {

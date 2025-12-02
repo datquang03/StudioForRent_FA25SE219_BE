@@ -10,7 +10,6 @@ import {
   updateBooking as updateBookingService,
   checkInBooking as checkInBookingService,
   checkOutBooking as checkOutBookingService,
-  getBookingsForStaff as getBookingsForStaffService,
 } from '../services/booking.service.js';
 // #endregion
 
@@ -19,7 +18,11 @@ export const createBooking = asyncHandler(async (req, res) => {
   // attach authenticated user if available
   if (!data.userId && req.user) data.userId = req.user._id;
 
-  const { booking, paymentOptions } = await createBookingService(data);
+  const booking = await createBookingService(data);
+
+  // Generate payment options for the booking
+  const { createPaymentOptions } = await import('../services/payment.service.js');
+  const paymentOptions = await createPaymentOptions(booking._id);
 
   res.status(201).json({
     success: true,
@@ -37,10 +40,7 @@ export const getBookings = asyncHandler(async (req, res) => {
 });
 
 export const getBooking = asyncHandler(async (req, res) => {
-  const userId = req.user ? req.user._id : null;
-  const userRole = req.user ? req.user.role : null;
-  
-  const booking = await getBookingByIdService(req.params.id, userId, userRole);
+  const booking = await getBookingByIdService(req.params.id);
   res.status(200).json({ success: true, message: 'Lấy booking thành công!', data: booking });
 });
 
@@ -87,45 +87,6 @@ export const checkOut = asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, message: 'Check-out thành công!', data: booking });
 });
 
-export const getActiveBookingsForStaff = asyncHandler(async (req, res) => {
-  const { page, limit, status, startDate, endDate, includeAll } = req.query;
-
-  // Validate pagination parameters
-  const parsedPage = parseInt(page);
-  const parsedLimit = parseInt(limit);
-  
-  if (page && (isNaN(parsedPage) || parsedPage < 1)) {
-    return res.status(400).json({
-      success: false,
-      message: 'Invalid page parameter. Must be a positive integer.'
-    });
-  }
-  
-  if (limit && (isNaN(parsedLimit) || parsedLimit < 1 || parsedLimit > 200)) {
-    return res.status(400).json({
-      success: false,
-      message: 'Invalid limit parameter. Must be between 1 and 200.'
-    });
-  }
-
-  const result = await getBookingsForStaffService({
-    page: parsedPage || 1,
-    limit: parsedLimit || 20,
-    status,
-    startDate,
-    endDate,
-    includeAll: includeAll === 'true' || includeAll === true
-  });
-
-  const message = includeAll ? 'Lấy danh sách tất cả bookings thành công!' : 'Lấy danh sách booking đang hoạt động thành công!';
-  
-  res.status(200).json({
-    success: true,
-    message,
-    data: result
-  });
-});
-
 export default {
   createBooking,
   getBookings,
@@ -134,5 +95,4 @@ export default {
   confirmBooking,
   checkIn,
   checkOut,
-  getActiveBookingsForStaff,
 };

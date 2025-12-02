@@ -16,7 +16,7 @@ class RoomPolicyController {
 
     res.status(201).json({
       success: true,
-      message: "Policy created successfully",
+      message: "Tạo chính sách thành công",
       data: policy
     });
   });
@@ -101,7 +101,7 @@ class RoomPolicyController {
 
     res.json({
       success: true,
-      message: "Policy updated successfully",
+      message: "Cập nhật chính sách thành công",
       data: policy
     });
   });
@@ -115,7 +115,7 @@ class RoomPolicyController {
 
     res.json({
       success: true,
-      message: "Policy deleted successfully",
+      message: "Xóa chính sách thành công",
       data: policy
     });
   });

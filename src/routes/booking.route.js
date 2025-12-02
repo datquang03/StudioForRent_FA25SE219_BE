@@ -9,7 +9,6 @@ import {
   updateBooking,
   checkIn,
   checkOut,
-  getActiveBookingsForStaff,
 } from '../controllers/booking.controller.js';
 import { createBookingDetailsController } from '../controllers/bookingDetail.controller.js';
 import { protect, authorize } from '../middlewares/auth.js';
@@ -25,9 +24,6 @@ router.use(generalLimiter);
 // All booking routes require authentication
 router.use(protect);
 router.use(userLimiter); // Apply per-user rate limiting
-
-// Staff routes for managing bookings (MUST be before /:id routes to avoid conflict)
-router.get('/staff', authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), getActiveBookingsForStaff);
 
 // Customer routes
 router.post('/', authorize(USER_ROLES.CUSTOMER), bookingLimiter, createBooking);

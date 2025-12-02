@@ -10,7 +10,13 @@ import {
   getCustomerPaymentHistoryController,
   getStaffPaymentHistoryController,
   createRefundController,
-  getRefundStatusController
+  getRefundStatusController,
+  getMyTransactionsController,
+  getAllTransactionsController,
+  getTransactionByIdController,
+  deleteTransactionController,
+  deleteAllTransactionsController,
+  getTransactionHistoryController
 } from '../controllers/payment.controller.js';
 import { USER_ROLES } from '../utils/constants.js';
 //#endregion
@@ -127,6 +133,79 @@ router.get(
   authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN),
   getRefundStatusController
 );
+
+/**
+ * GET /api/payments/my-transactions
+ * Get my transactions (customer only)
+ */
+router.get(
+  '/my-transactions',
+  generalLimiter,
+  protect,
+  authorize(USER_ROLES.CUSTOMER),
+  getMyTransactionsController
+);
+
+/**
+ * GET /api/payments/transactions
+ * Get all transactions (staff/admin only)
+ */
+router.get(
+  '/transactions/all',
+  generalLimiter,
+  protect,
+  authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN),
+  getAllTransactionsController
+);
+
+/**
+ * GET /api/payments/transaction-history
+ * Get transaction history with statistics
+ */
+router.get(
+  '/transaction-history',
+  generalLimiter,
+  protect,
+  authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN),
+  getTransactionHistoryController
+);
+
+/**
+ * GET /api/payments/transactions/:transactionId
+ * Get transaction by ID
+ */
+router.get(
+  '/transactions/:transactionId',
+  generalLimiter,
+  protect,
+  authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN),
+  getTransactionByIdController
+);
+
+/**
+ * DELETE /api/payments/transactions/:transactionId
+ * Delete transaction (staff/admin only)
+ */
+router.delete(
+  '/transactions/:transactionId',
+  generalLimiter,
+  protect,
+  authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN),
+  deleteTransactionController
+);
+
+/**
+ * DELETE /api/payments/transactions
+ * Delete all cancelled transactions (staff/admin only)
+ */
+router.delete(
+  '/transactions/bulk/cancelled',
+  generalLimiter,
+  protect,
+  authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN),
+  deleteAllTransactionsController
+);
+
 //#endregion
 
 export default router;

@@ -11,27 +11,48 @@ import { reserveEquipment, releaseEquipment } from './equipment.service.js';
  * Returns { details: [BookingDetail], total }
  */
 export const createBookingDetails = async (bookingId, detailsArray, session = null) => {
-  if (!bookingId) throw new ValidationError('Missing bookingId');
-  if (!Array.isArray(detailsArray) || detailsArray.length === 0) {
-    throw new ValidationError('detailsArray must be a non-empty array');
-  }
-
-  const created = [];
-  const reserved = [];
-  let total = 0;
-
   try {
-    for (const item of detailsArray) {
-      const { detailType, equipmentId, extraServiceId, quantity = 1 } = item;
+    if (!bookingId) {
+      throw new ValidationError('ID booking là bắt buộc');
+    }
+    if (!Array.isArray(detailsArray) || detailsArray.length === 0) {
+      throw new ValidationError('Danh sách chi tiết phải là mảng không rỗng');
+    }
 
-      if (!detailType) throw new ValidationError('detailType is required');
-      if (quantity <= 0) throw new ValidationError('quantity must be >= 1');
+    const created = [];
+    const reserved = [];
+    let total = 0;
 
-      if (detailType === 'equipment') {
-        if (!equipmentId) throw new ValidationError('equipmentId is required for equipment detail');
+    try {
+      for (const item of detailsArray) {
+        const { detailType, equipmentId, extraServiceId, quantity = 1 } = item;
 
-        const equipment = await Equipment.findById(equipmentId);
-        if (!equipment) throw new NotFoundError('Equipment not found');
+        if (!detailType) {
+          throw new ValidationError('Loại chi tiết là bắt buộc');
+        }
+        if (isNaN(quantity) || quantity <= 0) {
+          throw new ValidationError('Số lượng phải lớn hơn hoặc bằng 1');
+        }
+
+        if (detailType === 'equipment') {
+          if (!equipmentId) {
+            throw new ValidationError('ID thiết bị là bắt buộc cho chi tiết thiết bị');
+          }
+
+          const equipment = await Equipment.findById(equipmentId);
+          if (!equipment) {
+            throw new NotFoundError('Thiết bị không tồn tại');
+          }
+
+          // Check if equipment is available
+          if (!equipment.isAvailable) {
+            throw new ValidationError(`Thiết bị "${equipment.name}" không khả dụng`);
+          }
+
+          // Validate quantity against available stock
+          if (equipment.quantityAvailable !== undefined && quantity > equipment.quantityAvailable) {
+            throw new ValidationError(`Số lượng thiết bị yêu cầu (${quantity}) vượt quá số lượng khả dụng (${equipment.quantityAvailable})`);
+          }
 
         // Reserve equipment (atomic)
         await reserveEquipment(equipmentId, quantity, session);
@@ -57,16 +78,20 @@ export const createBookingDetails = async (bookingId, detailsArray, session = nu
 
         created.push(detail);
         total += subtotal;
-      } else if (detailType === 'extra_service') {
-        if (!extraServiceId) throw new ValidationError('extraServiceId is required for extra_service detail');
+        } else if (detailType === 'extra_service') {
+          if (!extraServiceId) {
+            throw new ValidationError('ID dịch vụ là bắt buộc cho chi tiết dịch vụ');
+          }
 
-        const svc = await Service.findById(extraServiceId);
-        if (!svc) throw new NotFoundError('Service not found');
+          const svc = await Service.findById(extraServiceId);
+          if (!svc) {
+            throw new NotFoundError('Dịch vụ không tồn tại');
+          }
 
-        // Service must be available/active
-        if (!svc.isAvailable) {
-          throw new ValidationError(`Service "${svc.name}" is not available`);
-        }
+          // Service must be available/active
+          if (!svc.isAvailable) {
+            throw new ValidationError(`Dịch vụ "${svc.name}" không khả dụng`);
+          }
 
         const pricePerUnit = svc.pricePerUse || 0;
         const subtotal = pricePerUnit * quantity;
@@ -86,15 +111,15 @@ export const createBookingDetails = async (bookingId, detailsArray, session = nu
           { session },
         );
 
-        created.push(detail);
-        total += subtotal;
-      } else {
-        throw new ValidationError('Invalid detailType');
+          created.push(detail);
+          total += subtotal;
+        } else {
+          throw new ValidationError('Loại chi tiết không hợp lệ. Chọn từ: equipment, extra_service');
+        }
       }
-    }
 
-    return { details: created, total };
-  } catch (err) {
+      return { details: created, total };
+    } catch (err) {
     // Rollback: delete created details and release reserved equipment
     try {
       if (created.length > 0) {
@@ -116,23 +141,35 @@ export const createBookingDetails = async (bookingId, detailsArray, session = nu
       }
     } catch (rollbackErr) {
       // eslint-disable-next-line no-console
-      console.error('Rollback failed', rollbackErr);
-    }
+        console.error('Rollback failed', rollbackErr);
+      }
 
-    throw err;
+      throw err;
+    }
+  } catch (error) {
+    if (error instanceof ValidationError || error instanceof NotFoundError) {
+      throw error;
+    }
+    console.error('Error in createBookingDetails:', error);
+    throw new Error('Lỗi khi tạo chi tiết booking');
   }
 };
 
 export const removeBookingDetails = async (bookingId, detailIds, session = null) => {
-  if (!bookingId) throw new ValidationError('Missing bookingId');
-  if (!Array.isArray(detailIds) || detailIds.length === 0) {
-    throw new ValidationError('detailIds must be a non-empty array');
-  }
+  try {
+    if (!bookingId) {
+      throw new ValidationError('ID booking là bắt buộc');
+    }
+    if (!Array.isArray(detailIds) || detailIds.length === 0) {
+      throw new ValidationError('Danh sách ID chi tiết phải là mảng không rỗng');
+    }
 
-  const query = BookingDetail.find({ bookingId, _id: { $in: detailIds } });
-  if (session) query.session(session);
-  const toRemove = await query.lean();
-  if (!toRemove || toRemove.length === 0) return { removedTotal: 0 };
+    const query = BookingDetail.find({ bookingId, _id: { $in: detailIds } });
+    if (session) query.session(session);
+    const toRemove = await query.lean();
+    if (!toRemove || toRemove.length === 0) {
+      return { removedTotal: 0 };
+    }
 
   let removedTotal = 0;
 
@@ -150,14 +187,21 @@ export const removeBookingDetails = async (bookingId, detailIds, session = null)
     removedTotal += d.subtotal || 0;
   }
 
-  // Delete the details
-  if (session) {
-    await BookingDetail.deleteMany({ bookingId, _id: { $in: detailIds } }).session(session);
-  } else {
-    await BookingDetail.deleteMany({ bookingId, _id: { $in: detailIds } });
-  }
+    // Delete the details
+    if (session) {
+      await BookingDetail.deleteMany({ bookingId, _id: { $in: detailIds } }).session(session);
+    } else {
+      await BookingDetail.deleteMany({ bookingId, _id: { $in: detailIds } });
+    }
 
-  return { removedTotal };
+    return { removedTotal };
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      throw error;
+    }
+    console.error('Error in removeBookingDetails:', error);
+    throw new Error('Lỗi khi xóa chi tiết booking');
+  }
 };
 
 export default {
