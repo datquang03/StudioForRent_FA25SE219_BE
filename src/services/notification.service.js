@@ -120,7 +120,7 @@ export const sendNotification = async (notification, sendEmailFlag = false, io =
  */
 export const getNotifications = async (userId, { page = 1, limit = 10, isRead, type } = {}) => {
   try {
-    const query = { userId };
+    const query = { userId, isDeleted: false };
 
     if (isRead !== undefined) {
       query.isRead = isRead;
@@ -183,21 +183,44 @@ export const markAsRead = async (notificationId, userId) => {
 };
 
 /**
- * Xóa notification
+ * Xóa notification (Soft delete)
  * @param {string} notificationId - ID của notification
  * @param {string} userId - ID của user (để verify ownership)
  */
 export const deleteNotification = async (notificationId, userId) => {
   try {
-    const result = await Notification.findOneAndDelete({ _id: notificationId, userId });
+    const result = await Notification.findOneAndUpdate(
+      { _id: notificationId, userId },
+      { isDeleted: true },
+      { new: true }
+    );
 
     if (!result) {
       throw new Error('Notification not found or not owned by user');
     }
 
-    logger.info(`Notification ${notificationId} deleted`);
+    logger.info(`Notification ${notificationId} soft deleted`);
   } catch (error) {
     logger.error('Error deleting notification:', error);
+    throw error;
+  }
+};
+
+/**
+ * Xóa tất cả notification đã đọc (Soft delete)
+ * @param {string} userId - ID của user
+ */
+export const deleteAllReadNotifications = async (userId) => {
+  try {
+    const result = await Notification.updateMany(
+      { userId, isRead: true, isDeleted: false },
+      { isDeleted: true }
+    );
+
+    logger.info(`Soft deleted ${result.modifiedCount} read notifications for user ${userId}`);
+    return result.modifiedCount;
+  } catch (error) {
+    logger.error('Error deleting all read notifications:', error);
     throw error;
   }
 };

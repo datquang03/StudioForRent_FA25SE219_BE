@@ -150,3 +150,90 @@ export const deleteCommentService = async (commentId, userId, userRole) => {
     await comment.deleteOne();
   }
 };
+
+/**
+ * Toggle like on a comment
+ * @param {string} commentId - Comment ID
+ * @param {string} userId - User ID
+ * @returns {Promise<Object>} Updated comment
+ */
+export const toggleCommentLikeService = async (commentId, userId) => {
+  const comment = await Comment.findById(commentId);
+  if (!comment) {
+    throw new Error("Comment not found");
+  }
+
+  const likeIndex = comment.likes.indexOf(userId);
+  if (likeIndex === -1) {
+    // Like
+    comment.likes.push(userId);
+    
+    // Notify owner if not self-like
+    if (comment.userId.toString() !== userId.toString()) {
+      await createAndSendNotification(
+        comment.userId,
+        NOTIFICATION_TYPE.INFO,
+        "Lượt thích mới",
+        "Ai đó đã thích bình luận của bạn.",
+        false,
+        null,
+        comment._id
+      );
+    }
+  } else {
+    // Unlike
+    comment.likes.splice(likeIndex, 1);
+  }
+
+  await comment.save();
+  return comment;
+};
+
+/**
+ * Toggle like on a reply
+ * @param {string} commentId - Comment ID
+ * @param {string} replyId - Reply ID
+ * @param {string} userId - User ID
+ * @returns {Promise<Object>} Updated comment
+ */
+export const toggleReplyLikeService = async (commentId, replyId, userId) => {
+  const comment = await Comment.findById(commentId);
+  if (!comment) {
+    throw new Error("Comment not found");
+  }
+
+  const reply = comment.replies.id(replyId);
+  if (!reply) {
+    throw new Error("Reply not found");
+  }
+
+  // Initialize likes array if undefined (for old documents)
+  if (!reply.likes) {
+    reply.likes = [];
+  }
+
+  const likeIndex = reply.likes.indexOf(userId);
+  if (likeIndex === -1) {
+    // Like
+    reply.likes.push(userId);
+    
+    // Notify reply owner if not self-like
+    if (reply.userId.toString() !== userId.toString()) {
+      await createAndSendNotification(
+        reply.userId,
+        NOTIFICATION_TYPE.INFO,
+        "Lượt thích mới",
+        "Ai đó đã thích phản hồi của bạn.",
+        false,
+        null,
+        comment._id
+      );
+    }
+  } else {
+    // Unlike
+    reply.likes.splice(likeIndex, 1);
+  }
+
+  await comment.save();
+  return comment;
+};

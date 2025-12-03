@@ -240,6 +240,44 @@ export const toggleReviewVisibilityService = async (reviewId) => {
 };
 
 /**
+ * Toggle like on a review
+ * @param {string} reviewId - Review ID
+ * @param {string} userId - User ID
+ * @returns {Promise<Object>} Updated review
+ */
+export const toggleReviewLikeService = async (reviewId, userId) => {
+  const review = await Review.findById(reviewId);
+  if (!review) {
+    throw new Error("Review not found");
+  }
+
+  const likeIndex = review.likes.indexOf(userId);
+  if (likeIndex === -1) {
+    // Like
+    review.likes.push(userId);
+    
+    // Notify owner if not self-like
+    if (review.userId.toString() !== userId.toString()) {
+      await createAndSendNotification(
+        review.userId,
+        NOTIFICATION_TYPE.INFO,
+        "Lượt thích mới",
+        "Ai đó đã thích đánh giá của bạn.",
+        false,
+        null,
+        review._id
+      );
+    }
+  } else {
+    // Unlike
+    review.likes.splice(likeIndex, 1);
+  }
+
+  await review.save();
+  return review;
+};
+
+/**
  * Helper function to recalculate average rating
  * @param {string} targetType - Target type
  * @param {string} targetId - Target ID

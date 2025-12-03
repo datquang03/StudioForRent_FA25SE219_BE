@@ -104,3 +104,39 @@ export const deleteComment = asyncHandler(async (req, res) => {
     message: "Comment deleted successfully",
   });
 });
+
+/**
+ * Toggle like on a comment
+ * POST /api/comments/:id/like
+ */
+export const likeComment = asyncHandler(async (req, res) => {
+  try {
+    const { toggleCommentLikeService } = await import("../services/comment.service.js");
+    const comment = await toggleCommentLikeService(req.params.id, req.user._id);
+    res.status(200).json({
+      success: true,
+      data: comment,
+    });
+  } catch (error) {
+    res.status(400);
+    throw new Error(error.message);
+  }
+});
+
+/**
+ * Toggle like on a reply
+ * POST /api/comments/:id/replies/:replyId/like
+ */
+export const likeReply = asyncHandler(async (req, res) => {
+  try {
+    const { toggleReplyLikeService } = await import("../services/comment.service.js");
+    const comment = await toggleReplyLikeService(req.params.id, req.params.replyId, req.user._id);
+    res.status(200).json({
+      success: true,
+      data: comment,
+    });
+  } catch (error) {
+    res.status(400);
+    throw new Error(error.message);
+  }
+});

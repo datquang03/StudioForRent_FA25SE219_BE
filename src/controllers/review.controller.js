@@ -115,3 +115,21 @@ export const toggleReviewVisibility = asyncHandler(async (req, res) => {
     throw new Error(error.message);
   }
 });
+
+/**
+ * Toggle like on a review
+ * POST /api/reviews/:id/like
+ */
+export const likeReview = asyncHandler(async (req, res) => {
+  try {
+    const { toggleReviewLikeService } = await import("../services/review.service.js");
+    const review = await toggleReviewLikeService(req.params.id, req.user._id);
+    res.status(200).json({
+      success: true,
+      data: review,
+    });
+  } catch (error) {
+    res.status(400);
+    throw new Error(error.message);
+  }
+});

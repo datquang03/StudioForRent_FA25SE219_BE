@@ -60,6 +60,20 @@ export const deleteNotificationController = asyncHandler(async (req, res) => {
 });
 
 /**
+ * Xóa tất cả notification đã đọc
+ */
+export const deleteAllReadNotificationsController = asyncHandler(async (req, res) => {
+  const { deleteAllReadNotifications } = await import('../services/notification.service.js');
+  const count = await deleteAllReadNotifications(req.user.id);
+
+  res.status(200).json({
+    success: true,
+    message: `Đã xóa ${count} thông báo đã đọc!`,
+    data: { count }
+  });
+});
+
+/**
  * Gửi notification thủ công (cho admin/staff)
  */
 export const sendManualNotificationController = asyncHandler(async (req, res) => {

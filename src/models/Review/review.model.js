@@ -54,6 +54,12 @@ const reviewSchema = new mongoose.Schema(
       createdAt: Date
     },
 
+    // Likes/Reactions
+    likes: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User"
+    }],
+
     isHidden: {
       type: Boolean,
       default: false,
