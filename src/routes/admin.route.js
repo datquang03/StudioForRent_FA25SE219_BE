@@ -21,16 +21,17 @@ router.use(sanitizeInput);
 router.use(adminLimiter);
 
 router.use(protect);
-router.use(authorize(USER_ROLES.ADMIN));
 
-router.get('/customers', searchLimiter, getCustomers);
-router.get('/customers/:id', validateObjectId(), getCustomer);
-router.patch('/customers/:id/ban', validateObjectId(), banCustomer);
-router.patch('/customers/:id/unban', validateObjectId(), unbanCustomer);
+// Customer Management - Accessible by Staff and Admin
+router.get('/customers', authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), searchLimiter, getCustomers);
+router.get('/customers/:id', authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), validateObjectId(), getCustomer);
+router.patch('/customers/:id/ban', authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), validateObjectId(), banCustomer);
+router.patch('/customers/:id/unban', authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), validateObjectId(), unbanCustomer);
 
-router.get('/staff', searchLimiter, getStaffList);
-router.get('/staff/:id', validateObjectId(), getStaff);
-router.patch('/staff/:id/deactivate', validateObjectId(), deactivateStaff);
-router.patch('/staff/:id/activate', validateObjectId(), activateStaff);
+// Staff Management - Accessible by Admin only
+router.get('/staff', authorize(USER_ROLES.ADMIN), searchLimiter, getStaffList);
+router.get('/staff/:id', authorize(USER_ROLES.ADMIN), validateObjectId(), getStaff);
+router.patch('/staff/:id/deactivate', authorize(USER_ROLES.ADMIN), validateObjectId(), deactivateStaff);
+router.patch('/staff/:id/activate', authorize(USER_ROLES.ADMIN), validateObjectId(), activateStaff);
 
 export default router;

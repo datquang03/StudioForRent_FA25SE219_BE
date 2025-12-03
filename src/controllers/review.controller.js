@@ -1,70 +1,117 @@
 import asyncHandler from "express-async-handler";
-import * as reviewService from "../services/review.service.js";
-import { isValidObjectId } from "../utils/validators.js";
+import { ValidationError } from "../utils/errors.js";
+import {
+  createReviewService,
+  getReviewsService,
+  replyToReviewService,
+  updateReviewService,
+  toggleReviewVisibilityService,
+  updateReviewReplyService,
+} from "../services/review.service.js";
 
+/**
+ * Create a new review
+ * POST /api/reviews
+ */
 export const createReview = asyncHandler(async (req, res) => {
-  const userId = req.user._id;
-  const { bookingId, rating, title, comment } = req.body;
-
-  // Validate required fields
-  if (!bookingId || !isValidObjectId(bookingId)) {
-    return res.status(400).json({ success: false, message: "ID booking hợp lệ là bắt buộc" });
+  try {
+    if (!req.body.content || req.body.content.trim().length === 0) {
+      res.status(400);
+      throw new Error("Nội dung đánh giá là bắt buộc");
+    }
+    const review = await createReviewService(req.body, req.user._id);
+    res.status(201).json({
+      success: true,
+      data: review,
+    });
+  } catch (error) {
+    res.status(400);
+    throw new Error(error.message);
   }
-
-  if (!rating) {
-    return res.status(400).json({ success: false, message: "Đánh giá là bắt buộc" });
-  }
-
-  if (typeof rating !== 'number' || rating < 1 || rating > 5) {
-    return res.status(400).json({ success: false, message: "Đánh giá phải là số từ 1 đến 5" });
-  }
-
-  // Validate optional fields
-  if (title && (typeof title !== 'string' || title.trim().length === 0 || title.length > 100)) {
-    return res.status(400).json({ success: false, message: "Tiêu đề phải là chuỗi không rỗng với tối đa 100 ký tự" });
-  }
-
-  if (comment && (typeof comment !== 'string' || comment.trim().length === 0 || comment.length > 500)) {
-    return res.status(400).json({ success: false, message: "Bình luận phải là chuỗi không rỗng với tối đa 500 ký tự" });
-  }
-
-  const review = await reviewService.createReview({ userId, bookingId, rating, title, comment });
-
-  res.status(201).json({ success: true, data: review });
 });
 
-export const listReviewsByStudio = asyncHandler(async (req, res) => {
-  const { studioId } = req.params;
-  const limit = parseInt(req.query.limit, 10) || 20;
-  const skip = parseInt(req.query.skip, 10) || 0;
-
-  // Validate studioId
-  if (!studioId || !isValidObjectId(studioId)) {
-    return res.status(400).json({ success: false, message: "ID studio hợp lệ là bắt buộc" });
+/**
+ * Get reviews for a specific target
+ * GET /api/reviews?targetType=Studio&targetId=...
+ */
+export const getReviews = asyncHandler(async (req, res) => {
+  try {
+    const result = await getReviewsService(req.query, req.user);
+    res.status(200).json({
+      success: true,
+      data: result.reviews,
+      pagination: result.pagination,
+    });
+  } catch (error) {
+    res.status(400);
+    throw new Error(error.message);
   }
-
-  // Validate pagination parameters
-  if (limit < 1 || limit > 100) {
-    return res.status(400).json({ success: false, message: "Giới hạn phải từ 1 đến 100" });
-  }
-
-  if (skip < 0) {
-    return res.status(400).json({ success: false, message: "Bỏ qua phải là số không âm" });
-  }
-
-  const reviews = await reviewService.getReviewsByStudio({ studioId, limit, skip });
-  res.json({ success: true, data: reviews });
 });
 
-export const getReviewForBooking = asyncHandler(async (req, res) => {
-  const { bookingId } = req.params;
-
-  // Validate bookingId
-  if (!bookingId || !isValidObjectId(bookingId)) {
-    return res.status(400).json({ success: false, message: "ID booking hợp lệ là bắt buộc" });
+/**
+ * Reply to a review (Staff/Admin only)
+ * POST /api/reviews/:id/reply
+ */
+export const replyToReview = asyncHandler(async (req, res) => {
+  if (!req.body.content || req.body.content.trim().length === 0) {
+    throw new ValidationError("Nội dung phản hồi là bắt buộc");
   }
+  const review = await replyToReviewService(req.params.id, req.body.content, req.user._id);
+  res.status(200).json({
+    success: true,
+    data: review,
+  });
+});
 
-  const review = await reviewService.getReviewByBooking({ bookingId });
-  if (!review) return res.status(404).json({ success: false, message: "Đánh giá không tồn tại" });
-  res.json({ success: true, data: review });
+/**
+ * Update a review reply (Staff/Admin only)
+ * PUT /api/reviews/:id/reply
+ */
+export const updateReviewReply = asyncHandler(async (req, res) => {
+  if (!req.body.content || req.body.content.trim().length === 0) {
+    throw new ValidationError("Nội dung phản hồi là bắt buộc");
+  }
+  const review = await updateReviewReplyService(req.params.id, req.body.content, req.user._id);
+  res.status(200).json({
+    success: true,
+    data: review,
+  });
+});
+
+/**
+ * Update a review (Customer only)
+ * PUT /api/reviews/:id
+ */
+export const updateReview = asyncHandler(async (req, res) => {
+  try {
+    if (req.body.content !== undefined && req.body.content.trim().length === 0) {
+      res.status(400);
+      throw new Error("Nội dung đánh giá không được để trống");
+    }
+    const review = await updateReviewService(req.params.id, req.body, req.user._id);
+    res.status(200).json({
+      success: true,
+      data: review,
+    });
+  } catch (error) {
+    res.status(400);
+    throw new Error(error.message);
+  }
+});
+
+/**
+ * Toggle review visibility (Admin only)
+ * PATCH /api/reviews/:id/visibility
+ */
+export const toggleReviewVisibility = asyncHandler(async (req, res) => {
+  try {
+    const review = await toggleReviewVisibilityService(req.params.id);
+    res.status(200).json({
+      success: true,
+      data: review,
+    });
+  } catch (error) {
+    res.status(400);
+    throw new Error(error.message);
+  }
 });

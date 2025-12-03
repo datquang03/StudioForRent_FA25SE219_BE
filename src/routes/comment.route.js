@@ -1,18 +1,28 @@
-import express from 'express';
-import { likeCommentController, unlikeCommentController } from '../controllers/setDesign.controller.js';
-import { protect } from '../middlewares/auth.js';
-import { sanitizeInput } from '../middlewares/validate.js';
-import { generalLimiter } from '../middlewares/rateLimiter.js';
+import express from "express";
+import { protect, optionalProtect } from "../middlewares/auth.js";
+import { 
+  createComment, 
+  getComments, 
+  replyToComment, 
+  updateComment, 
+  deleteComment 
+} from "../controllers/comment.controller.js";
 
 const router = express.Router();
 
-// Apply middleware to all routes
-router.use(sanitizeInput);
-router.use(generalLimiter);
-router.use(protect); // All comment routes require authentication
+// Public: Get comments (Q&A) (Optional Auth for Staff/Admin visibility)
+router.get("/", optionalProtect, getComments);
 
-// Like/Unlike comment
-router.post('/:commentId/like', likeCommentController);
-router.delete('/:commentId/like', unlikeCommentController);
+// Protected: Create comment (Authenticated Users)
+router.post("/", protect, createComment);
+
+// Protected: Reply to comment (Authenticated Users)
+router.post("/:id/reply", protect, replyToComment);
+
+// Protected: Update comment (Authenticated Users - Own comment)
+router.put("/:id", protect, updateComment);
+
+// Protected: Delete comment (Admin, Staff, or Owner)
+router.delete("/:id", protect, deleteComment);
 
 export default router;

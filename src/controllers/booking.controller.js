@@ -18,11 +18,10 @@ export const createBooking = asyncHandler(async (req, res) => {
   // attach authenticated user if available
   if (!data.userId && req.user) data.userId = req.user._id;
 
-  const booking = await createBookingService(data);
-
-  // Generate payment options for the booking
-  const { createPaymentOptions } = await import('../services/payment.service.js');
-  const paymentOptions = await createPaymentOptions(booking._id);
+  const result = await createBookingService(data);
+  
+  // Service returns { booking, paymentOptions }
+  const { booking, paymentOptions } = result;
 
   res.status(201).json({
     success: true,

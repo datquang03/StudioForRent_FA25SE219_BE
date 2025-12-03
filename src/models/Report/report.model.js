@@ -1,12 +1,24 @@
 import mongoose from "mongoose";
-import { REPORT_STATUS, REPORT_ISSUE_TYPE } from "../../utils/constants.js";
+import { REPORT_STATUS, REPORT_ISSUE_TYPE, REPORT_TARGET_TYPES } from "../../utils/constants.js";
 
 /**
  * REPORT MODEL
- * Theo PostgreSQL schema với issue_type và resolution tracking
+ * Polymorphic report model for Booking, Review, Comment
  */
 const reportSchema = new mongoose.Schema(
   {
+    // Polymorphic Association
+    targetType: {
+      type: String,
+      enum: Object.values(REPORT_TARGET_TYPES),
+      default: REPORT_TARGET_TYPES.BOOKING, // Default for backward compatibility
+    },
+    targetId: {
+      type: mongoose.Schema.Types.ObjectId,
+      required: true,
+      refPath: "targetType",
+    },
+    // Legacy field support (optional now)
     bookingId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Booking",
@@ -37,6 +49,15 @@ const reportSchema = new mongoose.Schema(
     resolvedAt: {
       type: Date,
     },
+    priority: {
+      type: String,
+      enum: ['low', 'medium', 'high', 'urgent'],
+      default: 'medium',
+    },
+    compensationAmount: {
+      type: Number,
+      default: 0,
+    }
   },
   {
     timestamps: { createdAt: true, updatedAt: false },
@@ -44,7 +65,7 @@ const reportSchema = new mongoose.Schema(
 );
 
 // Indexes
-reportSchema.index({ bookingId: 1 });
+reportSchema.index({ targetType: 1, targetId: 1 });
 reportSchema.index({ reporterId: 1 });
 reportSchema.index({ status: 1 });
 reportSchema.index({ issueType: 1 });

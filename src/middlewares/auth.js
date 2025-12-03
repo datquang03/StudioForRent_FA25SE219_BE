@@ -47,6 +47,26 @@ export const protect = asyncHandler(async (req, res, next) => {
     });
   }
 });
+
+/**
+ * Optional Protect - Verify JWT token if present, but don't block if missing
+ */
+export const optionalProtect = asyncHandler(async (req, res, next) => {
+  let token;
+
+  if (req.headers.authorization?.startsWith("Bearer")) {
+    try {
+      token = req.headers.authorization.split(" ")[1];
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+      req.user = await User.findById(decoded.id).select("-passwordHash -verificationCode -verificationCodeExpiry");
+    } catch (error) {
+      // Token invalid or expired, treat as guest
+      console.error("Optional auth error:", error.message);
+    }
+  }
+  next();
+});
 // #endregion
 
 // #region Authorization Middleware

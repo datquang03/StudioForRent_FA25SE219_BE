@@ -1,17 +1,33 @@
 import express from "express";
-import { protect } from "../middlewares/auth.js";
-import { reviewLimiter } from "../middlewares/rateLimiter.js";
-import { createReview, listReviewsByStudio, getReviewForBooking } from "../controllers/review.controller.js";
+import { protect, authorize, optionalProtect } from "../middlewares/auth.js";
+import { 
+  createReview, 
+  getReviews, 
+  replyToReview, 
+  updateReview, 
+  toggleReviewVisibility,
+  updateReviewReply
+} from "../controllers/review.controller.js";
+import { USER_ROLES } from "../utils/constants.js";
 
 const router = express.Router();
 
-// Create a review for a completed booking (customer to studio)
-router.post("/", protect, reviewLimiter, createReview);
+// Public: Get reviews (Optional Auth for Staff/Admin visibility)
+router.get("/", optionalProtect, getReviews);
 
-// List reviews for a studio
-router.get("/studio/:studioId", listReviewsByStudio);
+// Protected: Create review (Customer)
+router.post("/", protect, authorize(USER_ROLES.CUSTOMER), createReview);
 
-// Get review by bookingId
-router.get("/booking/:bookingId", getReviewForBooking);
+// Protected: Update review (Customer - Own review)
+router.put("/:id", protect, authorize(USER_ROLES.CUSTOMER), updateReview);
+
+// Protected: Reply to review (Staff/Admin)
+router.post("/:id/reply", protect, authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), replyToReview);
+
+// Protected: Update review reply (Staff/Admin)
+router.put("/:id/reply", protect, authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), updateReviewReply);
+
+// Protected: Toggle visibility (Admin only)
+router.patch("/:id/visibility", protect, authorize(USER_ROLES.ADMIN), toggleReviewVisibility);
 
 export default router;
