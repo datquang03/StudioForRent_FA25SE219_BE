@@ -43,7 +43,7 @@ const setDesignSchema = new mongoose.Schema(
 
     // === METADATA (Cached for performance) ===
     // Thay vì embedded array, ta chỉ lưu số liệu tổng hợp để hiển thị nhanh
-    ratingAvg: {
+    avgRating: {
       type: Number,
       default: 0,
       min: 0,

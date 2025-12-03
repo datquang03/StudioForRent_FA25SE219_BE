@@ -23,8 +23,8 @@ router.post('/', createReportController);
 // List all reports (Staff/Admin only)
 router.get('/', authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), getReportsController);
 
-// Get single report (Staff/Admin only - or owner, but for now restricted to staff/admin for simplicity)
-router.get('/:id', authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), validateObjectId(), getReportByIdController);
+// Get single report (Staff/Admin or Owner)
+router.get('/:id', validateObjectId(), getReportByIdController);
 
 // Update report (Staff/Admin only)
 router.patch('/:id', authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), validateObjectId(), updateReportController);

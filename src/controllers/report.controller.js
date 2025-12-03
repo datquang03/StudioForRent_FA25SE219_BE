@@ -22,7 +22,7 @@ export const getReportsController = asyncHandler(async (req, res) => {
 });
 
 export const getReportByIdController = asyncHandler(async (req, res) => {
-  const report = await getReportById(req.params.id);
+  const report = await getReportById(req.params.id, req.user);
   if (!report) {
     res.status(404);
     throw new Error('Báo cáo không tồn tại');

@@ -1,6 +1,7 @@
 import Comment from "../models/Comment/comment.model.js";
 import { createAndSendNotification } from "./notification.service.js";
 import { NOTIFICATION_TYPE } from "../utils/constants.js";
+import { NotFoundError, ForbiddenError } from "../utils/errors.js";
 
 /**
  * Create a new comment
@@ -132,12 +133,12 @@ export const updateCommentService = async (commentId, content, userId) => {
 export const deleteCommentService = async (commentId, userId, userRole) => {
   const comment = await Comment.findById(commentId);
   if (!comment) {
-    throw new Error("Comment not found");
+    throw new NotFoundError("Comment not found");
   }
 
   // Allow deletion if user is admin, staff, or the owner of the comment
   if (userRole !== "admin" && userRole !== "staff" && comment.userId.toString() !== userId.toString()) {
-    throw new Error("Not authorized to delete this comment");
+    throw new ForbiddenError("Not authorized to delete this comment");
   }
 
   // Soft delete if there are replies, hard delete otherwise

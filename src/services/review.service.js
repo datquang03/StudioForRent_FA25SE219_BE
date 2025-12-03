@@ -5,7 +5,7 @@ import Studio from "../models/Studio/studio.model.js";
 import SetDesign from "../models/SetDesign/setDesign.model.js";
 import Service from "../models/Service/service.model.js";
 import User from "../models/User/user.model.js";
-import { REVIEW_TARGET_TYPES, NOTIFICATION_TYPE } from "../utils/constants.js";
+import { REVIEW_TARGET_TYPES, NOTIFICATION_TYPE, BOOKING_STATUS } from "../utils/constants.js";
 import { createAndSendNotification } from "./notification.service.js";
 
 /**
@@ -23,7 +23,7 @@ export const createReviewService = async (data, userId) => {
     throw new Error("Booking not found or does not belong to you.");
   }
 
-  if (booking.status !== "completed") {
+  if (booking.status !== BOOKING_STATUS.COMPLETED) {
     throw new Error("You can only review completed bookings.");
   }
 
@@ -50,8 +50,8 @@ export const createReviewService = async (data, userId) => {
   // 5. Notify Admin/Staff (Async)
   // Find admins to notify
   const admins = await User.find({ role: "admin" }).select("_id");
-  for (const admin of admins) {
-    await createAndSendNotification(
+  await Promise.all(admins.map(admin => 
+    createAndSendNotification(
       admin._id,
       NOTIFICATION_TYPE.NEW_REVIEW,
       "Đánh giá mới",
@@ -59,8 +59,8 @@ export const createReviewService = async (data, userId) => {
       false,
       null,
       review._id
-    );
-  }
+    )
+  ));
 
   return review;
 };
@@ -189,7 +189,6 @@ export const updateReviewReplyService = async (reviewId, content, userId) => {
   // For now, allow any staff/admin to update for flexibility
 
   review.reply.content = content;
-  review.reply.updatedAt = new Date(); // Track update time if needed (schema might need update)
   
   await review.save();
   return review;
@@ -264,7 +263,7 @@ const updateAverageRating = async (targetType, targetId) => {
     if (targetType === REVIEW_TARGET_TYPES.STUDIO) {
       await Studio.findByIdAndUpdate(targetId, { avgRating: roundedRating, reviewCount: count });
     } else if (targetType === REVIEW_TARGET_TYPES.SET_DESIGN) {
-      await SetDesign.findByIdAndUpdate(targetId, { ratingAvg: roundedRating, reviewCount: count });
+      await SetDesign.findByIdAndUpdate(targetId, { avgRating: roundedRating, reviewCount: count });
     } else if (targetType === REVIEW_TARGET_TYPES.SERVICE) {
       await Service.findByIdAndUpdate(targetId, { avgRating: roundedRating, reviewCount: count });
     }
@@ -273,7 +272,7 @@ const updateAverageRating = async (targetType, targetId) => {
     if (targetType === REVIEW_TARGET_TYPES.STUDIO) {
       await Studio.findByIdAndUpdate(targetId, { avgRating: 0, reviewCount: 0 });
     } else if (targetType === REVIEW_TARGET_TYPES.SET_DESIGN) {
-      await SetDesign.findByIdAndUpdate(targetId, { ratingAvg: 0, reviewCount: 0 });
+      await SetDesign.findByIdAndUpdate(targetId, { avgRating: 0, reviewCount: 0 });
     } else if (targetType === REVIEW_TARGET_TYPES.SERVICE) {
       await Service.findByIdAndUpdate(targetId, { avgRating: 0, reviewCount: 0 });
     }

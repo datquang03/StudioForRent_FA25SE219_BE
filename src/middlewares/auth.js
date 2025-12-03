@@ -62,6 +62,7 @@ export const optionalProtect = asyncHandler(async (req, res, next) => {
       req.user = await User.findById(decoded.id).select("-passwordHash -verificationCode -verificationCodeExpiry");
     } catch (error) {
       // Token invalid or expired, treat as guest
+      console.error("Optional auth error:", error.message);
     }
   }
   next();

@@ -13,6 +13,10 @@ import {
  */
 export const createComment = asyncHandler(async (req, res) => {
   try {
+    if (!req.body.content || req.body.content.trim().length === 0) {
+      res.status(400);
+      throw new Error("Nội dung bình luận là bắt buộc");
+    }
     const comment = await createCommentService(req.body, req.user._id);
     res.status(201).json({
       success: true,
@@ -48,6 +52,10 @@ export const getComments = asyncHandler(async (req, res) => {
  */
 export const replyToComment = asyncHandler(async (req, res) => {
   try {
+    if (!req.body.content || req.body.content.trim().length === 0) {
+      res.status(400);
+      throw new Error("Nội dung phản hồi là bắt buộc");
+    }
     const comment = await replyToCommentService(
       req.params.id,
       req.body.content,
@@ -70,6 +78,10 @@ export const replyToComment = asyncHandler(async (req, res) => {
  */
 export const updateComment = asyncHandler(async (req, res) => {
   try {
+    if (!req.body.content || req.body.content.trim().length === 0) {
+      res.status(400);
+      throw new Error("Nội dung bình luận là bắt buộc");
+    }
     const comment = await updateCommentService(req.params.id, req.body.content, req.user._id);
     res.status(200).json({
       success: true,
@@ -86,14 +98,9 @@ export const updateComment = asyncHandler(async (req, res) => {
  * DELETE /api/comments/:id
  */
 export const deleteComment = asyncHandler(async (req, res) => {
-  try {
-    await deleteCommentService(req.params.id, req.user._id, req.user.role);
-    res.status(200).json({
-      success: true,
-      message: "Comment deleted successfully",
-    });
-  } catch (error) {
-    res.status(403); // Or 404 depending on error, but service throws generic Error
-    throw new Error(error.message);
-  }
+  await deleteCommentService(req.params.id, req.user._id, req.user.role);
+  res.status(200).json({
+    success: true,
+    message: "Comment deleted successfully",
+  });
 });

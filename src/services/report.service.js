@@ -1,9 +1,9 @@
 import Report from '../models/Report/report.model.js';
-import { ValidationError, NotFoundError } from '../utils/errors.js';
+import { ValidationError, NotFoundError, ForbiddenError } from '../utils/errors.js';
 import { Booking } from '../models/index.js';
 import Review from '../models/Review/review.model.js';
 import Comment from '../models/Comment/comment.model.js';
-import { REPORT_TARGET_TYPES, REPORT_ISSUE_TYPE, REPORT_STATUS } from '../utils/constants.js';
+import { REPORT_TARGET_TYPES, REPORT_ISSUE_TYPE, REPORT_STATUS, USER_ROLES } from '../utils/constants.js';
 
 export const createReport = async (data) => {
   try {
@@ -42,7 +42,7 @@ export const createReport = async (data) => {
 
     // Validate priority if provided
     if (data.priority) {
-      const validPriorities = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
+      const validPriorities = ['low', 'medium', 'high', 'urgent'];
       if (!validPriorities.includes(data.priority)) {
         throw new ValidationError(`Mức độ ưu tiên không hợp lệ. Chọn từ: ${validPriorities.join(', ')}`);
       }
@@ -111,7 +111,7 @@ export const getReports = async (filter = {}, options = {}) => {
 
     // Validate priority filter if provided
     if (filter.priority) {
-      const validPriorities = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
+      const validPriorities = ['low', 'medium', 'high', 'urgent'];
       if (!validPriorities.includes(filter.priority)) {
         throw new ValidationError(`Mức độ ưu tiên không hợp lệ. Chọn từ: ${validPriorities.join(', ')}`);
       }
@@ -131,7 +131,7 @@ export const getReports = async (filter = {}, options = {}) => {
   }
 };
 
-export const getReportById = async (id) => {
+export const getReportById = async (id, user) => {
   try {
     if (!id) {
       throw new ValidationError('ID báo cáo là bắt buộc');
@@ -147,9 +147,19 @@ export const getReportById = async (id) => {
       throw new NotFoundError('Báo cáo không tồn tại');
     }
 
+    // Check permissions: Admin/Staff or Owner
+    if (user) {
+      const isStaffOrAdmin = [USER_ROLES.ADMIN, USER_ROLES.STAFF].includes(user.role);
+      const isOwner = report.reporterId._id.toString() === user._id.toString();
+
+      if (!isStaffOrAdmin && !isOwner) {
+        throw new ForbiddenError('Bạn không có quyền xem báo cáo này');
+      }
+    }
+
     return report;
   } catch (error) {
-    if (error instanceof ValidationError || error instanceof NotFoundError) {
+    if (error instanceof ValidationError || error instanceof NotFoundError || error instanceof ForbiddenError) {
       throw error;
     }
     console.error(`Error fetching report with id ${id}:`, error);
@@ -177,7 +187,7 @@ export const updateReport = async (id, update) => {
 
     // Validate priority if provided
     if (update.priority) {
-      const validPriorities = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
+      const validPriorities = ['low', 'medium', 'high', 'urgent'];
       if (!validPriorities.includes(update.priority)) {
         throw new ValidationError(`Mức độ ưu tiên không hợp lệ. Chọn từ: ${validPriorities.join(', ')}`);
       }

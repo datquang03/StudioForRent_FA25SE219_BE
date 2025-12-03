@@ -51,8 +51,8 @@ const reportSchema = new mongoose.Schema(
     },
     priority: {
       type: String,
-      enum: ['LOW', 'MEDIUM', 'HIGH', 'URGENT'],
-      default: 'MEDIUM',
+      enum: ['low', 'medium', 'high', 'urgent'],
+      default: 'medium',
     },
     compensationAmount: {
       type: Number,

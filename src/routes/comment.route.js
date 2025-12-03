@@ -1,5 +1,5 @@
 import express from "express";
-import { protect, authorize, optionalProtect } from "../middlewares/auth.js";
+import { protect, optionalProtect } from "../middlewares/auth.js";
 import { 
   createComment, 
   getComments, 
@@ -7,7 +7,6 @@ import {
   updateComment, 
   deleteComment 
 } from "../controllers/comment.controller.js";
-import { USER_ROLES } from "../utils/constants.js";
 
 const router = express.Router();
 
