@@ -28,7 +28,7 @@ setInterval(async () => {
   }
 }, MONITOR_INTERVAL);
 
-export const getRedis = () => {
+const createRedisClient = () => {
   if (client) return client;
 
   const url = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
@@ -76,15 +76,25 @@ export const getRedis = () => {
     logger.warn('Redis client disconnected');
   });
 
-  // attempt to connect but don't crash if it fails; callers should handle failures
-  (async () => {
+  return client;
+};
+
+export const connectRedis = async () => {
+  const redisClient = createRedisClient();
+  if (!redisClient.isOpen) {
     try {
-      await client.connect();
+      await redisClient.connect();
     } catch (err) {
       logger.warn('Could not connect to Redis (non-fatal). Continuing without Redis.', { error: err?.message || err });
     }
-  })();
+  }
+  return redisClient;
+};
 
+export const getRedis = () => {
+  if (!client) {
+    return createRedisClient();
+  }
   return client;
 };
 
