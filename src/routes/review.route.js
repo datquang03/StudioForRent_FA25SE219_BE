@@ -6,7 +6,8 @@ import {
   replyToReview, 
   updateReview, 
   toggleReviewVisibility,
-  updateReviewReply
+  updateReviewReply,
+  likeReview
 } from "../controllers/review.controller.js";
 import { USER_ROLES } from "../utils/constants.js";
 
@@ -20,6 +21,9 @@ router.post("/", protect, authorize(USER_ROLES.CUSTOMER), createReview);
 
 // Protected: Update review (Customer - Own review)
 router.put("/:id", protect, authorize(USER_ROLES.CUSTOMER), updateReview);
+
+// Protected: Like review (Authenticated Users)
+router.post("/:id/like", protect, likeReview);
 
 // Protected: Reply to review (Staff/Admin)
 router.post("/:id/reply", protect, authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), replyToReview);

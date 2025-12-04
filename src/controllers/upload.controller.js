@@ -6,6 +6,7 @@ import {
   getOptimizedImageUrl,
   getVideoThumbnailUrl
 } from '../services/upload.service.js';
+import { User, Equipment, SetDesign, Review } from '../models/index.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
 
@@ -23,6 +24,9 @@ export const uploadAvatarController = async (req, res) => {
       folder,
       public_id: `avatar_${Date.now()}`
     });
+
+    // Update user avatar in database
+    await User.findByIdAndUpdate(userId, { avatar: result.url });
 
     res.status(200).json({
       success: true,
@@ -179,6 +183,9 @@ export const uploadEquipmentImageController = async (req, res) => {
       public_id: `equipment_${equipmentId}_${Date.now()}`
     });
 
+    // Update equipment image in database
+    await Equipment.findByIdAndUpdate(equipmentId, { image: result.url });
+
     res.status(200).json({
       success: true,
       message: 'Tải lên hình ảnh thiết bị thành công',
@@ -207,6 +214,10 @@ export const uploadReviewImagesController = async (req, res) => {
 
     const results = await uploadMultipleImages(req.files, { folder });
 
+    // Update review images in database
+    const imageUrls = results.map(img => img.url);
+    await Review.findByIdAndUpdate(reviewId, { $push: { images: { $each: imageUrls } } });
+
     res.status(200).json({
       success: true,
       message: `Tải lên ${results.length} hình ảnh đánh giá thành công`,
@@ -234,6 +245,10 @@ export const uploadSetDesignImagesController = async (req, res) => {
     const folder = `studio-rental/set-designs/${setDesignId}`;
 
     const results = await uploadMultipleImages(req.files, { folder });
+
+    // Update set design images in database
+    const imageUrls = results.map(img => img.url);
+    await SetDesign.findByIdAndUpdate(setDesignId, { $push: { images: { $each: imageUrls } } });
 
     res.status(200).json({
       success: true,

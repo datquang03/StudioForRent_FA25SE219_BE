@@ -4,6 +4,7 @@ import {
   getNotificationsController,
   markAsReadController,
   deleteNotificationController,
+  deleteAllReadNotificationsController,
   sendManualNotificationController,
 } from '../controllers/notification.controller.js';
 import { protect, authorize } from '../middlewares/auth.js';
@@ -33,6 +34,13 @@ router.put(
   '/:id/read',
   authorize([USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN]),
   markAsReadController
+);
+
+// Delete all read notifications (for customer, staff, admin)
+router.delete(
+  '/read/all',
+  authorize([USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN]),
+  deleteAllReadNotificationsController
 );
 
 // Delete notification (for customer, staff, admin)

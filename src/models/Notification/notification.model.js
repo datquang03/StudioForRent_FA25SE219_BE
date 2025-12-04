@@ -33,6 +33,10 @@ const notificationSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: { createdAt: true, updatedAt: false },
@@ -40,7 +44,7 @@ const notificationSchema = new mongoose.Schema(
 );
 
 // Indexes
-notificationSchema.index({ userId: 1, isRead: 1 });
+notificationSchema.index({ userId: 1, isRead: 1, isDeleted: 1 });
 notificationSchema.index({ createdAt: -1 });
 
 const Notification = mongoose.model("Notification", notificationSchema);

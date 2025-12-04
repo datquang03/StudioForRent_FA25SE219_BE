@@ -7,6 +7,7 @@ import path from "path";
 import { Server } from "socket.io";
 import { createServer } from "http";
 import { connectDB } from "./src/config/db.js";
+import { connectRedis } from "./src/config/redis.js";
 import authRoutes from "./src/routes/auth.route.js";
 import customerRoutes from "./src/routes/customer.route.js";
 import adminRoutes from "./src/routes/admin.route.js";
@@ -57,6 +58,7 @@ app.use(bodyParser.json({ limit: '10mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 
 connectDB();
+connectRedis();
 // Ensure upload temp directory exists
 const uploadTempDir = path.join(process.cwd(), 'uploads', 'temp');
 if (!fs.existsSync(uploadTempDir)) {

@@ -37,8 +37,16 @@ const commentSchema = new mongoose.Schema(
         userRole: { type: String, enum: ["customer", "staff", "admin"] }, // Added 'customer'
         content: { type: String, required: true },
         createdAt: { type: Date, default: Date.now },
+        likes: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }]
       },
     ],
+    
+    // Likes for the main comment
+    likes: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User"
+    }],
+
     isHidden: {
       type: Boolean,
       default: false, // Dùng để ẩn các comment spam/vi phạm

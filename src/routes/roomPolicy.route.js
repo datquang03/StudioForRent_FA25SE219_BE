@@ -2,23 +2,26 @@ import express from "express";
 import RoomPolicyController from "../controllers/roomPolicy.controller.js";
 import { protect, authorize } from "../middlewares/auth.js";
 import { searchLimiter } from "../middlewares/rateLimiter.js";
+import { USER_ROLES } from "../utils/constants.js";
 
 const router = express.Router();
 
-// All routes require authentication and admin authorization
+// All routes require authentication
 router.use(protect);
-router.use(authorize(['ADMIN']));
 
 // Policy CRUD routes
-router.get("/", searchLimiter, RoomPolicyController.getAllPolicies);
-router.post("/", RoomPolicyController.createPolicy);
-router.get("/type/:type", RoomPolicyController.getPoliciesByType);
-router.get("/:policyId", RoomPolicyController.getPolicyById);
-router.put("/:policyId", RoomPolicyController.updatePolicy);
-router.delete("/:policyId", RoomPolicyController.deletePolicy);
+// Read: Admin & Staff
+router.get("/", authorize(USER_ROLES.ADMIN, USER_ROLES.STAFF), searchLimiter, RoomPolicyController.getAllPolicies);
+router.get("/type/:type", authorize(USER_ROLES.ADMIN, USER_ROLES.STAFF), RoomPolicyController.getPoliciesByType);
+router.get("/:policyId", authorize(USER_ROLES.ADMIN, USER_ROLES.STAFF), RoomPolicyController.getPolicyById);
 
-// Calculation routes
-router.post("/:policyId/calculate-refund", RoomPolicyController.calculateRefund);
-router.post("/:policyId/calculate-noshow", RoomPolicyController.calculateNoShowCharge);
+// Write: Admin only
+router.post("/", authorize(USER_ROLES.ADMIN), RoomPolicyController.createPolicy);
+router.put("/:policyId", authorize(USER_ROLES.ADMIN), RoomPolicyController.updatePolicy);
+router.delete("/:policyId", authorize(USER_ROLES.ADMIN), RoomPolicyController.deletePolicy);
+
+// Calculation routes: Admin & Staff
+router.post("/:policyId/calculate-refund", authorize(USER_ROLES.ADMIN, USER_ROLES.STAFF), RoomPolicyController.calculateRefund);
+router.post("/:policyId/calculate-noshow", authorize(USER_ROLES.ADMIN, USER_ROLES.STAFF), RoomPolicyController.calculateNoShowCharge);
 
 export default router;
