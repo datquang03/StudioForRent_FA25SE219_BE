@@ -27,7 +27,7 @@ router.use(userLimiter); // Apply per-user rate limiting
 
 // Customer routes
 router.post('/', authorize(USER_ROLES.CUSTOMER), bookingLimiter, createBooking);
-router.get('/', authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), getBookings);
+router.get('/', authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF), getBookings);
 router.post('/:id/details', validateObjectId(), authorize(USER_ROLES.CUSTOMER), createBookingDetailsController);
 router.post('/:id/cancel', validateObjectId(), authorize(USER_ROLES.CUSTOMER), cancelBooking);
 
