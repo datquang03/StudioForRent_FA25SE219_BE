@@ -82,6 +82,15 @@ setDesignSchema.index({ isActive: 1 });
 setDesignSchema.index({ price: 1 });
 setDesignSchema.index({ createdAt: -1 });
 
+// Static methods
+setDesignSchema.statics.getActiveDesigns = function() {
+  return this.find({ isActive: true }).sort({ createdAt: -1 });
+};
+
+setDesignSchema.statics.getByCategory = function(category) {
+  return this.find({ category, isActive: true }).sort({ createdAt: -1 });
+};
+
 const SetDesign = mongoose.model("SetDesign", setDesignSchema);
 
 export default SetDesign;
