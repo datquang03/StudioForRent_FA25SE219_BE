@@ -22,5 +22,5 @@ jobs:
           git pull origin main || { echo "Git pull failed"; exit 1; }
           npm ci --production --frozen-lockfile || { echo "NPM install failed"; exit 1; }
           echo "${{ secrets.SPLUS_STUDIO_ENV_FILE }}" > .env
-          pm2 restart BackendAPI || pm2 start ecosystem.config.js || { echo "PM2 failed"; exit 1; }
+          pm2 reload ecosystem.config.cjs || pm2 start ecosystem.config.cjs || { echo "PM2 failed"; exit 1; }
           echo "Deploy complete at $(date)"
