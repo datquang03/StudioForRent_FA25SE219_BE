@@ -5,6 +5,8 @@ import {
   replyToCommentService,
   updateCommentService,
   deleteCommentService,
+  toggleCommentLikeService,
+  toggleReplyLikeService,
 } from "../services/comment.service.js";
 
 /**
@@ -110,17 +112,11 @@ export const deleteComment = asyncHandler(async (req, res) => {
  * POST /api/comments/:id/like
  */
 export const likeComment = asyncHandler(async (req, res) => {
-  try {
-    const { toggleCommentLikeService } = await import("../services/comment.service.js");
-    const comment = await toggleCommentLikeService(req.params.id, req.user._id);
-    res.status(200).json({
-      success: true,
-      data: comment,
-    });
-  } catch (error) {
-    res.status(400);
-    throw new Error(error.message);
-  }
+  const comment = await toggleCommentLikeService(req.params.id, req.user._id);
+  res.status(200).json({
+    success: true,
+    data: comment,
+  });
 });
 
 /**
@@ -128,15 +124,9 @@ export const likeComment = asyncHandler(async (req, res) => {
  * POST /api/comments/:id/replies/:replyId/like
  */
 export const likeReply = asyncHandler(async (req, res) => {
-  try {
-    const { toggleReplyLikeService } = await import("../services/comment.service.js");
-    const comment = await toggleReplyLikeService(req.params.id, req.params.replyId, req.user._id);
-    res.status(200).json({
-      success: true,
-      data: comment,
-    });
-  } catch (error) {
-    res.status(400);
-    throw new Error(error.message);
-  }
+  const comment = await toggleReplyLikeService(req.params.id, req.params.replyId, req.user._id);
+  res.status(200).json({
+    success: true,
+    data: comment,
+  });
 });

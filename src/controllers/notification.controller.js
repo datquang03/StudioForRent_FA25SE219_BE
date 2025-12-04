@@ -5,6 +5,7 @@ import {
   markAsRead,
   deleteNotification,
   createAndSendNotification,
+  deleteAllReadNotifications,
 } from '../services/notification.service.js';
 // #endregion
 
@@ -63,7 +64,6 @@ export const deleteNotificationController = asyncHandler(async (req, res) => {
  * Xóa tất cả notification đã đọc
  */
 export const deleteAllReadNotificationsController = asyncHandler(async (req, res) => {
-  const { deleteAllReadNotifications } = await import('../services/notification.service.js');
   const count = await deleteAllReadNotifications(req.user.id);
 
   res.status(200).json({
