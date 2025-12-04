@@ -2,6 +2,7 @@
 // Worker entrypoint to start background jobs (no-show, reminders, etc.)
 import dotenv from 'dotenv';
 import logger from '../utils/logger.js';
+import connectDB from '../config/db.js';
 import { connectRedis } from '../config/redis.js';
 import initNoShowJob from './noShowJob.js';
 import initScheduleReminders from './scheduleReminderJob.js';
@@ -11,6 +12,9 @@ dotenv.config();
 const start = async () => {
   try {
     logger.info('Starting jobs worker');
+
+    // Connect to Database
+    await connectDB();
 
     // Connect to Redis
     await connectRedis();
