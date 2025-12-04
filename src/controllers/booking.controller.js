@@ -32,7 +32,15 @@ export const createBooking = asyncHandler(async (req, res) => {
 
 export const getBookings = asyncHandler(async (req, res) => {
   const { page, limit, status } = req.query;
-  const userId = req.user ? req.user._id : req.query.userId;
+  
+  let userId;
+  // If customer, force filter by their own ID
+  if (req.user && req.user.role === 'customer') {
+    userId = req.user._id;
+  } else {
+    // For staff/admin, allow filtering by specific userId if provided in query, otherwise get all
+    userId = req.query.userId;
+  }
 
   const result = await getBookingsService({ userId, page, limit, status });
   res.status(200).json({ success: true, message: 'Lấy danh sách bookings thành công!', data: result });
