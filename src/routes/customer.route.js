@@ -9,7 +9,7 @@ import { protect, authorize } from '../middlewares/auth.js';
 import { sanitizeInput } from '../middlewares/validate.js';
 import { generalLimiter } from '../middlewares/rateLimiter.js';
 import { USER_ROLES } from '../utils/constants.js';
-import { upload, FILE_SIZE_LIMITS, ALLOWED_FILE_TYPES } from '../middlewares/upload.js';
+import { upload, FILE_SIZE_LIMITS, ALLOWED_FILE_TYPES, handleMulterError } from '../middlewares/upload.js';
 
 const router = express.Router();
 
@@ -24,5 +24,7 @@ router.get('/profile', getProfile);
 router.patch('/profile', updateProfile);
 router.post('/avatar', upload.single('avatar', ALLOWED_FILE_TYPES.IMAGES, FILE_SIZE_LIMITS.AVATAR), uploadAvatar);
 router.delete('/profile', deleteAccount);
+
+router.use(handleMulterError);
 
 export default router;
