@@ -33,6 +33,11 @@ const router = express.Router();
 router.use(sanitizeInput);
 router.use(generalLimiter);
 
+// Custom design requests management (Staff/Admin) - Moved here to avoid conflict with /:id
+router.get('/custom-requests', protect, authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), getCustomDesignRequestsController);
+router.get('/custom-requests/:id', protect, validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), getCustomDesignRequestByIdController);
+router.patch('/custom-requests/:id/status', protect, validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), updateCustomDesignRequestStatusController);
+
 // Public routes (no authentication required)
 router.get('/active', getActiveSetDesignsController);
 router.get('/category/:category', getSetDesignsByCategoryController);
@@ -53,11 +58,6 @@ router.post('/ai-generate-design', aiLimiter, generateCompleteDesignController);
 
 // Protected routes (authentication required)
 router.use(protect);
-
-// Custom design requests management (Staff/Admin)
-router.get('/custom-requests', authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), getCustomDesignRequestsController);
-router.get('/custom-requests/:id', validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), getCustomDesignRequestByIdController);
-router.patch('/custom-requests/:id/status', validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), updateCustomDesignRequestStatusController);
 
 // Image upload (Customer and Staff)
 router.post('/upload-images', authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), uploadLimiter, uploadDesignImagesController);
