@@ -5,7 +5,7 @@ import { ValidationError } from '../utils/errors.js';
 
 // File size limits (in bytes)
 export const FILE_SIZE_LIMITS = {
-  AVATAR: 2 * 1024 * 1024,      // 2MB
+  AVATAR: 5 * 1024 * 1024,      // 5MB
   STUDIO_IMAGE: 5 * 1024 * 1024, // 5MB
   EQUIPMENT_IMAGE: 3 * 1024 * 1024, // 3MB
   REVIEW_IMAGE: 3 * 1024 * 1024,   // 3MB
