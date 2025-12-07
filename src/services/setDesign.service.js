@@ -503,7 +503,7 @@ export const updateComment = async (designId, commentIndex, customerId, newMessa
       throw new ValidationError('Nội dung bình luận không được để trống');
     }
     if (newMessage.length > 300) {
-      throw new ValidationError('Nội dung bình luẫn không được vượt quá 300 ký tự');
+      throw new ValidationError('Nội dung bình luận không được vượt quá 300 ký tự');
     }
 
     const design = await SetDesign.findById(designId);
