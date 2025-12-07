@@ -6,6 +6,15 @@ import {
   createSetDesign,
   updateSetDesign,
   deleteSetDesign,
+  addReview,
+  addComment,
+  replyToComment,
+  updateComment,
+  deleteComment,
+  updateReply,
+  deleteReply,
+  likeComment,
+  unlikeComment,
   uploadDesignImage,
   getSetDesignsByCategory,
   getActiveSetDesigns,
@@ -16,7 +25,8 @@ import {
   convertRequestToSetDesign,
   generateImageFromText,
   chatWithDesignAI,
-  generateCompleteDesign
+  generateCompleteDesign,
+  getCustomSetDesign
 } from '../services/setDesign.service.js';
 // #endregion
 
@@ -100,6 +110,234 @@ export const deleteSetDesignController = asyncHandler(async (req, res) => {
     success: true,
     message: 'Xóa thiết kế set thành công',
     data: design
+  });
+});
+
+/**
+ * Add a review to a set design
+ * POST /api/set-designs/:id/reviews
+ */
+export const addReviewController = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { rating, comment } = req.body;
+  const customerId = req.user._id;
+  const customerName = req.user.name;
+
+  const design = await addReview(id, customerId, customerName, rating, comment);
+
+  res.status(201).json({
+    success: true,
+    message: 'Thêm đánh giá thành công',
+    data: design
+  });
+});
+
+/**
+ * Add a comment to a set design (Customer only)
+ * POST /api/set-designs/:id/comments
+ */
+export const addCommentController = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { message } = req.body;
+  const customerId = req.user._id;
+  const customerName = req.user.fullName || req.user.username;
+
+  if (!message) {
+    res.status(400);
+    throw new Error('Nội dung bình luận là bắt buộc');
+  }
+
+  const design = await addComment(id, customerId, customerName, message);
+
+  res.status(201).json({
+    success: true,
+    message: 'Thêm bình luận thành công',
+    data: design
+  });
+});
+
+/**
+ * Reply to a comment on a set design (Staff and Customer)
+ * POST /api/set-designs/:id/comments/:commentIndex/reply
+ */
+export const replyToCommentController = asyncHandler(async (req, res) => {
+  const { id, commentIndex } = req.params;
+  const { message } = req.body;
+  const userId = req.user._id;
+  const userName = req.user.fullName || req.user.username;
+  const userRole = req.user.role;
+
+  if (!message) {
+    res.status(400);
+    throw new Error('Nội dung phản hồi là bắt buộc');
+  }
+
+  const parsedIndex = parseInt(commentIndex);
+  if (isNaN(parsedIndex)) {
+    res.status(400);
+    throw new Error('Chỉ số bình luận không hợp lệ');
+  }
+
+  const design = await replyToComment(id, parsedIndex, userId, userName, userRole, message);
+
+  res.status(201).json({
+    success: true,
+    message: 'Thêm phản hồi thành công',
+    data: design
+  });
+});
+
+/**
+ * Update a comment on a set design (Customer - own comments only)
+ * PATCH /api/set-designs/:id/comments/:commentIndex
+ */
+export const updateCommentController = asyncHandler(async (req, res) => {
+  const { id, commentIndex } = req.params;
+  const { message } = req.body;
+  const customerId = req.user._id;
+
+  if (!message) {
+    res.status(400);
+    throw new Error('Nội dung bình luận mới là bắt buộc');
+  }
+
+  const parsedIndex = parseInt(commentIndex);
+  if (isNaN(parsedIndex)) {
+    res.status(400);
+    throw new Error('Chỉ số bình luận không hợp lệ');
+  }
+
+  const design = await updateComment(id, parsedIndex, customerId, message);
+
+  res.status(200).json({
+    success: true,
+    message: 'Cập nhật bình luận thành công',
+    data: design
+  });
+});
+
+/**
+ * Delete a comment on a set design (Customer - own comments, Staff/Admin - any comments)
+ * DELETE /api/set-designs/:id/comments/:commentIndex
+ */
+export const deleteCommentController = asyncHandler(async (req, res) => {
+  const { id, commentIndex } = req.params;
+  const userId = req.user._id;
+  const userRole = req.user.role;
+
+  const parsedIndex = parseInt(commentIndex);
+  if (isNaN(parsedIndex)) {
+    res.status(400);
+    throw new Error('Chỉ số bình luận không hợp lệ');
+  }
+
+  const design = await deleteComment(id, parsedIndex, userId, userRole);
+
+  res.status(200).json({
+    success: true,
+    message: 'Xóa bình luận thành công',
+    data: design
+  });
+});
+
+/**
+ * Update a reply on a comment (User - own replies only)
+ * PATCH /api/set-designs/:id/comments/:commentIndex/replies/:replyIndex
+ */
+export const updateReplyController = asyncHandler(async (req, res) => {
+  const { id, commentIndex, replyIndex } = req.params;
+  const { message } = req.body;
+  const userId = req.user._id;
+
+  if (!message) {
+    res.status(400);
+    throw new Error('Nội dung phản hồi mới là bắt buộc');
+  }
+
+  const parsedCommentIndex = parseInt(commentIndex);
+  const parsedReplyIndex = parseInt(replyIndex);
+  
+  if (isNaN(parsedCommentIndex) || isNaN(parsedReplyIndex)) {
+    res.status(400);
+    throw new Error('Chỉ số không hợp lệ');
+  }
+
+  const design = await updateReply(id, parsedCommentIndex, parsedReplyIndex, userId, message);
+
+  res.status(200).json({
+    success: true,
+    message: 'Cập nhật phản hồi thành công',
+    data: design
+  });
+});
+
+/**
+ * Delete a reply on a comment (User - own replies, Staff/Admin - any replies)
+ * DELETE /api/set-designs/:id/comments/:commentIndex/replies/:replyIndex
+ */
+export const deleteReplyController = asyncHandler(async (req, res) => {
+  const { id, commentIndex, replyIndex } = req.params;
+  const userId = req.user._id;
+  const userRole = req.user.role;
+
+  const parsedCommentIndex = parseInt(commentIndex);
+  const parsedReplyIndex = parseInt(replyIndex);
+  
+  if (isNaN(parsedCommentIndex) || isNaN(parsedReplyIndex)) {
+    res.status(400);
+    throw new Error('Chỉ số không hợp lệ');
+  }
+
+  const design = await deleteReply(id, parsedCommentIndex, parsedReplyIndex, userId, userRole);
+
+  res.status(200).json({
+    success: true,
+    message: 'Xóa phản hồi thành công',
+    data: design
+  });
+});
+
+/**
+ * Like a comment
+ * POST /api/comments/:commentId/like
+ */
+export const likeCommentController = asyncHandler(async (req, res) => {
+  const { commentId } = req.params;
+  const userId = req.user._id;
+
+  if (!commentId || commentId.trim() === '') {
+    res.status(400);
+    throw new Error('ID bình luận là bắt buộc');
+  }
+
+  const result = await likeComment(commentId, userId);
+
+  res.status(200).json({
+    success: true,
+    message: 'Đã thích bình luận thành công',
+    data: result
+  });
+});
+
+/**
+ * Unlike a comment
+ * DELETE /api/comments/:commentId/like
+ */
+export const unlikeCommentController = asyncHandler(async (req, res) => {
+  const { commentId } = req.params;
+  const userId = req.user._id;
+
+  if (!commentId || commentId.trim() === '') {
+    res.status(400);
+    throw new Error('ID bình luận là bắt buộc');
+  }
+
+  const result = await unlikeComment(commentId, userId);
+
+  res.status(200).json({
+    success: true,
+    message: 'Đã bỏ thích bình luận thành công',
+    data: result
   });
 });
 
@@ -280,6 +518,43 @@ export const createCustomDesignRequestController = asyncHandler(async (req, res)
     success: true,
     message: 'Gửi yêu cầu thiết kế tùy chỉnh thành công. Chúng tôi sẽ liên hệ với bạn sớm!',
     data: request
+  });
+});
+
+/**
+ * Get custom design requests for a customer
+ * GET /api/set-designs/custom-request
+ */
+export const getCustomSetDesignController = asyncHandler(async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const status = req.query.status;
+
+  const emailFromUser = req.user?.email;
+  const phoneFromUser = req.user?.phone || req.user?.phoneNumber;
+
+  const email = (req.query.email || emailFromUser || '').trim();
+  const phoneNumber = (req.query.phoneNumber || phoneFromUser || '').trim();
+
+  if (!email) {
+    res.status(400);
+    throw new Error('Email là bắt buộc để tra cứu yêu cầu thiết kế tùy chỉnh');
+  }
+
+  const filters = {
+    email,
+    phoneNumber: phoneNumber || undefined,
+    status,
+    page,
+    limit
+  };
+
+  const result = await getCustomSetDesign(filters);
+
+  res.status(200).json({
+    success: true,
+    data: result.requests,
+    pagination: result.pagination
   });
 });
 

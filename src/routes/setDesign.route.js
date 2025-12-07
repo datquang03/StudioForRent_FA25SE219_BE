@@ -16,7 +16,8 @@ import {
   convertRequestToSetDesignController,
   generateImageFromTextController,
   chatWithDesignAIController,
-  generateCompleteDesignController
+  generateCompleteDesignController,
+  getCustomSetDesignController
 } from '../controllers/setDesign.controller.js';
 import { protect } from '../middlewares/auth.js';
 import { authorize } from '../middlewares/auth.js';
@@ -42,6 +43,7 @@ router.patch('/custom-requests/:id/status', protect, validateObjectId(), authori
 router.get('/active', getActiveSetDesignsController);
 router.get('/category/:category', getSetDesignsByCategoryController);
 router.get('/', getSetDesignsController);
+router.get('/custom-request', getCustomSetDesignController);
 router.get('/:id', validateObjectId(), getSetDesignByIdController);
 
 // Custom design request - Public route for customers to submit requests
