@@ -42,7 +42,7 @@ router.patch('/custom-requests/:id/status', protect, validateObjectId(), authori
 // Public routes (no authentication required)
 router.get('/active', getActiveSetDesignsController);
 router.get('/category/:category', getSetDesignsByCategoryController);
-router.get('/custom-request', getCustomSetDesignController);
+router.get('/custom-request', protect, getCustomSetDesignController);
 router.get('/', getSetDesignsController);
 router.get('/:id', validateObjectId(), getSetDesignByIdController);
 
