@@ -271,6 +271,12 @@ export const addReview = async (designId, customerId, customerName, rating, comm
     if (!rating || !comment) {
       throw new ValidationError('Rating và nội dung đánh giá là bắt buộc');
     }
+    if (typeof comment !== 'string') {
+      throw new ValidationError('Nội dung đánh giá phải là chuỗi');
+    }
+    if (comment.trim().length === 0) {
+      throw new ValidationError('Nội dung đánh giá không được để trống');
+    }
     if (isNaN(rating) || rating < 1 || rating > 5) {
       throw new ValidationError('Rating phải từ 1 đến 5');
     }
