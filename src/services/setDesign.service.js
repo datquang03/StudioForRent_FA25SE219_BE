@@ -1515,7 +1515,7 @@ export const generateImageFromText = async (description, options = {}) => {
  * @param {number} [filters.page] - Page number
  * @param {number} [filters.limit] - Page size
  */
-export const getCustomSetDesign = async (filters = {}) => {
+export const getCustomDesignRequestsByEmail = async (filters = {}) => {
   try {
     const {
       email,
