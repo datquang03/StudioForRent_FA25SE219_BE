@@ -121,7 +121,7 @@ export const addReviewController = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { rating, comment } = req.body;
   const customerId = req.user._id;
-  const customerName = req.user.name;
+  const customerName = req.user.fullName || req.user.username || req.user.name;
 
   const design = await addReview(id, customerId, customerName, rating, comment);
 
@@ -533,7 +533,23 @@ export const getCustomSetDesignController = asyncHandler(async (req, res) => {
   const emailFromUser = req.user?.email;
   const phoneFromUser = req.user?.phone || req.user?.phoneNumber;
 
-  const email = (req.query.email || emailFromUser || '').trim();
+  // Security: Only allow querying own data or staff/admin querying any data
+  const requestedEmail = req.query.email?.trim();
+  const isStaffOrAdmin = req.user?.role === 'staff' || req.user?.role === 'admin';
+
+  let email;
+  if (requestedEmail) {
+    // If email is specified in query, check authorization
+    if (!isStaffOrAdmin && requestedEmail.toLowerCase() !== emailFromUser?.toLowerCase()) {
+      res.status(403);
+      throw new Error('Bạn chỉ có thể truy cập dữ liệu của chính mình');
+    }
+    email = requestedEmail;
+  } else {
+    // Use authenticated user's email
+    email = emailFromUser;
+  }
+
   const phoneNumber = (req.query.phoneNumber || phoneFromUser || '').trim();
 
   if (!email) {

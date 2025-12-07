@@ -12,6 +12,25 @@ import { ValidationError, NotFoundError } from '../utils/errors.js';
 import { SET_DESIGN_CATEGORIES } from '../utils/constants.js';
 // #endregion
 
+// #region Helper Functions
+
+/**
+ * Validate ObjectId format and presence
+ * @param {string} id - The ID to validate
+ * @param {string} fieldName - Name of the field for error messages
+ * @throws {ValidationError} If ID is invalid or missing
+ */
+const validateObjectId = (id, fieldName) => {
+  if (!id) {
+    throw new ValidationError(`${fieldName} là bắt buộc`);
+  }
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    throw new ValidationError(`${fieldName} không hợp lệ`);
+  }
+};
+
+// #endregion
+
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY);
 const textModel = genAI.getGenerativeModel({
@@ -103,9 +122,7 @@ export const getSetDesigns = async (options = {}) => {
  */
 export const getSetDesignById = async (id) => {
   try {
-    if (!id) {
-      throw new ValidationError('ID set design là bắt buộc');
-    }
+    validateObjectId(id, 'ID set design');
 
     const design = await SetDesign.findById(id)
       .populate('reviews.customerId', 'name email')
@@ -179,9 +196,7 @@ export const updateSetDesign = async (id, updateData, user) => {
       throw new ValidationError('Chỉ staff mới có thể cập nhật set design');
     }
 
-    if (!id) {
-      throw new ValidationError('ID set design là bắt buộc');
-    }
+    validateObjectId(id, 'ID set design');
 
     // Validate price if provided
     if (updateData.price !== undefined && (isNaN(updateData.price) || updateData.price < 0)) {
@@ -226,9 +241,7 @@ export const deleteSetDesign = async (id, user) => {
       throw new ValidationError('Chỉ staff mới có thể xóa set design');
     }
 
-    if (!id) {
-      throw new ValidationError('ID set design là bắt buộc');
-    }
+    validateObjectId(id, 'ID set design');
 
     const design = await SetDesign.findByIdAndUpdate(
       id,
@@ -262,20 +275,10 @@ export const deleteSetDesign = async (id, user) => {
  */
 export const addReview = async (designId, customerId, customerName, rating, comment) => {
   try {
-    if (!designId) {
-      throw new ValidationError('ID set design là bắt buộc');
-    }
-    if (!customerId) {
-      throw new ValidationError('ID khách hàng là bắt buộc');
-    }
+    validateObjectId(designId, 'ID set design');
+    validateObjectId(customerId, 'ID khách hàng');
     if (!rating || !comment) {
       throw new ValidationError('Rating và nội dung đánh giá là bắt buộc');
-    }
-    if (typeof comment !== 'string') {
-      throw new ValidationError('Nội dung đánh giá phải là chuỗi');
-    }
-    if (comment.trim().length === 0) {
-      throw new ValidationError('Nội dung đánh giá không được để trống');
     }
     if (isNaN(rating) || rating < 1 || rating > 5) {
       throw new ValidationError('Rating phải từ 1 đến 5');
@@ -310,20 +313,10 @@ export const addReview = async (designId, customerId, customerName, rating, comm
 export const addComment = async (designId, customerId, customerName, message) => {
   try {
     // Validate designId
-    if (!designId) {
-      throw new ValidationError('ID set design là bắt buộc');
-    }
-    if (!mongoose.Types.ObjectId.isValid(designId)) {
-      throw new ValidationError('ID set design không hợp lệ');
-    }
+    validateObjectId(designId, 'ID set design');
 
     // Validate customerId
-    if (!customerId) {
-      throw new ValidationError('ID khách hàng là bắt buộc');
-    }
-    if (!mongoose.Types.ObjectId.isValid(customerId)) {
-      throw new ValidationError('ID khách hàng không hợp lệ');
-    }
+    validateObjectId(customerId, 'ID khách hàng');
 
     // Validate customerName
     if (!customerName || customerName.trim().length === 0) {
@@ -385,12 +378,7 @@ export const addComment = async (designId, customerId, customerName, message) =>
 export const replyToComment = async (designId, commentIndex, userId, userName, userRole, message) => {
   try {
     // Validate designId
-    if (!designId) {
-      throw new ValidationError('ID set design là bắt buộc');
-    }
-    if (!mongoose.Types.ObjectId.isValid(designId)) {
-      throw new ValidationError('ID set design không hợp lệ');
-    }
+    validateObjectId(designId, 'ID set design');
 
     // Validate commentIndex
     if (commentIndex === undefined || commentIndex === null) {
@@ -401,12 +389,7 @@ export const replyToComment = async (designId, commentIndex, userId, userName, u
     }
 
     // Validate userId
-    if (!userId) {
-      throw new ValidationError('ID người dùng là bắt buộc');
-    }
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
-      throw new ValidationError('ID người dùng không hợp lệ');
-    }
+    validateObjectId(userId, 'ID người dùng');
 
     // Validate userName
     if (!userName || userName.trim().length === 0) {
@@ -475,12 +458,7 @@ export const replyToComment = async (designId, commentIndex, userId, userName, u
 export const updateComment = async (designId, commentIndex, customerId, newMessage) => {
   try {
     // Validate designId
-    if (!designId) {
-      throw new ValidationError('ID set design là bắt buộc');
-    }
-    if (!mongoose.Types.ObjectId.isValid(designId)) {
-      throw new ValidationError('ID set design không hợp lệ');
-    }
+    validateObjectId(designId, 'ID set design');
 
     // Validate commentIndex
     if (commentIndex === undefined || commentIndex === null) {
@@ -491,12 +469,7 @@ export const updateComment = async (designId, commentIndex, customerId, newMessa
     }
 
     // Validate customerId
-    if (!customerId) {
-      throw new ValidationError('ID khách hàng là bắt buộc');
-    }
-    if (!mongoose.Types.ObjectId.isValid(customerId)) {
-      throw new ValidationError('ID khách hàng không hợp lệ');
-    }
+    validateObjectId(customerId, 'ID khách hàng');
 
     // Validate newMessage
     if (!newMessage) {
@@ -509,7 +482,7 @@ export const updateComment = async (designId, commentIndex, customerId, newMessa
       throw new ValidationError('Nội dung bình luận không được để trống');
     }
     if (newMessage.length > 300) {
-      throw new ValidationError('Nội dung bình luận không được vượt quá 300 ký tự');
+      throw new ValidationError('Nội dung bình luẫn không được vượt quá 300 ký tự');
     }
 
     const design = await SetDesign.findById(designId);
@@ -552,15 +525,8 @@ export const updateComment = async (designId, commentIndex, customerId, newMessa
  */
 export const deleteComment = async (designId, commentIndex, userId, userRole) => {
   try {
-    if (!designId) {
-      throw new ValidationError('ID set design là bắt buộc');
-    }
-    if (commentIndex === undefined || commentIndex === null) {
-      throw new ValidationError('Chỉ số bình luận là bắt buộc');
-    }
-    if (!userId) {
-      throw new ValidationError('ID người dùng là bắt buộc');
-    }
+    validateObjectId(designId, 'ID set design');
+    validateObjectId(userId, 'ID người dùng');
 
     const design = await SetDesign.findById(designId);
     if (!design) {
@@ -603,18 +569,14 @@ export const deleteComment = async (designId, commentIndex, userId, userRole) =>
  */
 export const updateReply = async (designId, commentIndex, replyIndex, userId, newMessage) => {
   try {
-    if (!designId) {
-      throw new ValidationError('ID set design là bắt buộc');
-    }
+    validateObjectId(designId, 'ID set design');
     if (commentIndex === undefined || commentIndex === null) {
       throw new ValidationError('Chỉ số bình luận là bắt buộc');
     }
     if (replyIndex === undefined || replyIndex === null) {
       throw new ValidationError('Chỉ số phản hồi là bắt buộc');
     }
-    if (!userId) {
-      throw new ValidationError('ID người dùng là bắt buộc');
-    }
+    validateObjectId(userId, 'ID người dùng');
     if (!newMessage || newMessage.trim().length === 0) {
       throw new ValidationError('Nội dung phản hồi mới là bắt buộc');
     }
@@ -662,9 +624,7 @@ export const updateReply = async (designId, commentIndex, replyIndex, userId, ne
  */
 export const deleteReply = async (designId, commentIndex, replyIndex, userId, userRole) => {
   try {
-    if (!designId) {
-      throw new ValidationError('ID set design là bắt buộc');
-    }
+    validateObjectId(designId, 'ID set design');
     if (commentIndex === undefined || commentIndex === null) {
       throw new ValidationError('Chỉ số bình luận là bắt buộc');
     }
@@ -722,15 +682,8 @@ export const likeComment = async (commentId, userId) => {
     if (!commentId || typeof commentId !== 'string' || commentId.trim().length === 0) {
       throw new ValidationError('ID bình luận là bắt buộc');
     }
-    if (!mongoose.Types.ObjectId.isValid(commentId)) {
-      throw new ValidationError('ID bình luận không hợp lệ');
-    }
-    if (!userId) {
-      throw new ValidationError('ID người dùng là bắt buộc');
-    }
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
-      throw new ValidationError('ID người dùng không hợp lệ');
-    }
+    validateObjectId(commentId, 'ID bình luận');
+    validateObjectId(userId, 'ID người dùng');
 
     // Find design that contains this comment
     const design = await SetDesign.findOne({ 'comments._id': commentId });
@@ -787,15 +740,8 @@ export const unlikeComment = async (commentId, userId) => {
     if (!commentId || typeof commentId !== 'string' || commentId.trim().length === 0) {
       throw new ValidationError('ID bình luận là bắt buộc');
     }
-    if (!mongoose.Types.ObjectId.isValid(commentId)) {
-      throw new ValidationError('ID bình luận không hợp lệ');
-    }
-    if (!userId) {
-      throw new ValidationError('ID người dùng là bắt buộc');
-    }
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
-      throw new ValidationError('ID người dùng không hợp lệ');
-    }
+    validateObjectId(commentId, 'ID bình luận');
+    validateObjectId(userId, 'ID người dùng');
 
     // Find design that contains this comment
     const design = await SetDesign.findOne({ 'comments._id': commentId });
@@ -1515,7 +1461,7 @@ export const generateImageFromText = async (description, options = {}) => {
  * @param {number} [filters.page] - Page number
  * @param {number} [filters.limit] - Page size
  */
-export const getCustomDesignRequestsByEmail = async (filters = {}) => {
+export const getCustomSetDesign = async (filters = {}) => {
   try {
     const {
       email,
