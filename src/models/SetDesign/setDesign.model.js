@@ -51,37 +51,7 @@ const setDesignSchema = new mongoose.Schema(
       }
     },
 
-    // === REVIEWS ===
-    reviews: {
-      type: [{
-        customerId: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "User",
-          required: true,
-        },
-        customerName: {
-          type: String,
-          required: true,
-        },
-        rating: {
-          type: Number,
-          required: true,
-          min: 1,
-          max: 5,
-        },
-        comment: {
-          type: String,
-          maxlength: [500, "Review comment cannot exceed 500 characters"],
-        },
-        createdAt: {
-          type: Date,
-          default: Date.now,
-        },
-      }],
-      default: [],
-    },
-
-    // === COMMENTS ===
+    // === COMMENTS (Questions and discussions) ===
     comments: {
       type: [{
         customerId: {
@@ -168,16 +138,28 @@ setDesignSchema.index({ isActive: 1 });
 setDesignSchema.index({ price: 1 });
 setDesignSchema.index({ createdAt: -1 });
 
-// Virtual for average rating
-setDesignSchema.virtual('averageRating').get(function() {
-  if (this.reviews.length === 0) return 0;
-  const sum = this.reviews.reduce((acc, review) => acc + review.rating, 0);
-  return Math.round((sum / this.reviews.length) * 10) / 10; // Round to 1 decimal
+// Virtual for average rating - queries Review model
+setDesignSchema.virtual('averageRating').get(async function() {
+  const Review = mongoose.model('Review');
+  const reviews = await Review.find({
+    targetType: 'SetDesign',
+    targetId: this._id,
+    isHidden: false
+  }).select('rating');
+  
+  if (reviews.length === 0) return 0;
+  const sum = reviews.reduce((acc, review) => acc + review.rating, 0);
+  return Math.round((sum / reviews.length) * 10) / 10; // Round to 1 decimal
 });
 
-// Virtual for total reviews count
-setDesignSchema.virtual('totalReviews').get(function() {
-  return this.reviews.length;
+// Virtual for total reviews count - queries Review model
+setDesignSchema.virtual('totalReviews').get(async function() {
+  const Review = mongoose.model('Review');
+  return await Review.countDocuments({
+    targetType: 'SetDesign',
+    targetId: this._id,
+    isHidden: false
+  });
 });
 
 // Virtual for total comments count
@@ -197,18 +179,6 @@ setDesignSchema.statics.getActiveDesigns = function() {
 // Static method to get designs by category
 setDesignSchema.statics.getByCategory = function(category) {
   return this.find({ category, isActive: true }).sort({ createdAt: -1 });
-};
-
-// Instance method to add review
-setDesignSchema.methods.addReview = function(customerId, customerName, rating, comment) {
-  this.reviews.push({
-    customerId,
-    customerName,
-    rating,
-    comment,
-    createdAt: new Date(),
-  });
-  return this.save();
 };
 
 // Instance method to add comment

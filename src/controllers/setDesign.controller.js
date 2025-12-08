@@ -6,7 +6,6 @@ import {
   createSetDesign,
   updateSetDesign,
   deleteSetDesign,
-  addReview,
   addComment,
   replyToComment,
   updateComment,
@@ -26,7 +25,10 @@ import {
   generateImageFromText,
   chatWithDesignAI,
   generateCompleteDesign,
-  getCustomSetDesign
+  getCustomSetDesign,
+  getSetDesignReviews,
+  addSetDesignReview,
+  replyToSetDesignReview
 } from '../services/setDesign.service.js';
 // #endregion
 
@@ -109,25 +111,6 @@ export const deleteSetDesignController = asyncHandler(async (req, res) => {
   res.status(200).json({
     success: true,
     message: 'Xóa thiết kế set thành công',
-    data: design
-  });
-});
-
-/**
- * Add a review to a set design
- * POST /api/set-designs/:id/reviews
- */
-export const addReviewController = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const { rating, comment } = req.body;
-  const customerId = req.user._id;
-  const customerName = req.user.fullName || req.user.username || req.user.name;
-
-  const design = await addReview(id, customerId, customerName, rating, comment);
-
-  res.status(201).json({
-    success: true,
-    message: 'Thêm đánh giá thành công',
     data: design
   });
 });
@@ -299,10 +282,10 @@ export const deleteReplyController = asyncHandler(async (req, res) => {
 
 /**
  * Like a comment
- * POST /api/comments/:commentId/like
+ * POST /api/set-designs/:id/comments/:commentId/like
  */
 export const likeCommentController = asyncHandler(async (req, res) => {
-  const { commentId } = req.params;
+  const { id: designId, commentId } = req.params;
   const userId = req.user._id;
 
   if (!commentId || commentId.trim() === '') {
@@ -321,10 +304,10 @@ export const likeCommentController = asyncHandler(async (req, res) => {
 
 /**
  * Unlike a comment
- * DELETE /api/comments/:commentId/like
+ * DELETE /api/set-designs/:id/comments/:commentId/like
  */
 export const unlikeCommentController = asyncHandler(async (req, res) => {
-  const { commentId } = req.params;
+  const { id: designId, commentId } = req.params;
   const userId = req.user._id;
 
   if (!commentId || commentId.trim() === '') {
@@ -866,6 +849,86 @@ export const generateCompleteDesignController = asyncHandler(async (req, res) =>
     success: true,
     message: 'Tạo thiết kế hoàn chỉnh thành công',
     data: result
+  });
+});
+
+// #endregion
+
+// #region Review Controllers (Using centralized Review model)
+
+/**
+ * Get reviews for a set design
+ * GET /api/set-designs/:designId/reviews
+ */
+export const getSetDesignReviewsController = asyncHandler(async (req, res) => {
+  const { designId } = req.params;
+
+  const options = {
+    page: parseInt(req.query.page) || 1,
+    limit: parseInt(req.query.limit) || 10,
+    sortBy: req.query.sortBy || 'createdAt',
+    sortOrder: req.query.sortOrder || 'desc'
+  };
+
+  const result = await getSetDesignReviews(designId, options);
+
+  res.status(200).json({
+    success: true,
+    message: 'Lấy đánh giá thành công',
+    data: result
+  });
+});
+
+/**
+ * Add a review to a set design
+ * POST /api/set-designs/:designId/reviews
+ * Requires authentication and completed booking
+ */
+export const addSetDesignReviewController = asyncHandler(async (req, res) => {
+  const { designId } = req.params;
+  const { bookingId, rating, content, images } = req.body;
+  const userId = req.user._id;
+
+  if (!bookingId) {
+    res.status(400);
+    throw new Error('ID booking là bắt buộc');
+  }
+
+  if (!rating || !content) {
+    res.status(400);
+    throw new Error('Rating và nội dung đánh giá là bắt buộc');
+  }
+
+  const review = await addSetDesignReview(designId, bookingId, userId, rating, content, images);
+
+  res.status(201).json({
+    success: true,
+    message: 'Thêm đánh giá thành công',
+    data: review
+  });
+});
+
+/**
+ * Reply to a review (Staff/Admin only)
+ * PUT /api/set-designs/reviews/:reviewId/reply
+ * Requires staff/admin authentication
+ */
+export const replyToSetDesignReviewController = asyncHandler(async (req, res) => {
+  const { reviewId } = req.params;
+  const { content } = req.body;
+  const staffId = req.user._id;
+
+  if (!content) {
+    res.status(400);
+    throw new Error('Nội dung phản hồi là bắt buộc');
+  }
+
+  const review = await replyToSetDesignReview(reviewId, staffId, content);
+
+  res.status(200).json({
+    success: true,
+    message: 'Phản hồi đánh giá thành công',
+    data: review
   });
 });
 
