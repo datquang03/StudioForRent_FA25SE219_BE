@@ -422,6 +422,8 @@ export const sanitizeInput = (req, res, next) => {
     console.error('Sanitize Input Error:', error);
     return next(error);
   }
+
+  next();
 };
 
 //#region Service Validation
