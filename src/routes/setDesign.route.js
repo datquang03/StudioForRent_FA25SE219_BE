@@ -17,7 +17,7 @@ import {
   generateImageFromTextController,
   chatWithDesignAIController,
   generateCompleteDesignController,
-  getCustomSetDesignController
+  getCustomSetDesignController,
 } from '../controllers/setDesign.controller.js';
 import { protect } from '../middlewares/auth.js';
 import { authorize } from '../middlewares/auth.js';
