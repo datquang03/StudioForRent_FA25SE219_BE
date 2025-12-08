@@ -4,13 +4,12 @@ import OpenAI from 'openai';
 import mongoose from 'mongoose';
 import SetDesign from '../models/SetDesign/setDesign.model.js';
 import CustomDesignRequest from '../models/CustomDesignRequest/customDesignRequest.model.js';
-import Review from '../models/Review/review.model.js';
 import logger from '../utils/logger.js';
 import cloudinary from '../config/cloudinary.js';
 import axios from 'axios';
 import { generateImageWithGetty } from './gettyImages.service.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
-import { SET_DESIGN_CATEGORIES, REVIEW_TARGET_TYPES } from '../utils/constants.js';
+import { SET_DESIGN_CATEGORIES } from '../utils/constants.js';
 // #endregion
 
 // #region Helper Functions
@@ -1306,170 +1305,6 @@ export const convertRequestToSetDesign = async (requestId, designData = {}, user
       throw error;
     }
     throw new Error('Lỗi khi chuyển đổi yêu cầu thành set design');
-  }
-};
-
-// #endregion
-
-// #region Review Functions (Using centralized Review model)
-
-/**
- * Get reviews for a set design
- * @param {string} designId - Set design ID
- * @param {Object} options - Query options
- * @returns {Object} Reviews with pagination
- */
-export const getSetDesignReviews = async (designId, options = {}) => {
-  try {
-    validateObjectId(designId, 'ID set design');
-
-    const {
-      page = 1,
-      limit = 10,
-      sortBy = 'createdAt',
-      sortOrder = 'desc'
-    } = options;
-
-    const sortOptions = {};
-    sortOptions[sortBy] = sortOrder === 'desc' ? -1 : 1;
-
-    const skip = (page - 1) * limit;
-
-    const query = {
-      targetType: REVIEW_TARGET_TYPES.SET_DESIGN,
-      targetId: designId,
-      isHidden: false
-    };
-
-    const [reviews, total] = await Promise.all([
-      Review.find(query)
-        .populate('userId', 'name email')
-        .populate('reply.userId', 'name email')
-        .sort(sortOptions)
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      Review.countDocuments(query)
-    ]);
-
-    return {
-      reviews,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / limit)
-      }
-    };
-  } catch (error) {
-    logger.error('Error getting set design reviews:', error);
-    throw new Error('Failed to retrieve reviews');
-  }
-};
-
-/**
- * Add a review to a set design (requires completed booking)
- * @param {string} designId - Set design ID
- * @param {string} bookingId - Booking ID (must be completed)
- * @param {string} userId - User ID
- * @param {number} rating - Rating (1-5)
- * @param {string} content - Review content
- * @param {Array} images - Array of image URLs
- * @returns {Object} Created review
- */
-export const addSetDesignReview = async (designId, bookingId, userId, rating, content, images = []) => {
-  try {
-    validateObjectId(designId, 'ID set design');
-    validateObjectId(bookingId, 'ID booking');
-    validateObjectId(userId, 'ID người dùng');
-
-    if (!rating || isNaN(rating) || rating < 1 || rating > 5) {
-      throw new ValidationError('Rating phải từ 1 đến 5');
-    }
-
-    if (!content || content.trim().length === 0) {
-      throw new ValidationError('Nội dung đánh giá là bắt buộc');
-    }
-
-    // Verify set design exists
-    const design = await SetDesign.findById(designId);
-    if (!design) {
-      throw new NotFoundError('Set design không tồn tại');
-    }
-
-    // Create review using centralized Review model
-    const review = new Review({
-      bookingId,
-      userId,
-      targetType: REVIEW_TARGET_TYPES.SET_DESIGN,
-      targetId: designId,
-      rating,
-      content: content.trim(),
-      images,
-      isHidden: false
-    });
-
-    await review.save();
-
-    // Populate user data for response
-    await review.populate('userId', 'name email');
-
-    logger.info(`Review added to set design: ${design.name} by user: ${userId}`);
-    return review;
-  } catch (error) {
-    logger.error('Error adding set design review:', error);
-    if (error instanceof ValidationError || error instanceof NotFoundError) {
-      throw error;
-    }
-    if (error.code === 11000) {
-      throw new ValidationError('Bạn đã đánh giá set design này rồi');
-    }
-    throw new Error('Lỗi khi thêm đánh giá');
-  }
-};
-
-/**
- * Update a review reply (Staff/Admin only)
- * @param {string} reviewId - Review ID
- * @param {string} staffId - Staff/Admin ID
- * @param {string} replyContent - Reply content
- * @returns {Object} Updated review
- */
-export const replyToSetDesignReview = async (reviewId, staffId, replyContent) => {
-  try {
-    validateObjectId(reviewId, 'ID đánh giá');
-    validateObjectId(staffId, 'ID nhân viên');
-
-    if (!replyContent || replyContent.trim().length === 0) {
-      throw new ValidationError('Nội dung phản hồi là bắt buộc');
-    }
-
-    const review = await Review.findById(reviewId);
-    if (!review) {
-      throw new NotFoundError('Đánh giá không tồn tại');
-    }
-
-    if (review.targetType !== REVIEW_TARGET_TYPES.SET_DESIGN) {
-      throw new ValidationError('Đánh giá không thuộc về set design');
-    }
-
-    review.reply = {
-      userId: staffId,
-      content: replyContent.trim(),
-      createdAt: new Date()
-    };
-
-    await review.save();
-    await review.populate('reply.userId', 'name email');
-
-    logger.info(`Reply added to review ${reviewId} by staff ${staffId}`);
-    return review;
-  } catch (error) {
-    logger.error('Error replying to review:', error);
-    if (error instanceof ValidationError || error instanceof NotFoundError) {
-      throw error;
-    }
-    throw new Error('Lỗi khi thêm phản hồi đánh giá');
   }
 };
 
