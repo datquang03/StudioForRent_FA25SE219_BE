@@ -79,12 +79,6 @@ setDesignSchema.index({ isActive: 1 });
 setDesignSchema.index({ price: 1 });
 setDesignSchema.index({ createdAt: -1 });
 
-
-
-// Ensure virtual fields are serialized
-setDesignSchema.set('toJSON', { virtuals: true });
-setDesignSchema.set('toObject', { virtuals: true });
-
 // Static method to get active designs
 setDesignSchema.statics.getActiveDesigns = function() {
   return this.find({ isActive: true }).sort({ createdAt: -1 });
