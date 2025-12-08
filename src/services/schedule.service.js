@@ -262,21 +262,25 @@ export const markScheduleBooked = async (scheduleId, bookingId, session = null) 
       throw new ValidationError('ID booking là bắt buộc');
     }
 
-    const query = Schedule.findById(scheduleId);
-    if (session) query.session(session);
-    const schedule = await query;
+    // Use findOneAndUpdate for atomic check-and-set
+    const schedule = await Schedule.findOneAndUpdate(
+      { _id: scheduleId, status: SCHEDULE_STATUS.AVAILABLE },
+      { 
+        status: SCHEDULE_STATUS.BOOKED,
+        bookingId: bookingId 
+      },
+      { new: true, session }
+    );
     
     if (!schedule) {
-      throw new NotFoundError('Lịch không tồn tại');
-    }
-    
-    if (schedule.status !== SCHEDULE_STATUS.AVAILABLE) {
+      // Check why it failed: not found or not available?
+      const exists = await Schedule.findById(scheduleId).session(session);
+      if (!exists) {
+        throw new NotFoundError('Lịch không tồn tại');
+      }
       throw new ConflictError('Lịch không còn trống');
     }
     
-    schedule.status = SCHEDULE_STATUS.BOOKED;
-    schedule.bookingId = bookingId;
-    await schedule.save({ session });
     return schedule;
   } catch (error) {
     if (error instanceof ValidationError || error instanceof NotFoundError || error instanceof ConflictError) {
