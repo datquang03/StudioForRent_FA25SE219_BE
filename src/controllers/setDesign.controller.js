@@ -342,11 +342,12 @@ export const getCustomSetDesignController = asyncHandler(async (req, res) => {
  * GET /api/set-designs/custom-requests
  */
 export const getCustomDesignRequestsController = asyncHandler(async (req, res) => {
+  const query = req.query;
   const options = {
-    page: parseInt(req.query.page) || 1,
-    limit: parseInt(req.query.limit) || 10,
-    status: req.query.status,
-    search: req.query.search
+    page: parseInt(query.page) || 1,
+    limit: parseInt(query.limit) || 10,
+    status: query.status,
+    search: query.search
   };
 
   const result = await getCustomDesignRequests(options);

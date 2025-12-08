@@ -397,28 +397,31 @@ export const sanitizeInput = (req, res, next) => {
     return clean.trim();
   };
 
-  // Sanitize body (POST/PUT/PATCH data)
-  if (req.body && typeof req.body === 'object') {
-    Object.keys(req.body).forEach(key => {
-      req.body[key] = sanitizeString(req.body[key]);
-    });
-  }
+  try {
+    // Sanitize body (POST/PUT/PATCH data)
+    if (req.body && typeof req.body === 'object') {
+      Object.keys(req.body).forEach(key => {
+        req.body[key] = sanitizeString(req.body[key]);
+      });
+    }
 
-  // Sanitize query params (GET ?search=...)
-  if (req.query && typeof req.query === 'object') {
-    Object.keys(req.query).forEach(key => {
-      req.query[key] = sanitizeString(req.query[key]);
-    });
-  }
+    // Sanitize query params (GET ?search=...)
+    if (req.query && typeof req.query === 'object') {
+      Object.keys(req.query).forEach(key => {
+        req.query[key] = sanitizeString(req.query[key]);
+      });
+    }
 
-  // Sanitize URL params (/:id)
-  if (req.params && typeof req.params === 'object') {
-    Object.keys(req.params).forEach(key => {
-      req.params[key] = sanitizeString(req.params[key]);
-    });
+    // Sanitize URL params (/:id)
+    if (req.params && typeof req.params === 'object') {
+      Object.keys(req.params).forEach(key => {
+        req.params[key] = sanitizeString(req.params[key]);
+      });
+    }
+  } catch (error) {
+    console.error('Sanitize Input Error:', error);
+    return next(error);
   }
-
-  next();
 };
 
 //#region Service Validation
