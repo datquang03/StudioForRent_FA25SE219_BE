@@ -420,9 +420,8 @@ export const sanitizeInput = (req, res, next) => {
     }
   } catch (error) {
     console.error('Sanitize Input Error:', error);
+    return next(error);
   }
-
-  next();
 };
 
 //#region Service Validation
