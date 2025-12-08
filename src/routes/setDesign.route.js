@@ -92,11 +92,6 @@ router.put('/:id', validateObjectId(), authorize(USER_ROLES.STAFF), updateSetDes
 router.delete('/:id', validateObjectId(), authorize(USER_ROLES.STAFF), deleteSetDesignController);
 router.post('/custom-requests/:id/convert', validateObjectId(), authorize(USER_ROLES.STAFF), convertRequestToSetDesignController);
 
-// Review routes (using centralized Review model)
-router.get('/:id/reviews', validateObjectId(), getSetDesignReviewsController);
-router.post('/:id/reviews', validateObjectId(), protect, authorize(USER_ROLES.CUSTOMER), addSetDesignReviewController);
-router.put('/reviews/:reviewId/reply', validateObjectId(), protect, authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), replyToSetDesignReviewController);
-
 // #endregion
 
 export default router;

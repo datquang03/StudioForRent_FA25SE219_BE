@@ -26,9 +26,6 @@ import {
   chatWithDesignAI,
   generateCompleteDesign,
   getCustomSetDesign,
-  getSetDesignReviews,
-  addSetDesignReview,
-  replyToSetDesignReview
 } from '../services/setDesign.service.js';
 // #endregion
 
