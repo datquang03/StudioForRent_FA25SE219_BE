@@ -99,42 +99,6 @@ router.get(
 );
 
 /**
- * GET /api/payments/:paymentId
- * Get payment status
- */
-router.get(
-  '/:paymentId',
-  generalLimiter,
-  protect,
-  authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN),
-  getPaymentStatusController
-);
-
-/**
- * POST /api/payments/:paymentId/refund
- * Create refund request
- */
-router.post(
-  '/:paymentId/refund',
-  generalLimiter,
-  protect,
-  authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN),
-  createRefundController
-);
-
-/**
- * GET /api/payments/:paymentId/refund
- * Get refund status
- */
-router.get(
-  '/:paymentId/refund',
-  generalLimiter,
-  protect,
-  authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN),
-  getRefundStatusController
-);
-
-/**
  * GET /api/payments/my-transactions
  * Get my transactions (customer only)
  */
@@ -183,6 +147,18 @@ router.get(
 );
 
 /**
+ * DELETE /api/payments/transactions
+ * Delete all cancelled transactions (staff/admin only)
+ */
+router.delete(
+  '/transactions/bulk/cancelled',
+  generalLimiter,
+  protect,
+  authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN),
+  deleteAllTransactionsController
+);
+
+/**
  * DELETE /api/payments/transactions/:transactionId
  * Delete transaction (staff/admin only)
  */
@@ -195,15 +171,39 @@ router.delete(
 );
 
 /**
- * DELETE /api/payments/transactions
- * Delete all cancelled transactions (staff/admin only)
+ * GET /api/payments/:paymentId
+ * Get payment status
  */
-router.delete(
-  '/transactions/bulk/cancelled',
+router.get(
+  '/:paymentId',
+  generalLimiter,
+  protect,
+  authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN),
+  getPaymentStatusController
+);
+
+/**
+ * POST /api/payments/:paymentId/refund
+ * Create refund request
+ */
+router.post(
+  '/:paymentId/refund',
   generalLimiter,
   protect,
   authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN),
-  deleteAllTransactionsController
+  createRefundController
+);
+
+/**
+ * GET /api/payments/:paymentId/refund
+ * Get refund status
+ */
+router.get(
+  '/:paymentId/refund',
+  generalLimiter,
+  protect,
+  authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN),
+  getRefundStatusController
 );
 
 //#endregion
