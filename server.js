@@ -90,43 +90,56 @@ app.use("/api/reports", reportRoutes);
 app.use("/api/reviews", reviewRoutes);
 
 // Setup Socket.io with Redis Adapter
+if (!process.env.REDIS_URL) {
+  logger.error('REDIS_URL is missing in environment variables');
+  process.exit(1);
+}
+
 const pubClient = createClient({ url: process.env.REDIS_URL });
 const subClient = pubClient.duplicate();
 
-Promise.all([pubClient.connect(), subClient.connect()]).then(() => {
-  io.adapter(createAdapter(pubClient, subClient));
-  logger.info('Socket.io Redis Adapter connected');
-}).catch(err => {
-  logger.error('Socket.io Redis Adapter connection failed', err);
-});
+// Initialize Redis Adapter and start server
+const initServer = async () => {
+  try {
+    await Promise.all([pubClient.connect(), subClient.connect()]);
+    io.adapter(createAdapter(pubClient, subClient));
+    logger.info('Socket.io Redis Adapter connected');
 
-// Setup Socket.io with authentication
-io.use(socketAuth);
-handleSocketConnection(io);
+    // Setup Socket.io with authentication
+    io.use(socketAuth);
+    handleSocketConnection(io);
 
-// Attach io to req for controllers
-app.use((req, res, next) => {
-  req.io = io;
-  next();
-});
+    // Attach io to req for controllers
+    app.use((req, res, next) => {
+      req.io = io;
+      next();
+    });
 
-// Background jobs (no-show, reminders, etc.) should NOT be started
-// from the web server process. Start jobs via the dedicated worker:
-//   `npm run worker` which runs `src/jobs/worker.js`.
-// This file intentionally does not initialize schedulers or cron jobs.
+    // Background jobs (no-show, reminders, etc.) should NOT be started
+    // from the web server process. Start jobs via the dedicated worker:
+    //   `npm run worker` which runs `src/jobs/worker.js`.
+    // This file intentionally does not initialize schedulers or cron jobs.
 
-app.get("/", (req, res) => {
-  res.send("🚀 API is running...");
-});
+    app.get("/", (req, res) => {
+      res.send("🚀 API is running...");
+    });
 
-// 404 handler - must be after all routes
-app.use(notFoundHandler);
+    // 404 handler - must be after all routes
+    app.use(notFoundHandler);
 
-// Global error handler - must be last
-app.use(errorHandler);
+    // Global error handler - must be last
+    app.use(errorHandler);
 
-server.listen(PORT, () => {
-  logger.success(`Server is running on http://localhost:${PORT}`);
-});
+    server.listen(PORT, () => {
+      logger.success(`Server is running on http://localhost:${PORT}`);
+    });
+
+  } catch (err) {
+    logger.error('Failed to initialize server:', err);
+    process.exit(1);
+  }
+};
+
+initServer();
 
 export { io };

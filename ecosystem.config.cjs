@@ -3,8 +3,9 @@ module.exports = {
     {
       name: 'BackendAPI',
       script: './server.js',
-      instances: "max",
+      instances: 4,
       exec_mode: "cluster",
+      increment_var: 'PORT',
       autorestart: true,
       watch: false,
       max_memory_restart: '1G',
