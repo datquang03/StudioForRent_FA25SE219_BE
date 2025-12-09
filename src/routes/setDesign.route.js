@@ -20,7 +20,7 @@ import {
   generateCompleteDesignController,
   getCustomSetDesignController,
 } from '../controllers/setDesign.controller.js';
-import { protect } from '../middlewares/auth.js';
+import { protect, optionalProtect } from '../middlewares/auth.js';
 import { authorize } from '../middlewares/auth.js';
 import { sanitizeInput, validateObjectId } from '../middlewares/validate.js';
 import { generalLimiter, aiLimiter, uploadLimiter } from '../middlewares/rateLimiter.js';
@@ -48,8 +48,8 @@ router.get('/custom-request', protect, getCustomSetDesignController);
 router.get('/', getSetDesignsController);
 router.get('/:id', validateObjectId(), getSetDesignByIdController);
 
-// Custom design request - Public route for customers to submit requests
-router.post('/custom-request', aiLimiter, createCustomDesignRequestController);
+// Custom design request - Public route for customers to submit requests (optional auth to track user)
+router.post('/custom-request', optionalProtect, aiLimiter, createCustomDesignRequestController);
 
 // AI Image Generation from Text using Gemini Imagen 3 - Public route with rate limiting
 router.post('/generate-from-text', aiLimiter, generateImageFromTextController);

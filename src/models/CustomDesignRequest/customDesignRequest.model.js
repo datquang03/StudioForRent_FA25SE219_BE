@@ -13,6 +13,12 @@ import mongoose from "mongoose";
 const customDesignRequestSchema = new mongoose.Schema(
   {
     // === CUSTOMER INFORMATION ===
+    customerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+
     customerName: {
       type: String,
       required: [true, "Customer name is required"],

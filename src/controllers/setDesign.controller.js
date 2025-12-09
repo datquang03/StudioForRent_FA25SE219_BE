@@ -273,7 +273,8 @@ export const createCustomDesignRequestController = asyncHandler(async (req, res)
     description,
     referenceImages: referenceImages || [],
     preferredCategory,
-    budgetRange
+    budgetRange,
+    customerId: req.user ? req.user._id : null // Add customerId if user is logged in
   };
 
   const request = await createCustomDesignRequest(requestData);
