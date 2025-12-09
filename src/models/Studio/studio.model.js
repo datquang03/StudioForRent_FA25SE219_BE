@@ -64,6 +64,9 @@ const studioSchema = new mongoose.Schema(
 
 // Indexes
 studioSchema.index({ status: 1 });
+studioSchema.index({ basePricePerHour: 1 }); // Optimize sorting by price
+studioSchema.index({ avgRating: -1 }); // Optimize sorting by rating
+studioSchema.index({ name: 'text', description: 'text' }); // Enable text search
 
 const Studio = mongoose.model("Studio", studioSchema);
 

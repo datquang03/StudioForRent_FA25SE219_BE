@@ -118,6 +118,7 @@ const bookingSchema = new mongoose.Schema(
 // Indexes
 bookingSchema.index({ userId: 1, status: 1 });
 bookingSchema.index({ status: 1 });
+bookingSchema.index({ createdAt: -1 }); // Optimize sorting by newest
 // scheduleId đã có unique: true, không cần index riêng
 
 const Booking = mongoose.model("Booking", bookingSchema);
