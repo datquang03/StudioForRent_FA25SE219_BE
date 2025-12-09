@@ -937,11 +937,11 @@ export const generateImageFromText = async (description, options = {}) => {
 };
 
 /**
- * Get custom design requests for a customer by contact info
- * @param {Object} filters
- * @param {string} filters.email - Customer email
- * @param {string} [filters.phoneNumber] - Phone number for extra verification
- * @param {string} [filters.status] - Request status filter
+ * Get custom design requests with filters
+ * @param {Object} filters - Filter options
+ * @param {string} [filters.email] - Customer email (required for customers, optional for staff)
+ * @param {string} [filters.status] - Request status
+ * @param {string} [filters.search] - Search by name, email, or description
  * @param {number} [filters.page] - Page number
  * @param {number} [filters.limit] - Page size
  */
@@ -949,37 +949,29 @@ export const getCustomSetDesign = async (filters = {}) => {
   try {
     const {
       email,
-      phoneNumber,
       status,
+      search,
       page = 1,
       limit = 10
     } = filters;
-
-    if (!email) {
-      throw new ValidationError('Email là bắt buộc');
-    }
-
-    const normalizedEmail = email.trim().toLowerCase();
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(normalizedEmail)) {
-      throw new ValidationError('Email không hợp lệ');
-    }
 
     const safePage = Math.max(1, parseInt(page) || 1);
     const safeLimit = Math.min(50, Math.max(1, parseInt(limit) || 10));
     const skip = (safePage - 1) * safeLimit;
 
-    const query = { email: normalizedEmail };
+    const query = {};
 
-    if (phoneNumber) {
-      const normalizedPhone = phoneNumber.replace(/\s/g, '');
-      const phoneRegex = /^[0-9]{10,11}$/;
-      if (!phoneRegex.test(normalizedPhone)) {
-        throw new ValidationError('Số điện thoại không hợp lệ');
+    // Filter by email if provided (for customers or staff filtering specific email)
+    if (email) {
+      const normalizedEmail = email.trim().toLowerCase();
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(normalizedEmail)) {
+        throw new ValidationError('Email không hợp lệ');
       }
-      query.phoneNumber = normalizedPhone;
+      query.email = normalizedEmail;
     }
 
+    // Filter by status
     if (status) {
       const validStatuses = ['pending', 'processing', 'completed', 'rejected'];
       if (!validStatuses.includes(status)) {
@@ -988,8 +980,26 @@ export const getCustomSetDesign = async (filters = {}) => {
       query.status = status;
     }
 
+    // Search filter - search in customerName, email (if not filtered), description
+    if (search && search.trim().length > 0) {
+      const searchRegex = { $regex: search.trim(), $options: 'i' };
+      const searchConditions = [
+        { customerName: searchRegex },
+        { description: searchRegex }
+      ];
+      
+      // Only search in email field if not already filtering by specific email
+      if (!email) {
+        searchConditions.push({ email: searchRegex });
+      }
+
+      query.$or = searchConditions;
+    }
+
     const [requests, total] = await Promise.all([
       CustomDesignRequest.find(query)
+        .populate('processedBy', 'name email')
+        .populate('convertedToDesignId', 'name price')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(safeLimit)
@@ -1010,7 +1020,7 @@ export const getCustomSetDesign = async (filters = {}) => {
     if (error instanceof ValidationError) {
       throw error;
     }
-    logger.error('Error getting customer custom design requests:', error);
+    logger.error('Error getting custom design requests:', error);
     throw new Error('Lỗi khi lấy yêu cầu thiết kế tùy chỉnh');
   }
 };
@@ -1171,7 +1181,8 @@ export const getCustomDesignRequests = async (options = {}) => {
         .populate('convertedToDesignId', 'name price')
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(limit),
+        .limit(limit)
+        .lean(),
       CustomDesignRequest.countDocuments(query)
     ]);
 
@@ -1187,6 +1198,51 @@ export const getCustomDesignRequests = async (options = {}) => {
   } catch (error) {
     logger.error('Error getting custom design requests:', error);
     throw new Error('Failed to retrieve custom design requests');
+  }
+};
+
+/**
+ * Delete a custom design request
+ * @param {string} id - Request ID
+ * @param {string} userId - User ID (for ownership verification)
+ * @param {string} userRole - User role (customer, staff, admin)
+ * @returns {Object} Deleted request
+ */
+export const deleteCustomDesignRequest = async (id, userId, userRole) => {
+  try {
+    validateObjectId(id, 'ID yêu cầu');
+
+    const request = await CustomDesignRequest.findById(id);
+    if (!request) {
+      throw new NotFoundError('Yêu cầu thiết kế không tồn tại');
+    }
+
+    // Check ownership: customers can only delete their own requests
+    const isStaffOrAdmin = userRole === 'staff' || userRole === 'admin';
+    if (!isStaffOrAdmin) {
+      // For customers, verify email matches
+      const User = mongoose.model('User');
+      const user = await User.findById(userId).select('email');
+      if (!user || user.email.toLowerCase() !== request.email.toLowerCase()) {
+        throw new ValidationError('Bạn chỉ có thể xóa yêu cầu của chính mình');
+      }
+    }
+
+    // Don't allow deletion if already converted to SetDesign
+    if (request.convertedToDesignId) {
+      throw new ValidationError('Không thể xóa yêu cầu đã được chuyển đổi thành Set Design');
+    }
+
+    await CustomDesignRequest.findByIdAndDelete(id);
+
+    logger.info(`Custom design request deleted: ${id} by user: ${userId}`);
+    return request;
+  } catch (error) {
+    logger.error('Error deleting custom design request:', error);
+    if (error instanceof ValidationError || error instanceof NotFoundError) {
+      throw error;
+    }
+    throw new Error('Lỗi khi xóa yêu cầu thiết kế');
   }
 };
 

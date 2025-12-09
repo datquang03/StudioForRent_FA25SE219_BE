@@ -13,6 +13,7 @@ import {
   getCustomDesignRequestsController,
   getCustomDesignRequestByIdController,
   updateCustomDesignRequestStatusController,
+  deleteCustomDesignRequestController,
   convertRequestToSetDesignController,
   generateImageFromTextController,
   chatWithDesignAIController,
@@ -38,6 +39,7 @@ router.use(generalLimiter);
 router.get('/custom-requests', protect, authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), getCustomDesignRequestsController);
 router.get('/custom-requests/:id', protect, validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), getCustomDesignRequestByIdController);
 router.patch('/custom-requests/:id/status', protect, validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), updateCustomDesignRequestStatusController);
+router.delete('/custom-requests/:id', protect, validateObjectId(), authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), deleteCustomDesignRequestController);
 
 // Public routes (no authentication required)
 router.get('/active', getActiveSetDesignsController);
