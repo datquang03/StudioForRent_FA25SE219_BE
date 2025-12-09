@@ -13,6 +13,7 @@ import {
   getCustomDesignRequests,
   getCustomDesignRequestById,
   updateCustomDesignRequestStatus,
+  deleteCustomDesignRequest,
   convertRequestToSetDesign,
   generateImageFromText,
   chatWithDesignAI,
@@ -285,48 +286,40 @@ export const createCustomDesignRequestController = asyncHandler(async (req, res)
 });
 
 /**
- * Get custom design requests for a customer
+ * Get custom design requests
  * GET /api/set-designs/custom-request
+ * Staff/Admin: Get all requests with optional filters
+ * Customer: Get only their own requests
  */
 export const getCustomSetDesignController = asyncHandler(async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
   const status = req.query.status;
+  const search = req.query.search;
 
-  const emailFromUser = req.user?.email;
-  const phoneFromUser = req.user?.phone || req.user?.phoneNumber;
-
-  // Security: Only allow querying own data or staff/admin querying any data
-  const requestedEmail = req.query.email?.trim();
   const isStaffOrAdmin = req.user?.role === 'staff' || req.user?.role === 'admin';
-
-  let email;
-  if (requestedEmail) {
-    // If email is specified in query, check authorization
-    if (!isStaffOrAdmin && requestedEmail.toLowerCase() !== emailFromUser?.toLowerCase()) {
-      res.status(403);
-      throw new Error('Bạn chỉ có thể truy cập dữ liệu của chính mình');
-    }
-    email = requestedEmail;
-  } else {
-    // Use authenticated user's email
-    email = emailFromUser;
-  }
-
-  const phoneNumber = (req.query.phoneNumber || phoneFromUser || '').trim();
-
-  if (!email) {
-    res.status(400);
-    throw new Error('Email là bắt buộc để tra cứu yêu cầu thiết kế tùy chỉnh');
-  }
+  const emailFromUser = req.user?.email;
 
   const filters = {
-    email,
-    phoneNumber: phoneNumber || undefined,
-    status,
     page,
-    limit
+    limit,
+    status,
+    search
   };
+
+  // If customer, filter by their email only
+  if (!isStaffOrAdmin) {
+    if (!emailFromUser) {
+      res.status(400);
+      throw new Error('Email người dùng không tồn tại');
+    }
+    filters.email = emailFromUser;
+  } else {
+    // Staff/Admin can optionally filter by email
+    if (req.query.email) {
+      filters.email = req.query.email.trim();
+    }
+  }
 
   const result = await getCustomSetDesign(filters);
 
@@ -399,6 +392,26 @@ export const updateCustomDesignRequestStatusController = asyncHandler(async (req
   res.status(200).json({
     success: true,
     message: 'Cập nhật trạng thái yêu cầu thành công',
+    data: request
+  });
+});
+
+/**
+ * Delete a custom design request
+ * DELETE /api/set-designs/custom-requests/:id
+ * Customer: Can only delete their own requests
+ * Staff/Admin: Can delete any request
+ */
+export const deleteCustomDesignRequestController = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user._id;
+  const userRole = req.user.role;
+
+  const request = await deleteCustomDesignRequest(id, userId, userRole);
+
+  res.status(200).json({
+    success: true,
+    message: 'Xóa yêu cầu thiết kế thành công',
     data: request
   });
 });

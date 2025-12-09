@@ -1171,22 +1171,68 @@ export const getCustomDesignRequests = async (options = {}) => {
         .populate('convertedToDesignId', 'name price')
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(limit),
+        .limit(limit)
+        .lean(),
       CustomDesignRequest.countDocuments(query)
     ]);
 
     return {
-      requests,
+      requests: requests || [],
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / limit)
+        total: total || 0,
+        pages: Math.ceil((total || 0) / limit)
       }
     };
   } catch (error) {
     logger.error('Error getting custom design requests:', error);
     throw new Error('Failed to retrieve custom design requests');
+  }
+};
+
+/**
+ * Delete a custom design request
+ * @param {string} id - Request ID
+ * @param {string} userId - User ID (for ownership verification)
+ * @param {string} userRole - User role (customer, staff, admin)
+ * @returns {Object} Deleted request
+ */
+export const deleteCustomDesignRequest = async (id, userId, userRole) => {
+  try {
+    validateObjectId(id, 'ID yêu cầu');
+
+    const request = await CustomDesignRequest.findById(id);
+    if (!request) {
+      throw new NotFoundError('Yêu cầu thiết kế không tồn tại');
+    }
+
+    // Check ownership: customers can only delete their own requests
+    const isStaffOrAdmin = userRole === 'staff' || userRole === 'admin';
+    if (!isStaffOrAdmin) {
+      // For customers, verify email matches
+      const User = mongoose.model('User');
+      const user = await User.findById(userId).select('email');
+      if (!user || user.email.toLowerCase() !== request.email.toLowerCase()) {
+        throw new ValidationError('Bạn chỉ có thể xóa yêu cầu của chính mình');
+      }
+    }
+
+    // Don't allow deletion if already converted to SetDesign
+    if (request.convertedToDesignId) {
+      throw new ValidationError('Không thể xóa yêu cầu đã được chuyển đổi thành Set Design');
+    }
+
+    await CustomDesignRequest.findByIdAndDelete(id);
+
+    logger.info(`Custom design request deleted: ${id} by user: ${userId}`);
+    return request;
+  } catch (error) {
+    logger.error('Error deleting custom design request:', error);
+    if (error instanceof ValidationError || error instanceof NotFoundError) {
+      throw error;
+    }
+    throw new Error('Lỗi khi xóa yêu cầu thiết kế');
   }
 };
 
