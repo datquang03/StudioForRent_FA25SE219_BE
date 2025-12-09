@@ -5,6 +5,8 @@ import bodyParser from "body-parser";
 import fs from "fs";
 import path from "path";
 import { Server } from "socket.io";
+import { createAdapter } from "@socket.io/redis-adapter";
+import { createClient } from "redis";
 import { createServer } from "http";
 import { connectDB } from "./src/config/db.js";
 import { connectRedis } from "./src/config/redis.js";
@@ -66,6 +68,12 @@ if (!fs.existsSync(uploadTempDir)) {
   logger.info('Created uploads/temp directory');
 }
 
+// Attach io to req for controllers - MUST be before routes
+app.use((req, res, next) => {
+  req.io = io;
+  next();
+});
+
 app.use("/api/auth", authRoutes);
 app.use("/api/customers", customerRoutes);
 app.use("/api/admin", adminRoutes);
@@ -87,16 +95,6 @@ app.use("/api/payments", paymentRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/reviews", reviewRoutes);
 
-// Setup Socket.io with authentication
-io.use(socketAuth);
-handleSocketConnection(io);
-
-// Attach io to req for controllers
-app.use((req, res, next) => {
-  req.io = io;
-  next();
-});
-
 // Background jobs (no-show, reminders, etc.) should NOT be started
 // from the web server process. Start jobs via the dedicated worker:
 //   `npm run worker` which runs `src/jobs/worker.js`.
@@ -112,8 +110,36 @@ app.use(notFoundHandler);
 // Global error handler - must be last
 app.use(errorHandler);
 
-server.listen(PORT, () => {
-  logger.success(`Server is running on http://localhost:${PORT}`);
-});
+// Setup Socket.io with Redis Adapter
+if (!process.env.REDIS_URL) {
+  logger.error('REDIS_URL is missing in environment variables');
+  process.exit(1);
+}
+
+const pubClient = createClient({ url: process.env.REDIS_URL });
+const subClient = pubClient.duplicate();
+
+// Initialize Redis Adapter and start server
+const initServer = async () => {
+  try {
+    await Promise.all([pubClient.connect(), subClient.connect()]);
+    io.adapter(createAdapter(pubClient, subClient));
+    logger.info('Socket.io Redis Adapter connected');
+
+    // Setup Socket.io with authentication
+    io.use(socketAuth);
+    handleSocketConnection(io);
+
+    server.listen(PORT, () => {
+      logger.success(`Server is running on http://localhost:${PORT}`);
+    });
+
+  } catch (err) {
+    logger.error('Failed to initialize server (Redis adapter):', err);
+    process.exit(1);
+  }
+};
+
+initServer();
 
 export { io };
