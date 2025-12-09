@@ -3,7 +3,8 @@ module.exports = {
     {
       name: 'BackendAPI',
       script: './server.js',
-      instances: 1,
+      instances: "max",
+      exec_mode: "cluster",
       autorestart: true,
       watch: false,
       max_memory_restart: '1G',
@@ -29,7 +30,8 @@ module.exports = {
       watch: false,
       max_memory_restart: '500M',
       env: {
-        NODE_ENV: 'production'
+        NODE_ENV: 'production',
+        RUN_JOBS: 'true'
       },
       error_file: './logs/worker-error.log',
       out_file: './logs/worker-out.log',

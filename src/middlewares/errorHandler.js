@@ -77,7 +77,9 @@ export const errorHandler = (err, req, res, next) => {
   // Trả response về client
   res.status(statusCode).json({
     success: false,
+    errorCode: err.name || 'InternalServerError',
     message: err.message,
+    suggestion: err.suggestion || 'Vui lòng thử lại sau hoặc liên hệ hỗ trợ.',
     // Chỉ show chi tiết trong development mode
     ...(process.env.NODE_ENV === 'development' && {
       stack: err.stack,

@@ -71,6 +71,9 @@ export const createBooking = async (data) => {
           if (exact.status !== SCHEDULE_STATUS.AVAILABLE) {
             throw new ConflictError('Lịch cùng thời gian đã tồn tại và không còn trống');
           }
+          if (exact.status !== SCHEDULE_STATUS.AVAILABLE) {
+             throw new ConflictError('Lịch không còn trống');
+          }
           schedule = exact;
         } else {
           // Check overlapping or too-close schedules

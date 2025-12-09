@@ -5,6 +5,8 @@ import bodyParser from "body-parser";
 import fs from "fs";
 import path from "path";
 import { Server } from "socket.io";
+import { createAdapter } from "@socket.io/redis-adapter";
+import { createClient } from "redis";
 import { createServer } from "http";
 import { connectDB } from "./src/config/db.js";
 import { connectRedis } from "./src/config/redis.js";
@@ -86,6 +88,17 @@ app.use("/api/room-policies", roomPolicyRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/reviews", reviewRoutes);
+
+// Setup Socket.io with Redis Adapter
+const pubClient = createClient({ url: process.env.REDIS_URL });
+const subClient = pubClient.duplicate();
+
+Promise.all([pubClient.connect(), subClient.connect()]).then(() => {
+  io.adapter(createAdapter(pubClient, subClient));
+  logger.info('Socket.io Redis Adapter connected');
+}).catch(err => {
+  logger.error('Socket.io Redis Adapter connection failed', err);
+});
 
 // Setup Socket.io with authentication
 io.use(socketAuth);
