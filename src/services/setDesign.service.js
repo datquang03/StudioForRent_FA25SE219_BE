@@ -1258,7 +1258,7 @@ export const getCustomDesignRequestById = async (id) => {
     const request = await CustomDesignRequest.findById(id)
       .populate('processedBy', 'name email')
       .populate('convertedToDesignId', 'name price images')
-      .populate('customerId', 'name email avatar membershipLevel'); // Populate customer info
+      .populate('customerId', 'fullName email avatar'); // Populate customer info
 
     if (!request) {
       throw new Error('Custom design request not found');
