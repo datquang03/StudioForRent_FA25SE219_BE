@@ -1323,8 +1323,8 @@ export const convertRequestToSetDesign = async (requestId, designData = {}, user
     if (!request) {
       throw new NotFoundError('Yêu cầu thiết kế tùy chỉnh không tồn tại');
     }
-    if (request.status !== 'completed') {
-      throw new ValidationError('Chỉ có thể chuyển đổi yêu cầu đã hoàn thành');
+    if (request.status !== 'processing' && request.status !== 'completed') {
+      throw new ValidationError('Chỉ có thể chuyển đổi yêu cầu đang xử lý hoặc đã hoàn thành');
     }
     if (request.convertedToDesignId) {
       throw new ValidationError('Yêu cầu này đã được chuyển đổi thành set design rồi');
