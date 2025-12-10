@@ -169,9 +169,8 @@ customDesignRequestSchema.methods.markAsProcessing = function(staffId) {
 };
 
 // Instance method to approve and set price
-customDesignRequestSchema.methods.approve = function(price, notes) {
+customDesignRequestSchema.methods.approve = function(notes) {
   this.status = 'completed';
-  this.estimatedPrice = price;
   if (notes) this.staffNotes = notes;
   return this.save();
 };
