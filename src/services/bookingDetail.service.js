@@ -45,13 +45,13 @@ export const createBookingDetails = async (bookingId, detailsArray, session = nu
           }
 
           // Check if equipment is available
-          if (!equipment.isAvailable) {
+          if (equipment.availableQty <= 0) {
             throw new ValidationError(`Thiết bị "${equipment.name}" không khả dụng`);
           }
 
           // Validate quantity against available stock
-          if (equipment.quantityAvailable !== undefined && quantity > equipment.quantityAvailable) {
-            throw new ValidationError(`Số lượng thiết bị yêu cầu (${quantity}) vượt quá số lượng khả dụng (${equipment.quantityAvailable})`);
+          if (quantity > equipment.availableQty) {
+            throw new ValidationError(`Số lượng thiết bị yêu cầu (${quantity}) vượt quá số lượng khả dụng (${equipment.availableQty})`);
           }
 
         // Reserve equipment (atomic)

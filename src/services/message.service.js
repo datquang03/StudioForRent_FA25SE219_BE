@@ -166,7 +166,13 @@ export const getConversations = async (userId) => {
     // Group by conversation
     const directConversationsMap = new Map();
     for (const message of directMessages) {
-      const participants = [message.fromUserId.toString(), message.toUserId.toString()].sort();
+      // Fix: Access _id before toString() because fields are populated
+      const senderId = message.fromUserId?._id ? message.fromUserId._id.toString() : message.fromUserId?.toString();
+      const receiverId = message.toUserId?._id ? message.toUserId._id.toString() : message.toUserId?.toString();
+      
+      if (!senderId || !receiverId) continue; // Skip if user info is missing
+
+      const participants = [senderId, receiverId].sort();
       const conversationId = participants.join('-');
 
       if (!directConversationsMap.has(conversationId)) {
