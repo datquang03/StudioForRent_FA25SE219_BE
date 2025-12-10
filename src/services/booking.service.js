@@ -845,14 +845,23 @@ export const checkOutBooking = async (bookingId, actorId = null) => {
         
         if (details.length > 0) {
           const { releaseEquipment } = await import('./equipment.service.js');
-          // Use Promise.all for parallel execution
-          await Promise.all(details.map(d => 
+          
+          // Use Promise.allSettled to track all results
+          const results = await Promise.allSettled(details.map(d => 
             releaseEquipment(d.equipmentId, d.quantity, session)
-              .catch(err => console.error(`Failed to release equipment ${d.equipmentId}`, err))
           ));
+
+          // Log summary of failures
+          const failedReleases = results
+            .map((r, index) => r.status === 'rejected' ? { id: details[index].equipmentId, reason: r.reason } : null)
+            .filter(item => item !== null);
+
+          if (failedReleases.length > 0) {
+            console.error(`Failed to release equipment for booking ${booking._id}. Failures:`, failedReleases);
+          }
         }
       } catch (e) {
-        console.error('Error processing equipment release', e);
+        console.error('Error during equipment release preparation (import or DB query)', e);
       }
 
       // Optionally free schedule (delegate)
