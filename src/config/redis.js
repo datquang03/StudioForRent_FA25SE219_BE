@@ -8,7 +8,7 @@ let connected = false;
 const MONITOR_INTERVAL = 5 * 60 * 1000; // 5 minutes
 setInterval(async () => {
   try {
-    if (client && connected) {
+    if (client && client.isOpen && client.isReady) {
       const info = await client.info();
       const memoryMatch = info.match(/used_memory:(\d+)/);
       const keyCount = await client.dbsize();
@@ -21,10 +21,23 @@ setInterval(async () => {
         connectedClients: clientsMatch ? parseInt(clientsMatch[1]) : 'unknown'
       });
     } else {
-      logger.warn('Redis monitoring: disconnected');
+      // Only log if we expected it to be connected but it's not
+      if (connected) {
+        logger.warn('Redis monitoring: Client is not ready', { 
+          isOpen: client?.isOpen, 
+          isReady: client?.isReady,
+          connectedVar: connected 
+        });
+      }
     }
   } catch (err) {
-    logger.error('Redis monitoring error', { error: err?.message || err });
+    // Enhanced error logging
+    logger.error('Redis monitoring error', { 
+      message: err.message, 
+      stack: err.stack,
+      name: err.name,
+      code: err.code 
+    });
   }
 }, MONITOR_INTERVAL);
 
@@ -36,23 +49,14 @@ const createRedisClient = () => {
     url,
     socket: {
       connectTimeout: 5000, // 5s connect timeout
-      commandTimeout: 2000, // 2s command timeout
-    },
-    retry_strategy: (options) => {
-      if (options.error && options.error.code === 'ECONNREFUSED') {
-        logger.error('Redis connection refused');
-        return new Error('Redis connection failed');
+      reconnectStrategy: (retries) => {
+        if (retries > 20) {
+          logger.error('Redis retry attempts exhausted');
+          return new Error('Redis retry attempts exhausted');
+        }
+        // Exponential backoff with cap
+        return Math.min(retries * 100, 3000);
       }
-      if (options.total_retry_time > 1000 * 60 * 60) {
-        logger.error('Redis retry time exhausted');
-        return new Error('Retry time exhausted');
-      }
-      if (options.attempt > 10) {
-        logger.error('Redis retry attempts exhausted');
-        return undefined;
-      }
-      // Exponential backoff
-      return Math.min(options.attempt * 100, 3000);
     }
   });
 
