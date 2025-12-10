@@ -11,7 +11,7 @@ setInterval(async () => {
     if (client && client.isOpen && client.isReady) {
       const info = await client.info();
       const memoryMatch = info.match(/used_memory:(\d+)/);
-      const keyCount = await client.dbsize();
+      const keyCount = await client.dbSize();
       const clientsMatch = info.match(/connected_clients:(\d+)/);
       
       logger.info('Redis monitoring', {
