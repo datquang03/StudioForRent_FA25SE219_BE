@@ -53,6 +53,13 @@ router.get('/active', getActiveSetDesignsController);
 router.get('/category/:category', getSetDesignsByCategoryController);
 router.get('/custom-request', protect, getCustomSetDesignController);
 router.get('/', getSetDesignsController);
+// Converted custom designs
+router.get('/converted-custom-designs', protect, authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), getConvertedCustomDesignsController);
+router.get('/converted-custom-designs/:id', protect, validateObjectId(), authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), getConvertedCustomDesignByIdController);
+router.put('/converted-custom-designs/:id', protect, validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), updateConvertedCustomDesignController);
+router.delete('/converted-custom-designs/:id', protect, validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), deleteConvertedCustomDesignController);
+
+// Get Set Design by ID
 router.get('/:id', validateObjectId(), getSetDesignByIdController);
 
 // Custom design request - Public route for customers to submit requests (optional auth to track user)
@@ -69,13 +76,6 @@ router.post('/ai-generate-design', aiLimiter, generateCompleteDesignController);
 
 // Protected routes (authentication required)
 router.use(protect);
-
-// Get converted custom designs (Customer and Staff)
-router.get('/converted-custom-designs', authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), getConvertedCustomDesignsController);
-router.get('/converted-custom-designs/:id', validateObjectId(), authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), getConvertedCustomDesignByIdController);
-router.put('/converted-custom-designs/:id', validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), updateConvertedCustomDesignController);
-router.delete('/converted-custom-designs/:id', validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), deleteConvertedCustomDesignController);
-
 
 // Image upload form-data (Customer and Staff)
 router.post('/upload-images', 
