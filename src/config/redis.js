@@ -33,10 +33,10 @@ setInterval(async () => {
   } catch (err) {
     // Enhanced error logging
     logger.error('Redis monitoring error', { 
-      message: err.message, 
-      stack: err.stack,
-      name: err.name,
-      code: err.code 
+      message: err?.message || 'Unknown error', 
+      stack: err?.stack,
+      name: err?.name,
+      code: err?.code 
     });
   }
 }, MONITOR_INTERVAL);
@@ -66,7 +66,6 @@ const createRedisClient = () => {
   });
 
   client.on('connect', () => {
-    connected = true;
     logger.info('Redis client connecting');
   });
 

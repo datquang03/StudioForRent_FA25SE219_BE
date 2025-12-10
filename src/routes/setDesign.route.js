@@ -53,7 +53,7 @@ router.get('/active', getActiveSetDesignsController);
 router.get('/category/:category', getSetDesignsByCategoryController);
 router.get('/custom-request', protect, getCustomSetDesignController);
 router.get('/', getSetDesignsController);
-// Converted custom designs (Moved here to avoid conflict with /:id)
+// Converted custom designs
 router.get('/converted-custom-designs', protect, authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), getConvertedCustomDesignsController);
 router.get('/converted-custom-designs/:id', protect, validateObjectId(), authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), getConvertedCustomDesignByIdController);
 router.put('/converted-custom-designs/:id', protect, validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), updateConvertedCustomDesignController);
