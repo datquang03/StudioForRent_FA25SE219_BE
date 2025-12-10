@@ -61,6 +61,10 @@ export const createMessageController = asyncHandler(async (req, res) => {
 
   const message = await createMessage(fromUserId, toUserId, content, bookingId, req.io);
 
+  // Populate user info including avatar
+  await message.populate('fromUserId', 'username fullName avatar');
+  await message.populate('toUserId', 'username fullName avatar');
+
   res.status(201).json({
     success: true,
     message: 'Message đã được tạo',
@@ -119,8 +123,8 @@ export const getMessagesInConversationController = asyncHandler(async (req, res)
         .sort({ createdAt: -1 })
         .skip(((parseInt(page) || 1) - 1) * (parseInt(limit) || 20))
         .limit(parseInt(limit) || 20)
-        .populate('fromUserId', 'username fullName')
-        .populate('toUserId', 'username fullName'),
+        .populate('fromUserId', 'username fullName avatar')
+        .populate('toUserId', 'username fullName avatar'),
       Message.countDocuments({ bookingId: conversationId })
     ]);
   } else {
@@ -157,8 +161,8 @@ export const getMessagesInConversationController = asyncHandler(async (req, res)
         .sort({ createdAt: -1 })
         .skip(((parseInt(page) || 1) - 1) * (parseInt(limit) || 20))
         .limit(parseInt(limit) || 20)
-        .populate('fromUserId', 'username fullName')
-        .populate('toUserId', 'username fullName'),
+        .populate('fromUserId', 'username fullName avatar')
+        .populate('toUserId', 'username fullName avatar'),
       Message.countDocuments({
         bookingId: null,
         $or: [
@@ -192,6 +196,10 @@ export const markMessageAsReadController = asyncHandler(async (req, res) => {
   const userId = req.user.id;
 
   const message = await markMessageAsRead(id, userId);
+
+  // Populate user info including avatar
+  await message.populate('fromUserId', 'username fullName avatar');
+  await message.populate('toUserId', 'username fullName avatar');
 
   res.json({
     success: true,

@@ -120,7 +120,9 @@ export const getConversations = async (userId) => {
     const bookingMessages = await Message.find({
       $or: [{ fromUserId: userId }, { toUserId: userId }],
       bookingId: { $ne: null }
-    }).sort({ createdAt: -1 });
+    }).sort({ createdAt: -1 })
+      .populate('fromUserId', 'username fullName avatar')
+      .populate('toUserId', 'username fullName avatar');
 
     // Group booking messages by bookingId
     const bookingConversationsMap = new Map();
@@ -157,7 +159,9 @@ export const getConversations = async (userId) => {
     const directMessages = await Message.find({
       $or: [{ fromUserId: userId }, { toUserId: userId }],
       bookingId: null
-    }).sort({ createdAt: -1 });
+    }).sort({ createdAt: -1 })
+      .populate('fromUserId', 'username fullName avatar')
+      .populate('toUserId', 'username fullName avatar');
 
     // Group by conversation
     const directConversationsMap = new Map();
