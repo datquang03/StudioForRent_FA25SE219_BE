@@ -25,10 +25,11 @@ import {
   updateConvertedCustomDesignController,
   deleteConvertedCustomDesignController,
 } from '../controllers/setDesign.controller.js';
-import { protect } from '../middlewares/auth.js';
+import { protect, optionalProtect } from '../middlewares/auth.js';
 import { authorize } from '../middlewares/auth.js';
 import { sanitizeInput, validateObjectId } from '../middlewares/validate.js';
 import { generalLimiter, aiLimiter, uploadLimiter } from '../middlewares/rateLimiter.js';
+import { upload, FILE_SIZE_LIMITS, ALLOWED_FILE_TYPES } from '../middlewares/upload.js';
 import { USER_ROLES } from '../utils/constants.js';
 // #endregion
 
@@ -54,8 +55,8 @@ router.get('/custom-request', protect, getCustomSetDesignController);
 router.get('/', getSetDesignsController);
 router.get('/:id', validateObjectId(), getSetDesignByIdController);
 
-// Custom design request - Public route for customers to submit requests
-router.post('/custom-request', aiLimiter, createCustomDesignRequestController);
+// Custom design request - Public route for customers to submit requests (optional auth to track user)
+router.post('/custom-request', optionalProtect, aiLimiter, createCustomDesignRequestController);
 
 // AI Image Generation from Text using Gemini Imagen 3 - Public route with rate limiting
 router.post('/generate-from-text', aiLimiter, generateImageFromTextController);
@@ -75,8 +76,14 @@ router.get('/converted-custom-designs/:id', validateObjectId(), authorize(USER_R
 router.put('/converted-custom-designs/:id', validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), updateConvertedCustomDesignController);
 router.delete('/converted-custom-designs/:id', validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), deleteConvertedCustomDesignController);
 
-// Image upload (Customer and Staff)
-router.post('/upload-images', authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), uploadLimiter, uploadDesignImagesController);
+
+// Image upload form-data (Customer and Staff)
+router.post('/upload-images', 
+  authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), 
+  uploadLimiter, 
+  upload.array('images', 10, ALLOWED_FILE_TYPES.IMAGES, FILE_SIZE_LIMITS.SET_DESIGN_IMAGE),
+  uploadDesignImagesController
+);
 
 // Admin-only routes
 // Staff-only routes

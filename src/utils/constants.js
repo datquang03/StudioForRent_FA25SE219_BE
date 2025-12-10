@@ -116,6 +116,15 @@ export const BOOKING_STATUS = {
   CANCELLED: "cancelled",
 };
 
+export const BOOKING_EVENT_TYPE = {
+  CANCELLED: 'CANCELLED',
+  NO_SHOW: 'NO_SHOW',
+  REFUND_PROCESSED: 'REFUND_PROCESSED',
+  CHARGE_APPLIED: 'CHARGE_APPLIED',
+  CHECK_IN: 'CHECK_IN',
+  CHECK_OUT: 'CHECK_OUT'
+};
+
 // Booking Detail Types (for booking_details table)
 export const BOOKING_DETAIL_TYPE = {
   EQUIPMENT: "equipment",

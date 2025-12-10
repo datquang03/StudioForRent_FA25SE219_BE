@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { BOOKING_STATUS, PAY_TYPE } from "../../utils/constants.js";
+import { BOOKING_STATUS, PAY_TYPE, BOOKING_EVENT_TYPE } from "../../utils/constants.js";
 
 /**
  * BOOKING MODEL
@@ -66,7 +66,7 @@ const bookingSchema = new mongoose.Schema(
     events: [{
       type: {
         type: String,
-        enum: ['CANCELLED', 'NO_SHOW', 'REFUND_PROCESSED', 'CHARGE_APPLIED'],
+        enum: Object.values(BOOKING_EVENT_TYPE),
         required: true
       },
       timestamp: {

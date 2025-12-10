@@ -1,4 +1,4 @@
-// #region Imports
+//#region Imports
 import asyncHandler from 'express-async-handler';
 import {
   getSetDesigns,
@@ -25,6 +25,7 @@ import {
   updateConvertedCustomDesign,
   deleteConvertedCustomDesign,
 } from '../services/setDesign.service.js';
+import { uploadMultipleImages } from '../services/upload.service.js';
 // #endregion
 
 // #region Set Design Controller - Product Catalog
@@ -115,84 +116,28 @@ export const deleteSetDesignController = asyncHandler(async (req, res) => {
  * POST /api/set-designs/upload-images
  */
 export const uploadDesignImagesController = asyncHandler(async (req, res) => {
-  const { images } = req.body; // Array of { base64Image, fileName }
-
-  if (!images || !Array.isArray(images) || images.length === 0) {
+  if (!req.files || req.files.length === 0) {
     res.status(400);
-    throw new Error('Mảng hình ảnh là bắt buộc và không được để trống');
+    throw new Error('No images provided');
   }
 
-  if (images.length > 10) {
+  if (req.files.length > 10) {
     res.status(400);
-    throw new Error('Không thể tải lên nhiều hơn 10 hình ảnh cùng một lúc');
+    throw new Error('Cannot upload more than 10 images at once');
   }
 
-  // Validate each image
-  const validatedImages = [];
-  let totalSize = 0;
+  // Upload images using the same service as other uploads
+  const folder = 'studio-rental/custom-designs';
+  const results = await uploadMultipleImages(req.files, { folder });
 
-  for (let i = 0; i < images.length; i++) {
-    const { base64Image, fileName } = images[i];
-
-    if (!base64Image) {
-      res.status(400);
-      throw new Error(`Image ${i + 1}: Base64 image is required`);
-    }
-
-    // Validate base64 format
-    if (!base64Image.startsWith('data:image/')) {
-      res.status(400);
-      throw new Error(`Image ${i + 1}: Invalid image format. Must be a valid base64 image`);
-    }
-
-    // Extract mime type and data
-    const [mimePart, dataPart] = base64Image.split(',');
-    const mimeType = mimePart.split(':')[1].split(';')[0];
-
-    // Validate file type
-    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-    if (!allowedTypes.includes(mimeType)) {
-      res.status(400);
-      throw new Error(`Image ${i + 1}: File type ${mimeType} not allowed. Allowed types: ${allowedTypes.join(', ')}`);
-    }
-
-    // Calculate file size
-    const fileSizeBytes = (dataPart.length * 3) / 4;
-    const maxSizeBytes = 5 * 1024 * 1024; // 5MB per image
-
-    if (fileSizeBytes > maxSizeBytes) {
-      const maxSizeMB = (maxSizeBytes / (1024 * 1024)).toFixed(1);
-      const actualSizeMB = (fileSizeBytes / (1024 * 1024)).toFixed(1);
-      res.status(400);
-      throw new Error(`Image ${i + 1}: File size ${actualSizeMB}MB exceeds ${maxSizeMB}MB limit`);
-    }
-
-    totalSize += fileSizeBytes;
-    validatedImages.push({ base64Image, fileName: fileName || `design-${i + 1}` });
-  }
-
-  // Check total size (max 25MB for batch upload)
-  const maxTotalSize = 25 * 1024 * 1024; // 25MB
-  if (totalSize > maxTotalSize) {
-    const totalSizeMB = (totalSize / (1024 * 1024)).toFixed(1);
-    res.status(400);
-    throw new Error(`Total upload size ${totalSizeMB}MB exceeds 25MB limit`);
-  }
-
-  // Upload all images in parallel
-  const uploadPromises = validatedImages.map(({ base64Image, fileName }) =>
-    uploadDesignImage(base64Image, fileName)
-  );
-
-  const imageUrls = await Promise.all(uploadPromises);
+  const imageUrls = results.map(img => img.url);
 
   res.status(200).json({
     success: true,
-    message: `${images.length} image(s) uploaded successfully`,
+    message: `${results.length} image(s) uploaded successfully`,
     data: {
       imageUrls,
-      count: imageUrls.length,
-      totalSizeMB: (totalSize / (1024 * 1024)).toFixed(1)
+      count: imageUrls.length
     }
   });
 });
@@ -278,7 +223,8 @@ export const createCustomDesignRequestController = asyncHandler(async (req, res)
     description,
     referenceImages: referenceImages || [],
     preferredCategory,
-    budgetRange
+    budgetRange,
+    customerId: req.user ? req.user._id : null // Add customerId if user is logged in
   };
 
   const request = await createCustomDesignRequest(requestData);

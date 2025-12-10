@@ -11,6 +11,12 @@ dotenv.config();
 
 const start = async () => {
   try {
+    // Check if this instance should run jobs
+    if (process.env.RUN_JOBS !== 'true') {
+      logger.info('Skipping jobs worker (RUN_JOBS is not true)');
+      return;
+    }
+
     logger.info('Starting jobs worker');
 
     // Connect to Database

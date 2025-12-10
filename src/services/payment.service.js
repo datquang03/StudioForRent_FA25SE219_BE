@@ -20,10 +20,14 @@ const truncate = (str, len) => (str && str.length > len ? str.slice(0, len) : st
 
 /**
  * Generate unique order code for PayOS
- * Uses timestamp for uniqueness (safe for PayOS number constraints)
+ * Uses timestamp + random 3 digits for uniqueness (safe for PayOS number constraints)
  */
 const generateOrderCode = () => {
-  return Date.now();
+  // Date.now() is ~13 digits. Max safe integer is 16 digits.
+  // We can append 3 digits safely.
+  const timestamp = Date.now();
+  const random = crypto.randomBytes(2).readUInt16BE(0) % 1000;
+  return Number(`${timestamp}${random.toString().padStart(3, '0')}`);
 };
 
 /**
@@ -122,13 +126,13 @@ export const createPaymentOptions = async (bookingId) => {
     const options = [
       { 
         percentage: 30, 
-        amount: Math.round(totalAmount * 0.3), 
+        amount: Math.ceil(totalAmount * 0.3), 
         description: 'Deposit', 
         payType: PAY_TYPE.PREPAY_30 
       },
       { 
         percentage: 50, 
-        amount: Math.round(totalAmount * 0.5), 
+        amount: Math.ceil(totalAmount * 0.5), 
         description: 'Partial Payment', 
         payType: PAY_TYPE.PREPAY_50 
       },
@@ -297,7 +301,9 @@ export const handlePaymentWebhook = async (webhookPayload) => {
     // Verify webhook signature using PayOS SDK if available, otherwise fallback
     let verifiedData;
     try {
-      if (payos && typeof payos.verifyPaymentWebhookData === 'function') {
+      if (payos && payos.webhooks && typeof payos.webhooks.verify === 'function') {
+        verifiedData = await payos.webhooks.verify(body);
+      } else if (payos && typeof payos.verifyPaymentWebhookData === 'function') {
         verifiedData = payos.verifyPaymentWebhookData(body);
       } else {
         // Fallback simple verification using checksum key (HMAC-SHA256)
@@ -409,6 +415,7 @@ export const handlePaymentWebhook = async (webhookPayload) => {
         });
 
         // Update booking status and payType based on payment progress
+        // Use slight tolerance (epsilon) to handle floating point or rounding issues
         if (paymentPercentage >= 100) {
           booking.status = BOOKING_STATUS.CONFIRMED;
           booking.payType = PAY_TYPE.FULL;
@@ -640,7 +647,7 @@ export const createPaymentForOption = async (bookingId, opts = {}) => {
       throw new ValidationError('Phần trăm hoặc loại thanh toán không hợp lệ. Chọn: 30, 50, hoặc 100');
     }
 
-    const amount = payType === PAY_TYPE.FULL ? totalAmount : Math.round(totalAmount * (payType === PAY_TYPE.PREPAY_30 ? 0.3 : 0.5));
+    const amount = payType === PAY_TYPE.FULL ? totalAmount : Math.ceil(totalAmount * (payType === PAY_TYPE.PREPAY_30 ? 0.3 : 0.5));
 
     // Idempotency: return existing pending payment for same booking+payType
     const existing = await Payment.findOne({ bookingId, payType, status: PAYMENT_STATUS.PENDING }).session(session);

@@ -1201,7 +1201,8 @@ export const createCustomDesignRequest = async (requestData) => {
       description,
       referenceImages = [],
       preferredCategory,
-      budgetRange
+      budgetRange,
+      customerId // Extract customerId
     } = requestData;
 
     // Validate required fields
@@ -1237,6 +1238,7 @@ export const createCustomDesignRequest = async (requestData) => {
       referenceImages,
       preferredCategory,
       budgetRange,
+      customerId, // Save customerId
       status: 'pending',
       aiGenerationAttempts: 0
     });
@@ -1422,7 +1424,8 @@ export const getCustomDesignRequestById = async (id, user) => {
 
     const request = await CustomDesignRequest.findById(id)
       .populate('processedBy', 'name email')
-      .populate('convertedToDesignId', 'name price images');
+      .populate('convertedToDesignId', 'name price images')
+      .populate('customerId', 'fullName email avatar'); // Populate customer info
 
     if (!request) {
       throw new NotFoundError('Yêu cầu thiết kế không tồn tại');
