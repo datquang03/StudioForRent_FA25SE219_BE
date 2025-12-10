@@ -6,7 +6,7 @@ import {
   createSetDesignController,
   updateSetDesignController,
   deleteSetDesignController,
-  uploadDesignImagesController,
+  uploadDesignImagesFormController,
   getSetDesignsByCategoryController,
   getActiveSetDesignsController,
   createCustomDesignRequestController,
@@ -24,6 +24,7 @@ import { protect, optionalProtect } from '../middlewares/auth.js';
 import { authorize } from '../middlewares/auth.js';
 import { sanitizeInput, validateObjectId } from '../middlewares/validate.js';
 import { generalLimiter, aiLimiter, uploadLimiter } from '../middlewares/rateLimiter.js';
+import { upload, FILE_SIZE_LIMITS, ALLOWED_FILE_TYPES } from '../middlewares/upload.js';
 import { USER_ROLES } from '../utils/constants.js';
 // #endregion
 
@@ -63,8 +64,13 @@ router.post('/ai-generate-design', aiLimiter, generateCompleteDesignController);
 // Protected routes (authentication required)
 router.use(protect);
 
-// Image upload (Customer and Staff)
-router.post('/upload-images', authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), uploadLimiter, uploadDesignImagesController);
+// Image upload form-data (Customer and Staff)
+router.post('/upload-images', 
+  authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), 
+  uploadLimiter, 
+  upload.array('images', 10, ALLOWED_FILE_TYPES.IMAGES, FILE_SIZE_LIMITS.SET_DESIGN_IMAGE),
+  uploadDesignImagesFormController
+);
 
 // Admin-only routes
 // Staff-only routes
