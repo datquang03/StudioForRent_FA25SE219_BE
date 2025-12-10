@@ -6,7 +6,7 @@ import {
   createSetDesignController,
   updateSetDesignController,
   deleteSetDesignController,
-  uploadDesignImagesFormController,
+  uploadDesignImagesController,
   getSetDesignsByCategoryController,
   getActiveSetDesignsController,
   createCustomDesignRequestController,
@@ -69,7 +69,7 @@ router.post('/upload-images',
   authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), 
   uploadLimiter, 
   upload.array('images', 10, ALLOWED_FILE_TYPES.IMAGES, FILE_SIZE_LIMITS.SET_DESIGN_IMAGE),
-  uploadDesignImagesFormController
+  uploadDesignImagesController
 );
 
 // Admin-only routes
