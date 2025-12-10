@@ -818,8 +818,10 @@ export const checkInBooking = async (bookingId, actorId = null) => {
  */
 export const checkOutBooking = async (bookingId, actorId = null) => {
   const session = await mongoose.startSession();
+  let updatedBooking = null;
+
   try {
-    return await session.withTransaction(async () => {
+    updatedBooking = await session.withTransaction(async () => {
       const booking = await Booking.findById(bookingId).session(session);
       if (!booking) throw new NotFoundError('Booking không tồn tại');
 
@@ -840,17 +842,17 @@ export const checkOutBooking = async (bookingId, actorId = null) => {
       try {
         const BookingDetail = (await import('../models/Booking/bookingDetail.model.js')).default;
         const details = await BookingDetail.find({ bookingId: booking._id, detailType: 'equipment' }).session(session);
-        for (const d of details) {
-          try {
-            await (await import('./equipment.service.js')).releaseEquipment(d.equipmentId, d.quantity, session);
-          } catch (releaseErr) {
-            // log and continue
-            // eslint-disable-next-line no-console
-            console.error('Failed to release equipment on checkout', releaseErr);
-          }
+        
+        if (details.length > 0) {
+          const { releaseEquipment } = await import('./equipment.service.js');
+          // Use Promise.all for parallel execution
+          await Promise.all(details.map(d => 
+            releaseEquipment(d.equipmentId, d.quantity, session)
+              .catch(err => console.error(`Failed to release equipment ${d.equipmentId}`, err))
+          ));
         }
       } catch (e) {
-        // ignore if model/service shape differs
+        console.error('Error processing equipment release', e);
       }
 
       // Optionally free schedule (delegate)
@@ -863,27 +865,32 @@ export const checkOutBooking = async (bookingId, actorId = null) => {
         // ignore
       }
 
-      // Send notification (best-effort)
-      try {
-        await (await import('./notification.service.js')).createAndSendNotification(
-          booking.userId,
-          'CHECKOUT',
-          'Bạn đã checkout',
-          `Booking ${booking._id} đã checkout lúc ${booking.checkOutAt}`,
-          true,
-          null,
-          booking._id
-        );
-      } catch (notifyErr) {
-        // eslint-disable-next-line no-console
-        console.error('Failed to send check-out notification', notifyErr);
-      }
-
       return booking;
     });
   } finally {
     session.endSession();
   }
+
+  // Send notification outside transaction to avoid holding lock
+  if (updatedBooking) {
+    try {
+      const { createAndSendNotification } = await import('./notification.service.js');
+      await createAndSendNotification(
+        updatedBooking.userId,
+        'CHECKOUT',
+        'Bạn đã checkout',
+        `Booking ${updatedBooking._id} đã checkout lúc ${updatedBooking.checkOutAt}`,
+        true,
+        null,
+        updatedBooking._id
+      );
+    } catch (notifyErr) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to send check-out notification', notifyErr);
+    }
+  }
+
+  return updatedBooking;
 };
 
 export const markAsNoShow = async (bookingId, checkInTime = null, io = null) => {
