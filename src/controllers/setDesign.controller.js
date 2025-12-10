@@ -12,6 +12,7 @@ import {
   createCustomDesignRequest,
   getCustomDesignRequests,
   getCustomDesignRequestById,
+  updateCustomDesignRequest,
   updateCustomDesignRequestStatus,
   deleteCustomDesignRequest,
   convertRequestToSetDesign,
@@ -19,6 +20,10 @@ import {
   chatWithDesignAI,
   generateCompleteDesign,
   getCustomSetDesign,
+  getConvertedCustomDesigns,
+  getConvertedCustomDesignById,
+  updateConvertedCustomDesign,
+  deleteConvertedCustomDesign,
 } from '../services/setDesign.service.js';
 import { uploadMultipleImages } from '../services/upload.service.js';
 // #endregion
@@ -299,16 +304,37 @@ export const getCustomDesignRequestsController = asyncHandler(async (req, res) =
 });
 
 /**
- * Get a single custom design request by ID (Staff/Admin only)
+ * Get a single custom design request by ID
+ * Customer: Can only view their own requests
+ * Staff/Admin: Can view any request
  * GET /api/set-designs/custom-requests/:id
  */
 export const getCustomDesignRequestByIdController = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  const request = await getCustomDesignRequestById(id);
+  const request = await getCustomDesignRequestById(id, req.user);
 
   res.status(200).json({
     success: true,
+    data: request
+  });
+});
+
+/**
+ * Update a custom design request
+ * Customer: Can only update their own pending requests (limited fields)
+ * Staff/Admin: Can update any request (all fields)
+ * PUT /api/set-designs/custom-requests/:id
+ */
+export const updateCustomDesignRequestController = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const updateData = req.body;
+
+  const request = await updateCustomDesignRequest(id, updateData, req.user);
+
+  res.status(200).json({
+    success: true,
+    message: 'Cập nhật yêu cầu thiết kế thành công',
     data: request
   });
 });
@@ -375,6 +401,89 @@ export const convertRequestToSetDesignController = asyncHandler(async (req, res)
     success: true,
     message: 'Chuyển đổi yêu cầu thành thiết kế set thành công',
     data: setDesign
+  });
+});
+
+/**
+ * Get converted custom designs (SetDesigns created from custom requests)
+ * GET /api/set-designs/converted-custom-designs
+ * Customer: Get only their own converted designs
+ * Staff/Admin: Get all converted designs or filter by email
+ */
+export const getConvertedCustomDesignsController = asyncHandler(async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const search = req.query.search;
+
+  const filters = {
+    page,
+    limit,
+    search
+  };
+
+  // Staff/Admin can optionally filter by email
+  if ((req.user?.role === 'staff' || req.user?.role === 'admin') && req.query.email) {
+    filters.email = req.query.email.trim();
+  }
+
+  const result = await getConvertedCustomDesigns(filters, req.user);
+
+  res.status(200).json({
+    success: true,
+    data: result.designs,
+    pagination: result.pagination
+  });
+});
+
+/**
+ * Get a converted custom design by ID
+ * Customer: Can only view their own converted designs
+ * Staff/Admin: Can view any converted design
+ * GET /api/set-designs/converted-custom-designs/:id
+ */
+export const getConvertedCustomDesignByIdController = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const result = await getConvertedCustomDesignById(id, req.user);
+
+  res.status(200).json({
+    success: true,
+    data: result
+  });
+});
+
+/**
+ * Update a converted custom design
+ * Staff/Admin only
+ * PUT /api/set-designs/converted-custom-designs/:id
+ */
+export const updateConvertedCustomDesignController = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const updateData = req.body;
+
+  const design = await updateConvertedCustomDesign(id, updateData, req.user);
+
+  res.status(200).json({
+    success: true,
+    message: 'Cập nhật set design thành công',
+    data: design
+  });
+});
+
+/**
+ * Delete a converted custom design (soft delete)
+ * Staff/Admin only
+ * DELETE /api/set-designs/converted-custom-designs/:id
+ */
+export const deleteConvertedCustomDesignController = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const design = await deleteConvertedCustomDesign(id, req.user);
+
+  res.status(200).json({
+    success: true,
+    message: 'Xóa set design thành công',
+    data: design
   });
 });
 

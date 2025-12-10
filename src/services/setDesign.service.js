@@ -138,6 +138,170 @@ export const getSetDesignById = async (id) => {
 };
 
 /**
+ * Get a converted custom design (SetDesign created from custom request) by ID
+ * Customer: Can only view their own converted designs
+ * Staff/Admin: Can view any converted design
+ * @param {string} id - SetDesign ID
+ * @param {Object} user - Current user
+ * @returns {Object} SetDesign with original request info
+ */
+export const getConvertedCustomDesignById = async (id, user) => {
+  try {
+    validateObjectId(id, 'ID set design');
+
+    const [design, request] = await Promise.all([
+      SetDesign.findById(id),
+      CustomDesignRequest.findOne({ convertedToDesignId: id }).populate('processedBy', 'name email')
+    ]);
+
+    if (!design) {
+      throw new NotFoundError('Set design không tồn tại');
+    }
+
+    if (!request) {
+      throw new NotFoundError('Đây không phải là set design được chuyển đổi từ custom request');
+    }
+
+    // Check ownership for customers
+    const isStaffOrAdmin = user?.role === 'staff' || user?.role === 'admin';
+    if (!isStaffOrAdmin) {
+      const emailFromUser = user?.email?.toLowerCase();
+      if (!emailFromUser || emailFromUser !== request.email.toLowerCase()) {
+        throw new ValidationError('Bạn chỉ có thể xem set design của chính mình');
+      }
+    }
+
+    return {
+      setDesign: design,
+      originalRequest: {
+        requestId: request._id,
+        customerName: request.customerName,
+        email: request.email,
+        phoneNumber: request.phoneNumber,
+        originalDescription: request.description,
+        requestedAt: request.createdAt,
+        convertedAt: request.updatedAt,
+        processedBy: request.processedBy,
+        estimatedPrice: request.estimatedPrice
+      }
+    };
+  } catch (error) {
+    logger.error('Error getting converted custom design:', error);
+    if (error instanceof ValidationError || error instanceof NotFoundError) {
+      throw error;
+    }
+    throw new Error('Lỗi khi lấy thông tin set design');
+  }
+};
+
+/**
+ * Update a converted custom design (SetDesign created from custom request)
+ * Customer: Cannot update (read-only)
+ * Staff/Admin: Can update any field
+ * @param {string} id - SetDesign ID
+ * @param {Object} updateData - Update data
+ * @param {Object} user - Current user
+ * @returns {Object} Updated SetDesign
+ */
+export const updateConvertedCustomDesign = async (id, updateData, user) => {
+  try {
+    validateObjectId(id, 'ID set design');
+
+    // Only staff can update set designs
+    if (!user || (user.role !== 'staff' && user.role !== 'admin')) {
+      throw new ValidationError('Chỉ staff/admin mới có thể cập nhật set design');
+    }
+
+    const [design, request] = await Promise.all([
+      SetDesign.findById(id),
+      CustomDesignRequest.findOne({ convertedToDesignId: id })
+    ]);
+
+    if (!design) {
+      throw new NotFoundError('Set design không tồn tại');
+    }
+    if (!request) {
+      throw new NotFoundError('Đây không phải là set design được chuyển đổi từ custom request');
+    }
+
+    // Validate price if provided
+    if (updateData.price !== undefined && (isNaN(updateData.price) || updateData.price < 0)) {
+      throw new ValidationError('Giá phải là số không âm');
+    }
+
+    // Validate category if provided
+    if (updateData.category && !SET_DESIGN_CATEGORIES.includes(updateData.category)) {
+      throw new ValidationError(`Danh mục không hợp lệ. Chọn từ: ${SET_DESIGN_CATEGORIES.join(', ')}`);
+    }
+
+    const updatedDesign = await SetDesign.findByIdAndUpdate(
+      id,
+      { ...updateData, updatedAt: new Date() },
+      { new: true, runValidators: true }
+    );
+
+    logger.info(`Converted custom design updated: ${id} by user: ${user._id}`);
+    return updatedDesign;
+  } catch (error) {
+    logger.error('Error updating converted custom design:', error);
+    if (error instanceof ValidationError || error instanceof NotFoundError) {
+      throw error;
+    }
+    throw new Error('Lỗi khi cập nhật set design');
+  }
+};
+
+/**
+ * Delete a converted custom design (SetDesign created from custom request)
+ * Customer: Cannot delete
+ * Staff/Admin: Can delete (soft delete by setting isActive to false)
+ * @param {string} id - SetDesign ID
+ * @param {Object} user - Current user
+ * @returns {Object} Deleted SetDesign
+ */
+export const deleteConvertedCustomDesign = async (id, user) => {
+  try {
+    validateObjectId(id, 'ID set design');
+
+    // Only staff can delete set designs
+    if (!user || (user.role !== 'staff' && user.role !== 'admin')) {
+      throw new ValidationError('Chỉ staff/admin mới có thể xóa set design');
+    }
+
+    const [design, request] = await Promise.all([
+      SetDesign.findById(id),
+      CustomDesignRequest.findOne({ convertedToDesignId: id })
+    ]);
+
+    if (!design) {
+      throw new NotFoundError('Set design không tồn tại');
+    }
+    if (!request) {
+      throw new NotFoundError('Đây không phải là set design được chuyển đổi từ custom request');
+    }
+
+    // Soft delete
+    design.isActive = false;
+    design.updatedAt = new Date();
+    await design.save();
+
+    // Optionally update the request status
+    // request.status = 'rejected'; // Removed: Deleting the product doesn't mean the request was rejected
+    request.staffNotes = (request.staffNotes || '') + '\n[Set design đã bị xóa]';
+    await request.save();
+
+    logger.info(`Converted custom design deleted: ${id} by user: ${user._id}`);
+    return design;
+  } catch (error) {
+    logger.error('Error deleting converted custom design:', error);
+    if (error instanceof ValidationError || error instanceof NotFoundError) {
+      throw error;
+    }
+    throw new Error('Lỗi khi xóa set design');
+  }
+};
+
+/**
  * Create a new set design (Admin only)
  * @param {Object} designData - Set design data
  * @returns {Object} Created set design
@@ -1250,24 +1414,162 @@ export const deleteCustomDesignRequest = async (id, userId, userRole) => {
 
 /**
  * Get a single custom design request by ID
+ * Customer: Can only view their own requests
+ * Staff/Admin: Can view any request
  * @param {string} id - Request ID
+ * @param {Object} user - Current user
  * @returns {Object} Custom design request
  */
-export const getCustomDesignRequestById = async (id) => {
+export const getCustomDesignRequestById = async (id, user) => {
   try {
+    validateObjectId(id, 'ID yêu cầu');
+
     const request = await CustomDesignRequest.findById(id)
       .populate('processedBy', 'name email')
       .populate('convertedToDesignId', 'name price images')
       .populate('customerId', 'fullName email avatar'); // Populate customer info
 
     if (!request) {
-      throw new Error('Custom design request not found');
+      throw new NotFoundError('Yêu cầu thiết kế không tồn tại');
+    }
+
+    // Check ownership: customers can only view their own requests
+    const isStaffOrAdmin = user?.role === 'staff' || user?.role === 'admin';
+    if (!isStaffOrAdmin) {
+      const emailFromUser = user?.email?.toLowerCase();
+      if (!emailFromUser || emailFromUser !== request.email.toLowerCase()) {
+        throw new ValidationError('Bạn chỉ có thể xem yêu cầu của chính mình');
+      }
     }
 
     return request;
   } catch (error) {
     logger.error('Error getting custom design request:', error);
-    throw new Error('Failed to retrieve custom design request');
+    if (error instanceof ValidationError || error instanceof NotFoundError) {
+      throw error;
+    }
+    throw new Error('Lỗi khi lấy thông tin yêu cầu thiết kế');
+  }
+};
+
+/**
+ * Update a custom design request
+ * Customer: Can only update their own pending requests (limited fields)
+ * Staff/Admin: Can update any request (all fields)
+ * @param {string} id - Request ID
+ * @param {Object} updateData - Update data
+ * @param {Object} user - Current user
+ * @returns {Object} Updated request
+ */
+export const updateCustomDesignRequest = async (id, updateData, user) => {
+  try {
+    validateObjectId(id, 'ID yêu cầu');
+
+    const request = await CustomDesignRequest.findById(id);
+    if (!request) {
+      throw new NotFoundError('Yêu cầu thiết kế không tồn tại');
+    }
+
+    const isStaffOrAdmin = user?.role === 'staff' || user?.role === 'admin';
+
+    // Check ownership for customers
+    if (!isStaffOrAdmin) {
+      const emailFromUser = user?.email?.toLowerCase();
+      if (!emailFromUser || emailFromUser !== request.email.toLowerCase()) {
+        throw new ValidationError('Bạn chỉ có thể cập nhật yêu cầu của chính mình');
+      }
+
+      // Customers can only update pending requests
+      if (request.status !== 'pending') {
+        throw new ValidationError('Chỉ có thể cập nhật yêu cầu đang chờ xử lý');
+      }
+
+      // Customers can only update limited fields
+      const allowedFields = ['description', 'referenceImages', 'preferredCategory', 'budgetRange'];
+      const updateFields = Object.keys(updateData);
+      const invalidFields = updateFields.filter(field => !allowedFields.includes(field));
+      
+      if (invalidFields.length > 0) {
+        throw new ValidationError(`Không thể cập nhật các trường: ${invalidFields.join(', ')}`);
+      }
+
+      // Apply customer updates
+      if (updateData.description !== undefined) {
+        if (updateData.description.length < 20 || updateData.description.length > 1000) {
+          throw new ValidationError('Mô tả phải từ 20-1000 ký tự');
+        }
+        request.description = updateData.description;
+      }
+      if (updateData.referenceImages !== undefined) {
+        if (!Array.isArray(updateData.referenceImages) || updateData.referenceImages.length > 5) {
+          throw new ValidationError('Hình ảnh tham khảo phải là mảng và không quá 5 ảnh');
+        }
+        request.referenceImages = updateData.referenceImages;
+      }
+      if (updateData.preferredCategory !== undefined) {
+        if (updateData.preferredCategory && !SET_DESIGN_CATEGORIES.includes(updateData.preferredCategory)) {
+          throw new ValidationError(`Danh mục không hợp lệ. Chọn từ: ${SET_DESIGN_CATEGORIES.join(', ')}`);
+        }
+        request.preferredCategory = updateData.preferredCategory;
+      }
+      if (updateData.budgetRange !== undefined) {
+        if (typeof updateData.budgetRange !== 'string' || updateData.budgetRange.length > 100) {
+          throw new ValidationError('Khoảng ngân sách phải là chuỗi và không quá 100 ký tự');
+        }
+        request.budgetRange = updateData.budgetRange;
+      }
+    } else {
+      // Staff/Admin can update any field
+      if (updateData.status !== undefined) {
+        const validStatuses = ['pending', 'processing', 'completed', 'rejected'];
+        if (!validStatuses.includes(updateData.status)) {
+          throw new ValidationError(`Trạng thái không hợp lệ. Chọn từ: ${validStatuses.join(', ')}`);
+        }
+        request.status = updateData.status;
+        request.processedBy = user._id;
+      }
+      if (updateData.staffNotes !== undefined) {
+        request.staffNotes = updateData.staffNotes;
+      }
+      if (updateData.estimatedPrice !== undefined) {
+        if (isNaN(updateData.estimatedPrice) || updateData.estimatedPrice < 0) {
+          throw new ValidationError('Giá ước tính phải là số không âm');
+        }
+        request.estimatedPrice = updateData.estimatedPrice;
+      }
+      if (updateData.description !== undefined) {
+        if (updateData.description.length < 20 || updateData.description.length > 1000) {
+          throw new ValidationError('Mô tả phải từ 20-1000 ký tự');
+        }
+        request.description = updateData.description;
+      }
+      if (updateData.referenceImages !== undefined) {
+        if (!Array.isArray(updateData.referenceImages) || updateData.referenceImages.length > 5) {
+          throw new ValidationError('Hình ảnh tham khảo phải là mảng và không quá 5 ảnh');
+        }
+        request.referenceImages = updateData.referenceImages;
+      }
+      if (updateData.preferredCategory !== undefined) {
+        if (updateData.preferredCategory && !SET_DESIGN_CATEGORIES.includes(updateData.preferredCategory)) {
+          throw new ValidationError(`Danh mục không hợp lệ. Chọn từ: ${SET_DESIGN_CATEGORIES.join(', ')}`);
+        }
+        request.preferredCategory = updateData.preferredCategory;
+      }
+      if (updateData.budgetRange !== undefined) {
+        request.budgetRange = updateData.budgetRange;
+      }
+    }
+
+    await request.save();
+    logger.info(`Custom design request ${id} updated by user: ${user._id}`);
+    
+    return request;
+  } catch (error) {
+    logger.error('Error updating custom design request:', error);
+    if (error instanceof ValidationError || error instanceof NotFoundError) {
+      throw error;
+    }
+    throw new Error('Lỗi khi cập nhật yêu cầu thiết kế');
   }
 };
 
@@ -1364,6 +1666,107 @@ export const convertRequestToSetDesign = async (requestId, designData = {}, user
       throw error;
     }
     throw new Error('Lỗi khi chuyển đổi yêu cầu thành set design');
+  }
+};
+
+/**
+ * Get converted set designs from custom requests
+ * @param {Object} filters - Filter options
+ * @param {string} [filters.email] - Customer email (for customers)
+ * @param {Object} user - Current user
+ * @returns {Object} Converted set designs with pagination
+ */
+export const getConvertedCustomDesigns = async (filters = {}, user) => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      search
+    } = filters;
+
+    const safePage = Math.max(1, parseInt(page) || 1);
+    const safeLimit = Math.min(50, Math.max(1, parseInt(limit) || 10));
+    const skip = (safePage - 1) * safeLimit;
+
+    // Build query for CustomDesignRequests that have been converted
+    const requestQuery = {
+      convertedToDesignId: { $ne: null }
+    };
+
+    const isStaffOrAdmin = user?.role === 'staff' || user?.role === 'admin';
+    
+    // If customer, filter by their email
+    if (!isStaffOrAdmin) {
+      const emailFromUser = user?.email;
+      if (!emailFromUser) {
+        throw new ValidationError('Email người dùng không tồn tại');
+      }
+      requestQuery.email = emailFromUser.toLowerCase();
+    } else {
+      // Staff/Admin can optionally filter by email
+      if (filters.email) {
+        const normalizedEmail = filters.email.trim().toLowerCase();
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(normalizedEmail)) {
+          throw new ValidationError('Email không hợp lệ');
+        }
+        requestQuery.email = normalizedEmail;
+      }
+    }
+
+    // Search filter
+    if (search && search.trim().length > 0) {
+      const searchRegex = { $regex: search.trim(), $options: 'i' };
+      requestQuery.$or = [
+        { customerName: searchRegex },
+        { description: searchRegex }
+      ];
+      if (!filters.email) {
+        requestQuery.$or.push({ email: searchRegex });
+      }
+    }
+
+    // Get converted requests with their SetDesign data
+    const [requests, total] = await Promise.all([
+      CustomDesignRequest.find(requestQuery)
+        .populate('convertedToDesignId')
+        .populate('processedBy', 'name email')
+        .sort({ updatedAt: -1 })
+        .skip(skip)
+        .limit(safeLimit)
+        .lean(),
+      CustomDesignRequest.countDocuments(requestQuery)
+    ]);
+
+    // Transform data to include both request and design info
+    const convertedDesigns = requests.map(request => ({
+      requestId: request._id,
+      customerName: request.customerName,
+      email: request.email,
+      phoneNumber: request.phoneNumber,
+      originalDescription: request.description,
+      requestedAt: request.createdAt,
+      convertedAt: request.updatedAt,
+      processedBy: request.processedBy,
+      estimatedPrice: request.estimatedPrice,
+      setDesign: request.convertedToDesignId
+    }));
+
+    return {
+      designs: convertedDesigns,
+      pagination: {
+        page: safePage,
+        limit: safeLimit,
+        total,
+        pages: Math.ceil(total / safeLimit)
+      }
+    };
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      throw error;
+    }
+    logger.error('Error getting converted custom designs:', error);
+    throw new Error('Lỗi khi lấy danh sách set design đã chuyển đổi');
   }
 };
 

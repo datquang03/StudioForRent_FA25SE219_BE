@@ -12,6 +12,7 @@ import {
   createCustomDesignRequestController,
   getCustomDesignRequestsController,
   getCustomDesignRequestByIdController,
+  updateCustomDesignRequestController,
   updateCustomDesignRequestStatusController,
   deleteCustomDesignRequestController,
   convertRequestToSetDesignController,
@@ -19,6 +20,10 @@ import {
   chatWithDesignAIController,
   generateCompleteDesignController,
   getCustomSetDesignController,
+  getConvertedCustomDesignsController,
+  getConvertedCustomDesignByIdController,
+  updateConvertedCustomDesignController,
+  deleteConvertedCustomDesignController,
 } from '../controllers/setDesign.controller.js';
 import { protect, optionalProtect } from '../middlewares/auth.js';
 import { authorize } from '../middlewares/auth.js';
@@ -38,7 +43,8 @@ router.use(generalLimiter);
 
 // Custom design requests management (Staff/Admin) - Moved here to avoid conflict with /:id
 router.get('/custom-requests', protect, authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), getCustomDesignRequestsController);
-router.get('/custom-requests/:id', protect, validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), getCustomDesignRequestByIdController);
+router.get('/custom-requests/:id', protect, validateObjectId(), authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), getCustomDesignRequestByIdController);
+router.put('/custom-requests/:id', protect, validateObjectId(), authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), updateCustomDesignRequestController);
 router.patch('/custom-requests/:id/status', protect, validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), updateCustomDesignRequestStatusController);
 router.delete('/custom-requests/:id', protect, validateObjectId(), authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), deleteCustomDesignRequestController);
 
@@ -63,6 +69,13 @@ router.post('/ai-generate-design', aiLimiter, generateCompleteDesignController);
 
 // Protected routes (authentication required)
 router.use(protect);
+
+// Get converted custom designs (Customer and Staff)
+router.get('/converted-custom-designs', authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), getConvertedCustomDesignsController);
+router.get('/converted-custom-designs/:id', validateObjectId(), authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), getConvertedCustomDesignByIdController);
+router.put('/converted-custom-designs/:id', validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), updateConvertedCustomDesignController);
+router.delete('/converted-custom-designs/:id', validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), deleteConvertedCustomDesignController);
+
 
 // Image upload form-data (Customer and Staff)
 router.post('/upload-images', 
