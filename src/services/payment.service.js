@@ -26,7 +26,7 @@ const generateOrderCode = () => {
   // Date.now() is ~13 digits. Max safe integer is 16 digits.
   // We can append 3 digits safely.
   const timestamp = Date.now();
-  const random = Math.floor(Math.random() * 1000);
+  const random = crypto.randomBytes(2).readUInt16BE(0) % 1000;
   return Number(`${timestamp}${random.toString().padStart(3, '0')}`);
 };
 
@@ -301,7 +301,9 @@ export const handlePaymentWebhook = async (webhookPayload) => {
     // Verify webhook signature using PayOS SDK if available, otherwise fallback
     let verifiedData;
     try {
-      if (payos && typeof payos.verifyPaymentWebhookData === 'function') {
+      if (payos && payos.webhooks && typeof payos.webhooks.verify === 'function') {
+        verifiedData = await payos.webhooks.verify(body);
+      } else if (payos && typeof payos.verifyPaymentWebhookData === 'function') {
         verifiedData = payos.verifyPaymentWebhookData(body);
       } else {
         // Fallback simple verification using checksum key (HMAC-SHA256)
@@ -332,8 +334,8 @@ export const handlePaymentWebhook = async (webhookPayload) => {
 
     const orderCode = verifiedData.orderCode;
     const amount = verifiedData.amount;
-    const code = body.code; // "00" = success
-    const desc = body.desc;
+    const code = verifiedData.code; // "00" = success
+    const desc = verifiedData.desc;
 
     // Idempotency: try to claim a short-lived key in Redis to avoid duplicate webhook processing
     const idempotencyKey = `payos:webhook:${orderCode}`;
@@ -414,13 +416,13 @@ export const handlePaymentWebhook = async (webhookPayload) => {
 
         // Update booking status and payType based on payment progress
         // Use slight tolerance (epsilon) to handle floating point or rounding issues
-        if (paymentPercentage >= 99.9) {
+        if (paymentPercentage >= 100) {
           booking.status = BOOKING_STATUS.CONFIRMED;
           booking.payType = PAY_TYPE.FULL;
-        } else if (paymentPercentage >= 49.9) {
+        } else if (paymentPercentage >= 50) {
           booking.status = BOOKING_STATUS.CONFIRMED;
           booking.payType = PAY_TYPE.PREPAY_50;
-        } else if (paymentPercentage >= 29.9) {
+        } else if (paymentPercentage >= 30) {
           booking.status = BOOKING_STATUS.CONFIRMED;
           booking.payType = PAY_TYPE.PREPAY_30;
         }

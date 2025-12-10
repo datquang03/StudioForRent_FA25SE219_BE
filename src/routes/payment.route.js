@@ -175,7 +175,7 @@ router.delete(
  * Get payment status
  */
 router.get(
-  '/:paymentId',
+  '/:paymentId([0-9a-fA-F]{24})',
   generalLimiter,
   protect,
   authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN),
@@ -187,7 +187,7 @@ router.get(
  * Create refund request
  */
 router.post(
-  '/:paymentId/refund',
+  '/:paymentId([0-9a-fA-F]{24})/refund',
   generalLimiter,
   protect,
   authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN),
@@ -199,7 +199,7 @@ router.post(
  * Get refund status
  */
 router.get(
-  '/:paymentId/refund',
+  '/:paymentId([0-9a-fA-F]{24})/refund',
   generalLimiter,
   protect,
   authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN),
