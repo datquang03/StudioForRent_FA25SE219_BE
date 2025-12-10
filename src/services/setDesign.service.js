@@ -149,14 +149,14 @@ export const getConvertedCustomDesignById = async (id, user) => {
   try {
     validateObjectId(id, 'ID set design');
 
-    const design = await SetDesign.findById(id);
+    const [design, request] = await Promise.all([
+      SetDesign.findById(id),
+      CustomDesignRequest.findOne({ convertedToDesignId: id }).populate('processedBy', 'name email')
+    ]);
+
     if (!design) {
       throw new NotFoundError('Set design không tồn tại');
     }
-
-    // Find the original custom request that was converted to this design
-    const request = await CustomDesignRequest.findOne({ convertedToDesignId: id })
-      .populate('processedBy', 'name email');
 
     if (!request) {
       throw new NotFoundError('Đây không phải là set design được chuyển đổi từ custom request');
@@ -212,13 +212,14 @@ export const updateConvertedCustomDesign = async (id, updateData, user) => {
       throw new ValidationError('Chỉ staff/admin mới có thể cập nhật set design');
     }
 
-    const design = await SetDesign.findById(id);
+    const [design, request] = await Promise.all([
+      SetDesign.findById(id),
+      CustomDesignRequest.findOne({ convertedToDesignId: id })
+    ]);
+
     if (!design) {
       throw new NotFoundError('Set design không tồn tại');
     }
-
-    // Verify this is a converted design
-    const request = await CustomDesignRequest.findOne({ convertedToDesignId: id });
     if (!request) {
       throw new NotFoundError('Đây không phải là set design được chuyển đổi từ custom request');
     }
@@ -267,13 +268,14 @@ export const deleteConvertedCustomDesign = async (id, user) => {
       throw new ValidationError('Chỉ staff/admin mới có thể xóa set design');
     }
 
-    const design = await SetDesign.findById(id);
+    const [design, request] = await Promise.all([
+      SetDesign.findById(id),
+      CustomDesignRequest.findOne({ convertedToDesignId: id })
+    ]);
+
     if (!design) {
       throw new NotFoundError('Set design không tồn tại');
     }
-
-    // Verify this is a converted design
-    const request = await CustomDesignRequest.findOne({ convertedToDesignId: id });
     if (!request) {
       throw new NotFoundError('Đây không phải là set design được chuyển đổi từ custom request');
     }
@@ -284,7 +286,7 @@ export const deleteConvertedCustomDesign = async (id, user) => {
     await design.save();
 
     // Optionally update the request status
-    request.status = 'rejected';
+    // request.status = 'rejected'; // Removed: Deleting the product doesn't mean the request was rejected
     request.staffNotes = (request.staffNotes || '') + '\n[Set design đã bị xóa]';
     await request.save();
 
@@ -1511,6 +1513,9 @@ export const updateCustomDesignRequest = async (id, updateData, user) => {
         request.preferredCategory = updateData.preferredCategory;
       }
       if (updateData.budgetRange !== undefined) {
+        if (typeof updateData.budgetRange !== 'string' || updateData.budgetRange.length > 100) {
+          throw new ValidationError('Khoảng ngân sách phải là chuỗi và không quá 100 ký tự');
+        }
         request.budgetRange = updateData.budgetRange;
       }
     } else {
@@ -1533,12 +1538,21 @@ export const updateCustomDesignRequest = async (id, updateData, user) => {
         request.estimatedPrice = updateData.estimatedPrice;
       }
       if (updateData.description !== undefined) {
+        if (updateData.description.length < 20 || updateData.description.length > 1000) {
+          throw new ValidationError('Mô tả phải từ 20-1000 ký tự');
+        }
         request.description = updateData.description;
       }
       if (updateData.referenceImages !== undefined) {
+        if (!Array.isArray(updateData.referenceImages) || updateData.referenceImages.length > 5) {
+          throw new ValidationError('Hình ảnh tham khảo phải là mảng và không quá 5 ảnh');
+        }
         request.referenceImages = updateData.referenceImages;
       }
       if (updateData.preferredCategory !== undefined) {
+        if (updateData.preferredCategory && !SET_DESIGN_CATEGORIES.includes(updateData.preferredCategory)) {
+          throw new ValidationError(`Danh mục không hợp lệ. Chọn từ: ${SET_DESIGN_CATEGORIES.join(', ')}`);
+        }
         request.preferredCategory = updateData.preferredCategory;
       }
       if (updateData.budgetRange !== undefined) {
