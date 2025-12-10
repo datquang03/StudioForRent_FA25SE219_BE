@@ -119,6 +119,15 @@ if (!process.env.REDIS_URL) {
 const pubClient = createClient({ url: process.env.REDIS_URL });
 const subClient = pubClient.duplicate();
 
+// Attach error handlers to avoid unhandled Redis client errors
+pubClient.on('error', (err) => {
+  logger.error('Redis pubClient error', { error: err?.message || err });
+});
+
+subClient.on('error', (err) => {
+  logger.error('Redis subClient error', { error: err?.message || err });
+});
+
 // Initialize Redis Adapter and start server
 const initServer = async () => {
   try {
