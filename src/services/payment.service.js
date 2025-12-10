@@ -20,10 +20,14 @@ const truncate = (str, len) => (str && str.length > len ? str.slice(0, len) : st
 
 /**
  * Generate unique order code for PayOS
- * Uses timestamp for uniqueness (safe for PayOS number constraints)
+ * Uses timestamp + random 3 digits for uniqueness (safe for PayOS number constraints)
  */
 const generateOrderCode = () => {
-  return Date.now();
+  // Date.now() is ~13 digits. Max safe integer is 16 digits.
+  // We can append 3 digits safely.
+  const timestamp = Date.now();
+  const random = Math.floor(Math.random() * 1000);
+  return Number(`${timestamp}${random.toString().padStart(3, '0')}`);
 };
 
 /**
@@ -122,13 +126,13 @@ export const createPaymentOptions = async (bookingId) => {
     const options = [
       { 
         percentage: 30, 
-        amount: Math.round(totalAmount * 0.3), 
+        amount: Math.ceil(totalAmount * 0.3), 
         description: 'Deposit', 
         payType: PAY_TYPE.PREPAY_30 
       },
       { 
         percentage: 50, 
-        amount: Math.round(totalAmount * 0.5), 
+        amount: Math.ceil(totalAmount * 0.5), 
         description: 'Partial Payment', 
         payType: PAY_TYPE.PREPAY_50 
       },
@@ -328,8 +332,8 @@ export const handlePaymentWebhook = async (webhookPayload) => {
 
     const orderCode = verifiedData.orderCode;
     const amount = verifiedData.amount;
-    const code = verifiedData.code; // "00" = success
-    const desc = verifiedData.desc;
+    const code = body.code; // "00" = success
+    const desc = body.desc;
 
     // Idempotency: try to claim a short-lived key in Redis to avoid duplicate webhook processing
     const idempotencyKey = `payos:webhook:${orderCode}`;
@@ -409,13 +413,14 @@ export const handlePaymentWebhook = async (webhookPayload) => {
         });
 
         // Update booking status and payType based on payment progress
-        if (paymentPercentage >= 100) {
+        // Use slight tolerance (epsilon) to handle floating point or rounding issues
+        if (paymentPercentage >= 99.9) {
           booking.status = BOOKING_STATUS.CONFIRMED;
           booking.payType = PAY_TYPE.FULL;
-        } else if (paymentPercentage >= 50) {
+        } else if (paymentPercentage >= 49.9) {
           booking.status = BOOKING_STATUS.CONFIRMED;
           booking.payType = PAY_TYPE.PREPAY_50;
-        } else if (paymentPercentage >= 30) {
+        } else if (paymentPercentage >= 29.9) {
           booking.status = BOOKING_STATUS.CONFIRMED;
           booking.payType = PAY_TYPE.PREPAY_30;
         }
@@ -640,7 +645,7 @@ export const createPaymentForOption = async (bookingId, opts = {}) => {
       throw new ValidationError('Phần trăm hoặc loại thanh toán không hợp lệ. Chọn: 30, 50, hoặc 100');
     }
 
-    const amount = payType === PAY_TYPE.FULL ? totalAmount : Math.round(totalAmount * (payType === PAY_TYPE.PREPAY_30 ? 0.3 : 0.5));
+    const amount = payType === PAY_TYPE.FULL ? totalAmount : Math.ceil(totalAmount * (payType === PAY_TYPE.PREPAY_30 ? 0.3 : 0.5));
 
     // Idempotency: return existing pending payment for same booking+payType
     const existing = await Payment.findOne({ bookingId, payType, status: PAYMENT_STATUS.PENDING }).session(session);
