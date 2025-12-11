@@ -23,17 +23,17 @@ router.use(sanitizeInput);
 router.use(generalLimiter);
 
 // PUBLIC ROUTES
+router.get('/', searchLimiter, getEquipmentList);
 router.get('/available', searchLimiter, getAvailableEquipmentList);
 router.get('/available/:id', validateObjectId(), getAvailableEquipmentDetailController);
+router.get('/:id', validateObjectId(), getEquipmentDetail);
 
-// PROTECTED ROUTES
+// PROTECTED ROUTES (Staff only for modifications)
 router.use(protect);
 router.use(authorize(USER_ROLES.STAFF));
 
-// Collection routes
-router.route('/')
-  .get(searchLimiter, getEquipmentList)
-  .post(validateEquipmentCreation, createEquipmentController);
+// Collection routes (create only)
+router.post('/', validateEquipmentCreation, createEquipmentController);
 
 // Specific actions (must be before /:id)
 router.patch('/:id/set-maintenance-quantity',
@@ -50,10 +50,8 @@ router.post('/:id/image',
   uploadEquipmentImage
 );
 
-// Resource routes
-router.route('/:id')
-  .get(validateObjectId(), getEquipmentDetail)
-  .patch(validateObjectId(), validateEquipmentUpdate, updateEquipmentController)
-  .delete(validateObjectId(), deleteEquipmentController);
+// Resource routes (update and delete only)
+router.patch('/:id', validateObjectId(), validateEquipmentUpdate, updateEquipmentController);
+router.delete('/:id', validateObjectId(), deleteEquipmentController);
 
 export default router;
