@@ -18,11 +18,13 @@ const truncate = (str, len) => (str && str.length > len ? str.slice(0, len) : st
 
 /**
  * Generate unique order code for PayOS
+ * PayOS requires: positive integer, max 9007199254740991
  */
 const generateOrderCode = () => {
-  const timestamp = Date.now();
-  const random = crypto.randomBytes(2).readUInt16BE(0) % 1000;
-  return `${timestamp}${random.toString().padStart(3, '0')}`;
+  // Use timestamp in seconds + random to keep number smaller
+  const timestampSeconds = Math.floor(Date.now() / 1000);
+  const random = Math.floor(Math.random() * 10000); // 0-9999
+  return Number(`${timestampSeconds}${random.toString().padStart(4, '0')}`);
 };
 
 /**
@@ -476,31 +478,28 @@ export const createSetDesignPayment = async (orderId, paymentData, user) => {
         amount: paymentAmount,
         description: safeDescription,
         items: (() => {
-          // If this is a partial payment, use a single item with a note
-          const isPartialPayment = paymentAmount < (order.setDesignId?.price || 0) * order.quantity;
-          if (isPartialPayment) {
-            // Calculate percentage paid
-            const totalPrice = (order.setDesignId?.price || 0) * order.quantity;
-            const percent = Math.round((paymentAmount / totalPrice) * 100);
-            return [{
-              name: truncate(`${order.setDesignId?.name || 'Set Design'} (Partial Payment ${percent}%)`, 50),
-              quantity: order.quantity,
-              price: Math.floor(paymentAmount / order.quantity),
-            }];
-          } else {
-            // Full payment, use normal itemization
-            const items = [];
-            const basePrice = Math.floor(paymentAmount / order.quantity);
-            const remainder = paymentAmount - basePrice * order.quantity;
-            for (let i = 0; i < order.quantity; i++) {
-              items.push({
-                name: truncate(order.setDesignId?.name || 'Set Design', 50),
-                quantity: 1,
-                price: i === order.quantity - 1 ? basePrice + remainder : basePrice,
-              });
-            }
-            return items;
+          const items = [];
+          const basePrice = Math.floor(paymentAmount / order.quantity);
+          const remainder = paymentAmount - basePrice * order.quantity;
+          
+          // Add payment type info to item name for clarity
+          let itemNameSuffix = '';
+          if (payType === PAY_TYPE.PREPAY_30) {
+            itemNameSuffix = ' (30% Prepay)';
+          } else if (payType === PAY_TYPE.PREPAY_50) {
+            itemNameSuffix = ' (50% Prepay)';
+          } else if (paymentAmount < order.totalAmount) {
+            itemNameSuffix = ' (Remaining)';
           }
+          
+          for (let i = 0; i < order.quantity; i++) {
+            items.push({
+              name: truncate((order.setDesignId?.name || 'Set Design') + itemNameSuffix, 50),
+              quantity: 1,
+              price: i === order.quantity - 1 ? basePrice + remainder : basePrice,
+            });
+          }
+          return items;
         })(),
         returnUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/set-design/payment/success?orderId=${orderId}`,
         cancelUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/set-design/payment/cancel?orderId=${orderId}`,
