@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import Equipment from '../models/Equipment/equipment.model.js';
 import EquipmentOrder, { EQUIPMENT_ORDER_STATUS } from '../models/EquipmentOrder/equipmentOrder.model.js';
 import EquipmentPayment from '../models/EquipmentPayment/equipmentPayment.model.js';
-import payos, { getPayOSCreatePaymentFn } from '../config/payos.js';
+import { getPayOSCreatePaymentFn } from '../config/payos.js';
 import { PAYMENT_STATUS, PAY_TYPE } from '../utils/constants.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
