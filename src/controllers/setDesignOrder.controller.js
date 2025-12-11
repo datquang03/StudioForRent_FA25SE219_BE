@@ -12,7 +12,6 @@ import {
   getSetDesignPaymentStatus,
   getSetDesignOrderPayments,
 } from '../services/setDesignOrder.service.js';
-import { ValidationError, NotFoundError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
 import { isValidObjectId } from '../utils/validators.js';
 //#endregion
@@ -59,11 +58,16 @@ export const getMyOrdersController = asyncHandler(async (req, res) => {
  * GET /api/set-design-orders
  */
 export const getAllOrdersController = asyncHandler(async (req, res) => {
+   const { customerId } = req.query;
+  if (customerId && !isValidObjectId(customerId)) {
+    res.status(400);
+    throw new Error('ID khách hàng không hợp lệ');
+  }
   const options = {
     page: parseInt(req.query.page) || 1,
     limit: parseInt(req.query.limit) || 10,
     status: req.query.status,
-    customerId: req.query.customerId,
+    customerId: customerId,
   };
 
   const result = await getAllSetDesignOrders(options);

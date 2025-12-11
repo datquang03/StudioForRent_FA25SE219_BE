@@ -5,10 +5,9 @@ import SetDesign from '../models/SetDesign/setDesign.model.js';
 import SetDesignOrder, { SET_DESIGN_ORDER_STATUS } from '../models/SetDesignOrder/setDesignOrder.model.js';
 import SetDesignPayment from '../models/SetDesignPayment/setDesignPayment.model.js';
 import payos from '../config/payos.js';
-import { PAYMENT_STATUS, PAY_TYPE, SET_DESIGN_ORDER_STATUS as ORDER_STATUS } from '../utils/constants.js';
+import { PAYMENT_STATUS, PAY_TYPE } from '../utils/constants.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
-import { createAndSendNotification } from './notification.service.js';
 import { NOTIFICATION_TYPE } from '../utils/constants.js';
 //#endregion
 
