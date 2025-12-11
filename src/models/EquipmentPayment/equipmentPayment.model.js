@@ -29,7 +29,6 @@ const equipmentPaymentSchema = new mongoose.Schema(
       enum: Object.values(PAYMENT_STATUS),
       default: PAYMENT_STATUS.PENDING,
       required: true,
-      index: true,
     },
     transactionId: {
       type: String,

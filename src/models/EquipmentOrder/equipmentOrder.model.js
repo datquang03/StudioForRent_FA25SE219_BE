@@ -80,14 +80,12 @@ const equipmentOrderSchema = new mongoose.Schema(
       enum: Object.values(EQUIPMENT_ORDER_STATUS),
       default: EQUIPMENT_ORDER_STATUS.PENDING,
       required: true,
-      index: true,
     },
     paymentStatus: {
       type: String,
       enum: Object.values(PAYMENT_STATUS),
       default: PAYMENT_STATUS.PENDING,
       required: true,
-      index: true,
     },
     processedBy: {
       type: mongoose.Schema.Types.ObjectId,

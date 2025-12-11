@@ -179,36 +179,31 @@ export const getActiveSetDesignsController = asyncHandler(async (req, res) => {
 /**
  * Create a custom design request with customer info and description
  * POST /api/set-designs/custom-request
- * Public route (no authentication required)
+ * Protected route (authentication required)
  */
 export const createCustomDesignRequestController = asyncHandler(async (req, res) => {
   const {
-    customerName,
-    email,
-    phoneNumber,
     description,
     preferredCategory,
     budget
   } = req.body;
 
+  // Get customer info from authenticated user
+  const customerId = req.user._id;
+  const customerName = req.user.fullName || req.user.username;
+  const email = req.user.email;
+  const phoneNumber = req.user.phone;
+
+  // Validate that user has required profile information
+  if (!phoneNumber) {
+    res.status(400);
+    throw new Error('Vui lòng cập nhật số điện thoại trong hồ sơ trước khi gửi yêu cầu thiết kế');
+  }
+
   // Validation
-  if (!customerName || !email || !phoneNumber || !description) {
+  if (!description) {
     res.status(400);
-    throw new Error('Tên khách hàng, email, số điện thoại và mô tả là bắt buộc');
-  }
-
-  // Validate email format
-  const emailRegex = /^\S+@\S+\.\S+$/;
-  if (!emailRegex.test(email)) {
-    res.status(400);
-    throw new Error('Vui lòng cung cấp địa chỉ email hợp lệ');
-  }
-
-  // Validate phone number format
-  const phoneRegex = /^[0-9]{10,11}$/;
-  if (!phoneRegex.test(phoneNumber)) {
-    res.status(400);
-    throw new Error('Vui lòng cung cấp số điện thoại hợp lệ (10-11 chữ số)');
+    throw new Error('Mô tả là bắt buộc');
   }
 
   // Validate description length
@@ -259,7 +254,7 @@ export const createCustomDesignRequestController = asyncHandler(async (req, res)
     referenceImages,
     preferredCategory,
     budget: budget ? parseFloat(budget) : undefined,
-    customerId: req.user ? req.user._id : null // Add customerId if user is logged in
+    customerId
   };
 
   const request = await createCustomDesignRequest(requestData);
