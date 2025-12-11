@@ -1194,9 +1194,10 @@ export const createCustomDesignRequest = async (requestData) => {
       email,
       phoneNumber,
       description,
+      budget,
       referenceImages = [],
       preferredCategory,
-      budgetRange,
+      budgetRange, // Legacy support
       customerId // Extract customerId
     } = requestData;
 
@@ -1217,6 +1218,13 @@ export const createCustomDesignRequest = async (requestData) => {
       throw new ValidationError('Số điện thoại không hợp lệ');
     }
 
+    // Validate budget if provided
+    if (budget !== undefined && budget !== null) {
+      if (budget < 0) {
+        throw new ValidationError('Ngân sách không thể âm');
+      }
+    }
+
     // Validate category if provided
     if (preferredCategory && !SET_DESIGN_CATEGORIES.includes(preferredCategory)) {
       throw new ValidationError(`Danh mục không hợp lệ. Chọn từ: ${SET_DESIGN_CATEGORIES.join(', ')}`);
@@ -1230,9 +1238,10 @@ export const createCustomDesignRequest = async (requestData) => {
       email,
       phoneNumber,
       description,
-      referenceImages,
+      budget,
+      referenceImages, // Array of file objects
       preferredCategory,
-      budgetRange,
+      budgetRange, // Legacy support
       customerId, // Save customerId
       status: 'pending',
       aiGenerationAttempts: 0
@@ -1279,13 +1288,23 @@ const generateAndAttachAIImage = async (requestId, description) => {
       aspectRatio: '16:9',
     });
     
-    // Update request with generated image
-    request.generatedImage = imageResult.url;
+    // Update request with generated image as file object
+    const generatedImageObj = {
+      url: imageResult.url,
+      publicId: imageResult.publicId || null,
+      filename: imageResult.filename || `ai-generated-${Date.now()}.png`,
+      format: imageResult.format || 'png',
+      width: imageResult.width || null,
+      height: imageResult.height || null,
+      uploadedAt: new Date()
+    };
+
+    request.generatedImages = [generatedImageObj];
     request.status = 'pending'; // Back to pending for staff review
     request.aiMetadata = {
       prompt: imageResult.enhancedPrompt,
-      model: imageResult.metadata.model,
-      generatedAt: imageResult.metadata.timestamp,
+      model: imageResult.metadata?.model || 'gemini-2.5-flash-image',
+      generatedAt: imageResult.metadata?.timestamp || new Date(),
     };
     await request.save();
 

@@ -1,5 +1,7 @@
 //#region Imports
 import asyncHandler from 'express-async-handler';
+import fs from 'fs/promises';
+import { uploadImage } from '../services/upload.service.js';
 import {
   getSetDesigns,
   getSetDesignById,
@@ -185,7 +187,6 @@ export const createCustomDesignRequestController = asyncHandler(async (req, res)
     email,
     phoneNumber,
     description,
-    referenceImages,
     preferredCategory,
     budgetRange
   } = req.body;
@@ -216,12 +217,37 @@ export const createCustomDesignRequestController = asyncHandler(async (req, res)
     throw new Error('Mô tả phải có ít nhất 20 ký tự');
   }
 
+  // Handle uploaded reference images
+  let referenceImages = [];
+  if (req.files && req.files.length > 0) {
+    // Upload images to Cloudinary
+    const uploadedImages = await Promise.all(
+      req.files.map(async (file) => {
+        const result = await uploadImage(file, {
+          folder: 'set-design-references'
+        });
+        
+        return {
+          url: result.secure_url,
+          publicId: result.public_id,
+          filename: file.originalname,
+          format: result.format,
+          width: result.width,
+          height: result.height,
+          uploadedAt: new Date()
+        };
+      })
+    );
+    
+    referenceImages = uploadedImages;
+  }
+
   const requestData = {
     customerName,
     email,
     phoneNumber,
     description,
-    referenceImages: referenceImages || [],
+    referenceImages,
     preferredCategory,
     budgetRange,
     customerId: req.user ? req.user._id : null // Add customerId if user is logged in

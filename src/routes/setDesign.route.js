@@ -61,8 +61,13 @@ router.get('/converted-custom-designs/:id', validateObjectId(), getConvertedCust
 // Get Set Design by ID
 router.get('/:id', validateObjectId(), getSetDesignByIdController);
 
-// Custom design request - Public route for customers to submit requests (optional auth to track user)
-router.post('/custom-request', optionalProtect, aiLimiter, createCustomDesignRequestController);
+// Custom design request - Public route for customers to submit requests with file upload
+router.post('/custom-request', 
+  optionalProtect, 
+  aiLimiter, 
+  upload.array('referenceImages', 5, ALLOWED_FILE_TYPES.IMAGES, FILE_SIZE_LIMITS.SET_DESIGN_IMAGE),
+  createCustomDesignRequestController
+);
 
 // AI Image Generation from Text using Gemini Imagen 3 - Public route with rate limiting
 router.post('/generate-from-text', aiLimiter, generateImageFromTextController);

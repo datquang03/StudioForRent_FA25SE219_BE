@@ -50,15 +50,44 @@ const customDesignRequestSchema = new mongoose.Schema(
       maxlength: [1000, "Description cannot exceed 1000 characters"],
     },
 
-    // AI-generated image based on description
-    generatedImage: {
-      type: String, // Cloudinary URL
+    // Customer's budget for the custom design
+    budget: {
+      type: Number,
+      min: [0, "Budget cannot be negative"],
       default: null,
     },
 
-    // Additional reference images uploaded by customer (optional)
+    // AI-generated images based on description (array of file objects)
+    generatedImages: {
+      type: [{
+        url: { type: String, required: true },
+        publicId: { type: String },
+        filename: { type: String },
+        format: { type: String },
+        width: { type: Number },
+        height: { type: Number },
+        uploadedAt: { type: Date, default: Date.now }
+      }],
+      default: [],
+      validate: {
+        validator: function(images) {
+          return images.length <= 3; // Max 3 AI-generated images
+        },
+        message: "Cannot generate more than 3 images"
+      }
+    },
+
+    // Additional reference images uploaded by customer (array of file objects)
     referenceImages: {
-      type: [String], // Array of Cloudinary URLs
+      type: [{
+        url: { type: String, required: true },
+        publicId: { type: String },
+        filename: { type: String },
+        format: { type: String },
+        width: { type: Number },
+        height: { type: Number },
+        uploadedAt: { type: Date, default: Date.now }
+      }],
       default: [],
       validate: {
         validator: function(images) {
@@ -120,6 +149,7 @@ const customDesignRequestSchema = new mongoose.Schema(
       default: 'other',
     },
 
+    // Legacy budgetRange - deprecated in favor of budget field
     budgetRange: {
       min: {
         type: Number,
