@@ -6,6 +6,8 @@ import connectDB from '../config/db.js';
 import { connectRedis } from '../config/redis.js';
 import initNoShowJob from './noShowJob.js';
 import initScheduleReminders from './scheduleReminderJob.js';
+import { Emitter } from "@socket.io/redis-emitter";
+import { createClient } from "redis";
 
 dotenv.config();
 
@@ -22,14 +24,28 @@ const start = async () => {
     // Connect to Database
     await connectDB();
 
-    // Connect to Redis
+    // Connect to Redis (for caching/general use)
     await connectRedis();
 
-    // Initialize no-show job
-    initNoShowJob();
+    // Setup Redis Emitter for Socket.io
+    let ioEmitter = null;
+    if (process.env.REDIS_URL) {
+      try {
+        const redisClient = createClient({ url: process.env.REDIS_URL });
+        redisClient.on('error', (err) => logger.error('Redis Emitter Client Error', err));
+        await redisClient.connect();
+        ioEmitter = new Emitter(redisClient);
+        logger.info('Redis Emitter initialized for worker');
+      } catch (redisErr) {
+        logger.error('Failed to initialize Redis Emitter:', redisErr);
+      }
+    }
 
-    // Initialize reminder scheduler
-    initScheduleReminders();
+    // Initialize no-show job with emitter
+    initNoShowJob(ioEmitter);
+
+    // Initialize reminder scheduler with emitter
+    initScheduleReminders(ioEmitter);
 
     logger.info('Jobs worker started');
   } catch (err) {

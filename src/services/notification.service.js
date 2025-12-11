@@ -252,7 +252,7 @@ export const sendManualNotification = async (data, io = null) => {
  * Schedule reminders (placeholder cho future booking reminders)
  * Sử dụng node-cron để chạy định kỳ
  */
-export const scheduleReminders = () => {
+export const scheduleReminders = (io = null) => {
   // Run every 10 minutes for faster testing
   cron.schedule('*/10 * * * *', async () => {
     logger.info('Running scheduled reminders job');
@@ -301,7 +301,7 @@ export const scheduleReminders = () => {
           const title = 'Nhắc thanh toán phần còn lại';
           const message = `Bạn còn ${remaining} VND cần thanh toán cho booking #${booking._id.toString().slice(-8)} trước khi sử dụng dịch vụ vào ${new Date(sched.startTime).toLocaleString('vi-VN')}. Vui lòng thanh toán để tránh ảnh hưởng.`;
 
-          await createAndSendNotification(userId, NOTIFICATION_TYPE.REMINDER, title, message, false, null, booking._id);
+          await createAndSendNotification(userId, NOTIFICATION_TYPE.REMINDER, title, message, false, io, booking._id);
 
           // Also send an email to customer and CC all staff/admin emails (best-effort)
           try {

@@ -3,10 +3,10 @@
 import logger from '../utils/logger.js';
 import { scheduleReminders } from '../services/notification.service.js';
 
-const initScheduleReminders = () => {
+const initScheduleReminders = (io = null) => {
   try {
     logger.info('Initializing schedule reminder job');
-    scheduleReminders();
+    scheduleReminders(io);
   } catch (err) {
     logger.error('Failed to initialize schedule reminder job:', err);
   }
