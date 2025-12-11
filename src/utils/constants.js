@@ -167,6 +167,16 @@ export const AI_SET_DESIGN_STATUS = {
   CANCELLED: "cancelled",
 };
 
+// Set Design Order Status
+export const SET_DESIGN_ORDER_STATUS = {
+  PENDING: "pending",           // Order created, awaiting payment
+  CONFIRMED: "confirmed",       // Payment received, order confirmed
+  PROCESSING: "processing",     // Staff is preparing the design
+  READY: "ready",              // Design is ready for pickup/use
+  COMPLETED: "completed",       // Order completed
+  CANCELLED: "cancelled",       // Order cancelled
+};
+
 // Review & Report
 export const REVIEW_TARGET_TYPES = {
   STUDIO: "Studio",

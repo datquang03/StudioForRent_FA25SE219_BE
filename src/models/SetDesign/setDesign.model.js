@@ -35,8 +35,7 @@ const setDesignSchema = new mongoose.Schema(
     price: {
       type: Number,
       required: [true, "Set design price is required"],
-      min: [0, "Price cannot be negative"],
-      default: 0,
+      min: [1, "Price must be greater than 0"],
     },
 
     // === IMAGES ===
