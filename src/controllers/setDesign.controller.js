@@ -421,12 +421,7 @@ export const getConvertedCustomDesignsController = asyncHandler(async (req, res)
     search
   };
 
-  // Staff/Admin can optionally filter by email
-  if ((req.user?.role === 'staff' || req.user?.role === 'admin') && req.query.email) {
-    filters.email = req.query.email.trim();
-  }
-
-  const result = await getConvertedCustomDesigns(filters, req.user);
+  const result = await getConvertedCustomDesigns(filters);
 
   res.status(200).json({
     success: true,
@@ -444,7 +439,7 @@ export const getConvertedCustomDesignsController = asyncHandler(async (req, res)
 export const getConvertedCustomDesignByIdController = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  const result = await getConvertedCustomDesignById(id, req.user);
+  const result = await getConvertedCustomDesignById(id);
 
   res.status(200).json({
     success: true,
