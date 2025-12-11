@@ -145,7 +145,7 @@ export const getSetDesignById = async (id) => {
  * @param {Object} user - Current user
  * @returns {Object} SetDesign with original request info
  */
-export const getConvertedCustomDesignById = async (id, user) => {
+export const getConvertedCustomDesignById = async (id) => {
   try {
     validateObjectId(id, 'ID set design');
 
@@ -162,14 +162,7 @@ export const getConvertedCustomDesignById = async (id, user) => {
       throw new NotFoundError('Đây không phải là set design được chuyển đổi từ custom request');
     }
 
-    // Check ownership for customers
-    const isStaffOrAdmin = user?.role === 'staff' || user?.role === 'admin';
-    if (!isStaffOrAdmin) {
-      const emailFromUser = user?.email?.toLowerCase();
-      if (!emailFromUser || emailFromUser !== request.email.toLowerCase()) {
-        throw new ValidationError('Bạn chỉ có thể xem set design của chính mình');
-      }
-    }
+    // Public API - no ownership check
 
     return {
       setDesign: design,
@@ -1676,7 +1669,7 @@ export const convertRequestToSetDesign = async (requestId, designData = {}, user
  * @param {Object} user - Current user
  * @returns {Object} Converted set designs with pagination
  */
-export const getConvertedCustomDesigns = async (filters = {}, user) => {
+export const getConvertedCustomDesigns = async (filters = {}) => {
   try {
     const {
       page = 1,
@@ -1688,42 +1681,19 @@ export const getConvertedCustomDesigns = async (filters = {}, user) => {
     const safeLimit = Math.min(50, Math.max(1, parseInt(limit) || 10));
     const skip = (safePage - 1) * safeLimit;
 
-    // Build query for CustomDesignRequests that have been converted
+    // Build query for CustomDesignRequests that have been converted (Public - show all)
     const requestQuery = {
       convertedToDesignId: { $ne: null }
     };
-
-    const isStaffOrAdmin = user?.role === 'staff' || user?.role === 'admin';
-    
-    // If customer, filter by their email
-    if (!isStaffOrAdmin) {
-      const emailFromUser = user?.email;
-      if (!emailFromUser) {
-        throw new ValidationError('Email người dùng không tồn tại');
-      }
-      requestQuery.email = emailFromUser.toLowerCase();
-    } else {
-      // Staff/Admin can optionally filter by email
-      if (filters.email) {
-        const normalizedEmail = filters.email.trim().toLowerCase();
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(normalizedEmail)) {
-          throw new ValidationError('Email không hợp lệ');
-        }
-        requestQuery.email = normalizedEmail;
-      }
-    }
 
     // Search filter
     if (search && search.trim().length > 0) {
       const searchRegex = { $regex: search.trim(), $options: 'i' };
       requestQuery.$or = [
         { customerName: searchRegex },
-        { description: searchRegex }
+        { description: searchRegex },
+        { email: searchRegex }
       ];
-      if (!filters.email) {
-        requestQuery.$or.push({ email: searchRegex });
-      }
     }
 
     // Get converted requests with their SetDesign data
