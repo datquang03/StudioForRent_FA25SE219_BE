@@ -22,6 +22,8 @@ export { default as BookingDetail } from './Booking/bookingDetail.model.js';
 
 // AI Set Design
 export { default as SetDesign } from './SetDesign/setDesign.model.js';
+export { default as SetDesignOrder } from './SetDesignOrder/setDesignOrder.model.js';
+export { default as SetDesignPayment } from './SetDesignPayment/setDesignPayment.model.js';
 
 // Financial
 export { default as Payment } from './Payment/payment.model.js';
