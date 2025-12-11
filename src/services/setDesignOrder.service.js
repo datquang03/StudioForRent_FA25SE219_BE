@@ -395,6 +395,14 @@ export const createSetDesignPayment = async (orderId, paymentData, user) => {
       throw new ValidationError('Không thể thanh toán đơn hàng đã hủy');
     }
 
+    // Only allow payment for orders in PENDING or CONFIRMED status
+    const allowedStatusesForPayment = [
+      SET_DESIGN_ORDER_STATUS.PENDING,
+      SET_DESIGN_ORDER_STATUS.CONFIRMED,
+    ];
+    if (!allowedStatusesForPayment.includes(order.status)) {
+      throw new ValidationError('Không thể thanh toán cho đơn hàng ở trạng thái hiện tại');
+    }
     if (order.paymentStatus === PAYMENT_STATUS.PAID) {
       throw new ValidationError('Đơn hàng đã được thanh toán');
     }
