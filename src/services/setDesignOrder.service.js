@@ -559,9 +559,45 @@ export const createSetDesignPayment = async (orderId, paymentData, user) => {
 };
 
 /**
- * Handle payment webhook for set design orders
- * @param {Object} webhookPayload - Webhook data
- * @returns {Object} Processing result
+ * Verify PayOS webhook signature
+ * @param {Object} body - Webhook body
+ * @param {string} signature - Signature from headers
+ * @returns {boolean} Is signature valid
+ */
+const verifyPayOSWebhookSignature = (body, signature) => {
+  try {
+    if (!signature || !process.env.PAYOS_CHECKSUM_KEY) {
+      return false;
+    }
+
+    // PayOS webhook signature format: HMAC-SHA256 of sorted JSON string
+    const sortedBody = Object.keys(body)
+      .sort()
+      .reduce((obj, key) => {
+        obj[key] = body[key];
+        return obj;
+      }, {});
+
+    const dataStr = JSON.stringify(sortedBody);
+    const expectedSignature = crypto
+      .createHmac('sha256', process.env.PAYOS_CHECKSUM_KEY)
+      .update(dataStr)
+      .digest('hex');
+
+    return crypto.timingSafeEqual(
+      Buffer.from(signature),
+      Buffer.from(expectedSignature)
+    );
+  } catch (error) {
+    logger.error('Webhook signature verification error:', error);
+    return false;
+  }
+};
+
+/**
+ * Handle PayOS webhook for set design payment
+ * @param {Object} webhookPayload - Webhook payload from PayOS
+ * @returns {Object} Webhook processing result
  */
 export const handleSetDesignPaymentWebhook = async (webhookPayload) => {
   const session = await mongoose.startSession();
@@ -569,7 +605,15 @@ export const handleSetDesignPaymentWebhook = async (webhookPayload) => {
 
   try {
     const body = webhookPayload?.body || webhookPayload || {};
+    const headers = webhookPayload?.headers || {};
     const { orderCode, code, desc, data } = body;
+
+    // Verify webhook signature
+    const signature = headers['x-payos-signature'] || headers['X-PayOS-Signature'];
+    if (!verifyPayOSWebhookSignature(body, signature)) {
+      logger.warn('Invalid PayOS webhook signature', { orderCode });
+      throw new ValidationError('Invalid webhook signature');
+    }
 
     logger.info('Processing set design payment webhook', { orderCode, code });
 
@@ -581,15 +625,15 @@ export const handleSetDesignPaymentWebhook = async (webhookPayload) => {
 
     const payment = await SetDesignPayment.findOne({ transactionId }).session(session);
     if (!payment) {
-      // Not a set design payment, ignore
+      // Not a set design payment, ignore (generic response to prevent info leakage)
       await session.commitTransaction();
-      return { success: true, message: 'Not a set design payment' };
+      return { success: true };
     }
 
     // Check if already processed
     if (payment.status !== PAYMENT_STATUS.PENDING) {
       await session.commitTransaction();
-      return { success: true, message: 'Payment already processed' };
+      return { success: true };
     }
 
     // Update payment status based on webhook
@@ -620,7 +664,7 @@ export const handleSetDesignPaymentWebhook = async (webhookPayload) => {
 
       logger.info(`Set design payment ${payment._id} marked as PAID`);
 
-      return { success: true, message: 'Payment processed successfully' };
+      return { success: true };
     } else {
       payment.status = PAYMENT_STATUS.FAILED;
       payment.gatewayResponse = { ...payment.gatewayResponse, webhook: body };
@@ -629,7 +673,7 @@ export const handleSetDesignPaymentWebhook = async (webhookPayload) => {
 
       logger.info(`Set design payment ${payment._id} marked as FAILED`);
 
-      return { success: true, message: 'Payment failed' };
+      return { success: true };
     }
   } catch (error) {
     await session.abortTransaction();

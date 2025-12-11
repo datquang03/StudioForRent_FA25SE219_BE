@@ -53,11 +53,10 @@ router.get('/active', getActiveSetDesignsController);
 router.get('/category/:category', getSetDesignsByCategoryController);
 router.get('/custom-request', protect, getCustomSetDesignController);
 router.get('/', getSetDesignsController);
-// Converted custom designs
-router.get('/converted-custom-designs', protect, authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), getConvertedCustomDesignsController);
-router.get('/converted-custom-designs/:id', protect, validateObjectId(), authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), getConvertedCustomDesignByIdController);
-router.put('/converted-custom-designs/:id', protect, validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), updateConvertedCustomDesignController);
-router.delete('/converted-custom-designs/:id', protect, validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), deleteConvertedCustomDesignController);
+
+// Converted custom designs - Public GET endpoints
+router.get('/converted-custom-designs', getConvertedCustomDesignsController);
+router.get('/converted-custom-designs/:id', validateObjectId(), getConvertedCustomDesignByIdController);
 
 // Get Set Design by ID
 router.get('/:id', validateObjectId(), getSetDesignByIdController);
@@ -85,12 +84,15 @@ router.post('/upload-images',
   uploadDesignImagesController
 );
 
-// Admin-only routes
 // Staff-only routes
 router.post('/', authorize(USER_ROLES.STAFF), createSetDesignController);
 router.put('/:id', validateObjectId(), authorize(USER_ROLES.STAFF), updateSetDesignController);
 router.delete('/:id', validateObjectId(), authorize(USER_ROLES.STAFF), deleteSetDesignController);
 router.post('/custom-requests/:id/convert', validateObjectId(), authorize(USER_ROLES.STAFF), convertRequestToSetDesignController);
+
+// Converted custom designs - Protected PUT/DELETE (Staff/Admin only)
+router.put('/converted-custom-designs/:id', validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), updateConvertedCustomDesignController);
+router.delete('/converted-custom-designs/:id', validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), deleteConvertedCustomDesignController);
 
 // #endregion
 
