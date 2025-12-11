@@ -16,6 +16,7 @@
     "@google/generative-ai": "^0.24.1",
     "@payos/node": "^2.0.3",
     "@socket.io/redis-adapter": "^8.3.0",
+    "@socket.io/redis-emitter": "^5.1.0",
     "axios": "^1.13.2",
     "bcryptjs": "^3.0.2",
     "body-parser": "^2.2.0",
