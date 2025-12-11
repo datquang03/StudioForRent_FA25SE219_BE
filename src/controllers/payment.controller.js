@@ -3,6 +3,7 @@ import {
   createPaymentOptions, 
   handlePaymentWebhook, 
   getPaymentStatus, 
+  syncPaymentWithPayOS,
   createPaymentForRemaining, 
   getStaffPaymentHistory, 
   createPaymentForOption,
@@ -80,7 +81,8 @@ export const getPaymentStatusController = async (req, res) => {
       throw new ValidationError('ID thanh toán không hợp lệ');
     }
 
-    const payment = await getPaymentStatus(paymentId);
+    // Use syncPaymentWithPayOS to actively check and update status if pending
+    const payment = await syncPaymentWithPayOS(paymentId);
 
     res.status(200).json({
       success: true,

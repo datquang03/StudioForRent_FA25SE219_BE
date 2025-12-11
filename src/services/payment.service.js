@@ -1453,3 +1453,126 @@ export const getTransactionHistory = async (filters = {}) => {
     throw new Error('Lỗi khi lấy lịch sử giao dịch');
   }
 };
+
+/**
+ * Sync payment status with PayOS (Active Check)
+ * @param {string} paymentId
+ */
+export const syncPaymentWithPayOS = async (paymentId) => {
+  try {
+    if (!paymentId || !mongoose.Types.ObjectId.isValid(paymentId)) {
+      throw new ValidationError('ID thanh toán không hợp lệ');
+    }
+
+    // 1. Get current status
+    let payment = await Payment.findById(paymentId);
+    if (!payment) {
+      throw new NotFoundError('Thanh toán không tồn tại');
+    }
+
+    // If not PENDING, no need to sync
+    if (payment.status !== PAYMENT_STATUS.PENDING) {
+      return await Payment.findById(paymentId).populate('bookingId');
+    }
+
+    // 2. Check PayOS
+    let payOsInfo;
+    try {
+      // Use the existing function in this file
+      payOsInfo = await checkPaymentStatusWithPayOS(payment.transactionId);
+    } catch (err) {
+      logger.warn(`Failed to check PayOS status for payment ${paymentId}: ${err.message}`);
+      // Return existing payment if check fails
+      return await Payment.findById(paymentId).populate('bookingId');
+    }
+
+    if (!payOsInfo) {
+      return await Payment.findById(paymentId).populate('bookingId');
+    }
+
+    // 3. Compare and Update
+    const payOsStatus = payOsInfo.status; // 'PAID', 'CANCELLED', 'PENDING'
+    
+    // Map PayOS status to our status
+    let newStatus = null;
+    if (payOsStatus === 'PAID') newStatus = PAYMENT_STATUS.PAID;
+    else if (payOsStatus === 'CANCELLED') newStatus = PAYMENT_STATUS.CANCELLED;
+    
+    if (newStatus && newStatus !== payment.status) {
+      const session = await mongoose.startSession();
+      session.startTransaction();
+      
+      try {
+        // Re-fetch payment with lock
+        payment = await Payment.findById(paymentId).session(session);
+        
+        if (payment.status === PAYMENT_STATUS.PENDING) {
+          payment.status = newStatus;
+          if (newStatus === PAYMENT_STATUS.PAID) {
+            payment.paidAt = new Date();
+            payment.gatewayResponse = {
+              ...payment.gatewayResponse,
+              syncData: payOsInfo,
+              syncedAt: new Date()
+            };
+          } else if (newStatus === PAYMENT_STATUS.CANCELLED) {
+            payment.gatewayResponse = {
+              ...payment.gatewayResponse,
+              syncData: payOsInfo,
+              syncedAt: new Date(),
+              cancelReason: 'Synced from PayOS'
+            };
+          }
+          
+          await payment.save({ session });
+          
+          // Update Booking if PAID
+          if (newStatus === PAYMENT_STATUS.PAID) {
+             const booking = await Booking.findById(payment.bookingId).session(session);
+             if (booking) {
+                const paidPayments = await Payment.find({
+                  bookingId: booking._id,
+                  status: PAYMENT_STATUS.PAID
+                }).select('amount').session(session);
+
+                const totalPaid = paidPayments.reduce((sum, p) => sum + p.amount, 0);
+                const paymentPercentage = (totalPaid / booking.finalAmount) * 100;
+                
+                if (paymentPercentage >= 100) {
+                  booking.status = BOOKING_STATUS.CONFIRMED;
+                  booking.payType = PAY_TYPE.FULL;
+                } else if (paymentPercentage >= 50) {
+                  booking.status = BOOKING_STATUS.CONFIRMED;
+                  booking.payType = PAY_TYPE.PREPAY_50;
+                } else if (paymentPercentage >= 30) {
+                  booking.status = BOOKING_STATUS.CONFIRMED;
+                  booking.payType = PAY_TYPE.PREPAY_30;
+                }
+                
+                await booking.save({ session });
+                logger.info(`Booking ${booking._id} updated to ${booking.status} via sync`);
+             }
+          }
+        }
+        
+        await session.commitTransaction();
+        logger.info(`Synced payment ${paymentId} status to ${newStatus}`);
+      } catch (updateError) {
+        await session.abortTransaction();
+        logger.error(`Error syncing payment ${paymentId}:`, updateError);
+        // Don't throw, just return existing
+      } finally {
+        session.endSession();
+      }
+    }
+
+    return await Payment.findById(paymentId).populate('bookingId');
+
+  } catch (error) {
+    if (error instanceof ValidationError || error instanceof NotFoundError) {
+      throw error;
+    }
+    logger.error('Error in syncPaymentWithPayOS:', error);
+    throw new Error('Lỗi khi đồng bộ trạng thái thanh toán');
+  }
+};
