@@ -148,20 +148,6 @@ const customDesignRequestSchema = new mongoose.Schema(
       enum: ['wedding', 'portrait', 'corporate', 'event', 'family', 'graduation', 'other'],
       default: 'other',
     },
-
-    // Legacy budgetRange - deprecated in favor of budget field
-    budgetRange: {
-      min: {
-        type: Number,
-        min: 0,
-        default: null,
-      },
-      max: {
-        type: Number,
-        min: 0,
-        default: null,
-      }
-    },
   },
   {
     timestamps: true, // Adds createdAt and updatedAt

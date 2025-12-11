@@ -1197,7 +1197,6 @@ export const createCustomDesignRequest = async (requestData) => {
       budget,
       referenceImages = [],
       preferredCategory,
-      budgetRange, // Legacy support
       customerId // Extract customerId
     } = requestData;
 
@@ -1241,7 +1240,6 @@ export const createCustomDesignRequest = async (requestData) => {
       budget,
       referenceImages, // Array of file objects
       preferredCategory,
-      budgetRange, // Legacy support
       customerId, // Save customerId
       status: 'pending',
       aiGenerationAttempts: 0
@@ -1250,12 +1248,6 @@ export const createCustomDesignRequest = async (requestData) => {
     await customRequest.save();
 
     logger.info(`Custom design request created: ${customRequest._id}`);
-
-    // Attempt to generate AI image asynchronously (don't block the request)
-    // We'll update the request with the image later
-    generateAndAttachAIImage(customRequest._id, description).catch(err => {
-      logger.error(`Failed to generate AI image for request ${customRequest._id}:`, err);
-    });
 
     return customRequest;
   } catch (error) {
@@ -1497,7 +1489,7 @@ export const updateCustomDesignRequest = async (id, updateData, user) => {
       }
 
       // Customers can only update limited fields
-      const allowedFields = ['description', 'referenceImages', 'preferredCategory', 'budgetRange'];
+      const allowedFields = ['description', 'referenceImages', 'preferredCategory', 'budget'];
       const updateFields = Object.keys(updateData);
       const invalidFields = updateFields.filter(field => !allowedFields.includes(field));
       
@@ -1524,11 +1516,11 @@ export const updateCustomDesignRequest = async (id, updateData, user) => {
         }
         request.preferredCategory = updateData.preferredCategory;
       }
-      if (updateData.budgetRange !== undefined) {
-        if (typeof updateData.budgetRange !== 'string' || updateData.budgetRange.length > 100) {
-          throw new ValidationError('Khoảng ngân sách phải là chuỗi và không quá 100 ký tự');
+      if (updateData.budget !== undefined) {
+        if (typeof updateData.budget !== 'number' || updateData.budget < 0) {
+          throw new ValidationError('Ngân sách phải là số dương');
         }
-        request.budgetRange = updateData.budgetRange;
+        request.budget = updateData.budget;
       }
     } else {
       // Staff/Admin can update any field
@@ -1567,8 +1559,10 @@ export const updateCustomDesignRequest = async (id, updateData, user) => {
         }
         request.preferredCategory = updateData.preferredCategory;
       }
-      if (updateData.budgetRange !== undefined) {
-        request.budgetRange = updateData.budgetRange;
+      if (updateData.budget !== undefined) {
+        if (typeof updateData.budget === 'number' && updateData.budget >= 0) {
+          request.budget = updateData.budget;
+        }
       }
     }
 

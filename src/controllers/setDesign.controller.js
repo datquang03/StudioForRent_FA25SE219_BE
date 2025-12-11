@@ -188,7 +188,7 @@ export const createCustomDesignRequestController = asyncHandler(async (req, res)
     phoneNumber,
     description,
     preferredCategory,
-    budgetRange
+    budget
   } = req.body;
 
   // Validation
@@ -217,6 +217,15 @@ export const createCustomDesignRequestController = asyncHandler(async (req, res)
     throw new Error('Mô tả phải có ít nhất 20 ký tự');
   }
 
+  // Validate budget if provided
+  if (budget !== undefined && budget !== null && budget !== '') {
+    const budgetNum = parseFloat(budget);
+    if (isNaN(budgetNum) || budgetNum < 0) {
+      res.status(400);
+      throw new Error('Budget phải là số dương');
+    }
+  }
+
   // Handle uploaded reference images
   let referenceImages = [];
   if (req.files && req.files.length > 0) {
@@ -228,7 +237,7 @@ export const createCustomDesignRequestController = asyncHandler(async (req, res)
         });
         
         return {
-          url: result.secure_url,
+          url: result.url,
           publicId: result.public_id,
           filename: file.originalname,
           format: result.format,
@@ -249,7 +258,7 @@ export const createCustomDesignRequestController = asyncHandler(async (req, res)
     description,
     referenceImages,
     preferredCategory,
-    budgetRange,
+    budget: budget ? parseFloat(budget) : undefined,
     customerId: req.user ? req.user._id : null // Add customerId if user is logged in
   };
 
