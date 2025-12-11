@@ -22,7 +22,7 @@ const truncate = (str, len) => (str && str.length > len ? str.slice(0, len) : st
 const generateOrderCode = () => {
   const timestamp = Date.now();
   const random = crypto.randomBytes(2).readUInt16BE(0) % 1000;
-  return Number(`${timestamp}${random.toString().padStart(3, '0')}`);
+  return `${timestamp}${random.toString().padStart(3, '0')}`;
 };
 
 /**
