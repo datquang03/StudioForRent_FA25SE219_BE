@@ -465,13 +465,19 @@ export const createSetDesignPayment = async (orderId, paymentData, user) => {
         orderCode: payosOrderCode,
         amount: paymentAmount,
         description: safeDescription,
-        items: [
-          {
-            name: truncate(order.setDesignId?.name || 'Set Design', 50),
-            quantity: order.quantity,
-            price: Math.floor(paymentAmount / order.quantity),
-          },
-        ],
+        items: (() => {
+          const items = [];
+          const basePrice = Math.floor(paymentAmount / order.quantity);
+          const remainder = paymentAmount - basePrice * order.quantity;
+          for (let i = 0; i < order.quantity; i++) {
+            items.push({
+              name: truncate(order.setDesignId?.name || 'Set Design', 50),
+              quantity: 1,
+              price: i === order.quantity - 1 ? basePrice + remainder : basePrice,
+            });
+          }
+          return items;
+        })(),
         returnUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/set-design/payment/success?orderId=${orderId}`,
         cancelUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/set-design/payment/cancel?orderId=${orderId}`,
         buyerName: order.customerId?.username || 'Customer',
