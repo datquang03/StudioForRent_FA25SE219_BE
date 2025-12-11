@@ -1194,9 +1194,9 @@ export const createCustomDesignRequest = async (requestData) => {
       email,
       phoneNumber,
       description,
+      budget,
       referenceImages = [],
       preferredCategory,
-      budgetRange,
       customerId // Extract customerId
     } = requestData;
 
@@ -1217,6 +1217,13 @@ export const createCustomDesignRequest = async (requestData) => {
       throw new ValidationError('Số điện thoại không hợp lệ');
     }
 
+    // Validate budget if provided
+    if (budget !== undefined && budget !== null) {
+      if (budget < 0) {
+        throw new ValidationError('Ngân sách không thể âm');
+      }
+    }
+
     // Validate category if provided
     if (preferredCategory && !SET_DESIGN_CATEGORIES.includes(preferredCategory)) {
       throw new ValidationError(`Danh mục không hợp lệ. Chọn từ: ${SET_DESIGN_CATEGORIES.join(', ')}`);
@@ -1230,9 +1237,9 @@ export const createCustomDesignRequest = async (requestData) => {
       email,
       phoneNumber,
       description,
-      referenceImages,
+      budget,
+      referenceImages, // Array of file objects
       preferredCategory,
-      budgetRange,
       customerId, // Save customerId
       status: 'pending',
       aiGenerationAttempts: 0
@@ -1241,12 +1248,6 @@ export const createCustomDesignRequest = async (requestData) => {
     await customRequest.save();
 
     logger.info(`Custom design request created: ${customRequest._id}`);
-
-    // Attempt to generate AI image asynchronously (don't block the request)
-    // We'll update the request with the image later
-    generateAndAttachAIImage(customRequest._id, description).catch(err => {
-      logger.error(`Failed to generate AI image for request ${customRequest._id}:`, err);
-    });
 
     return customRequest;
   } catch (error) {
@@ -1279,13 +1280,23 @@ const generateAndAttachAIImage = async (requestId, description) => {
       aspectRatio: '16:9',
     });
     
-    // Update request with generated image
-    request.generatedImage = imageResult.url;
+    // Update request with generated image as file object
+    const generatedImageObj = {
+      url: imageResult.url,
+      publicId: imageResult.publicId || null,
+      filename: imageResult.filename || `ai-generated-${Date.now()}.png`,
+      format: imageResult.format || 'png',
+      width: imageResult.width || null,
+      height: imageResult.height || null,
+      uploadedAt: new Date()
+    };
+
+    request.generatedImages = [generatedImageObj];
     request.status = 'pending'; // Back to pending for staff review
     request.aiMetadata = {
       prompt: imageResult.enhancedPrompt,
-      model: imageResult.metadata.model,
-      generatedAt: imageResult.metadata.timestamp,
+      model: imageResult.metadata?.model || 'gemini-2.5-flash-image',
+      generatedAt: imageResult.metadata?.timestamp || new Date(),
     };
     await request.save();
 
@@ -1478,7 +1489,7 @@ export const updateCustomDesignRequest = async (id, updateData, user) => {
       }
 
       // Customers can only update limited fields
-      const allowedFields = ['description', 'referenceImages', 'preferredCategory', 'budgetRange'];
+      const allowedFields = ['description', 'referenceImages', 'preferredCategory', 'budget'];
       const updateFields = Object.keys(updateData);
       const invalidFields = updateFields.filter(field => !allowedFields.includes(field));
       
@@ -1505,11 +1516,11 @@ export const updateCustomDesignRequest = async (id, updateData, user) => {
         }
         request.preferredCategory = updateData.preferredCategory;
       }
-      if (updateData.budgetRange !== undefined) {
-        if (typeof updateData.budgetRange !== 'string' || updateData.budgetRange.length > 100) {
-          throw new ValidationError('Khoảng ngân sách phải là chuỗi và không quá 100 ký tự');
+      if (updateData.budget !== undefined) {
+        if (typeof updateData.budget !== 'number' || updateData.budget < 0) {
+          throw new ValidationError('Ngân sách phải là số dương');
         }
-        request.budgetRange = updateData.budgetRange;
+        request.budget = updateData.budget;
       }
     } else {
       // Staff/Admin can update any field
@@ -1548,8 +1559,10 @@ export const updateCustomDesignRequest = async (id, updateData, user) => {
         }
         request.preferredCategory = updateData.preferredCategory;
       }
-      if (updateData.budgetRange !== undefined) {
-        request.budgetRange = updateData.budgetRange;
+      if (updateData.budget !== undefined) {
+        if (typeof updateData.budget === 'number' && updateData.budget >= 0) {
+          request.budget = updateData.budget;
+        }
       }
     }
 
