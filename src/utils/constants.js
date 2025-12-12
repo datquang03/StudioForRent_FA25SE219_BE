@@ -140,7 +140,7 @@ export const PAY_TYPE = {
 
 export const PAYMENT_STATUS = {
   PENDING: "pending",
-  PAID: "paid", // Changed from SUCCESS to PAID
+  PAID: "paid",
   FAILED: "failed",
   REFUNDED: "refunded",
 };
