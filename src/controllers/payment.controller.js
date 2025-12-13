@@ -7,6 +7,7 @@ import {
   createPaymentForRemaining, 
   getStaffPaymentHistory, 
   createPaymentForOption,
+  formatPaymentOption,
   getMyTransactions,
   getAllTransactions,
   getTransactionById,
@@ -84,9 +85,12 @@ export const getPaymentStatusController = async (req, res) => {
     // Use syncPaymentWithPayOS to actively check and update status if pending
     const payment = await syncPaymentWithPayOS(paymentId);
 
+    // Format response to include remainingAmount
+    const formattedPayment = formatPaymentOption(payment, payment.bookingId?.finalAmount || 0);
+
     res.status(200).json({
       success: true,
-      data: payment
+      data: formattedPayment
     });
   } catch (error) {
     logger.error('Get payment status error:', error);

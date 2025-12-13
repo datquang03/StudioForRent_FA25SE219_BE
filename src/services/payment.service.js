@@ -43,7 +43,7 @@ const generatePaymentCode = (bookingId, percentage) => {
 /**
  * Format existing payment options for response
  */
-const formatPaymentOption = (payment, totalAmount) => {
+export const formatPaymentOption = (payment, totalAmount) => {
   const percentageMap = {
     [PAY_TYPE.PREPAY_30]: 30,
     [PAY_TYPE.PREPAY_50]: 50,
@@ -251,7 +251,7 @@ export const createPaymentOptions = async (bookingId) => {
     }
 
     await session.commitTransaction();
-    return paymentOptions[0];
+    return paymentOptions;
 
   } catch (error) {
     await session.abortTransaction();
@@ -646,7 +646,7 @@ export const createPaymentForOption = async (bookingId, opts = {}) => {
     const existing = await Payment.findOne({ bookingId, payType, status: PAYMENT_STATUS.PENDING }).session(session);
     if (existing) {
       await session.commitTransaction();
-      return existing;
+      return formatPaymentOption(existing, totalAmount);
     }
 
     const orderCode = generateOrderCode();
@@ -691,7 +691,7 @@ export const createPaymentForOption = async (bookingId, opts = {}) => {
     const payment = await Payment.create([{ bookingId, paymentCode, amount, payType, status: PAYMENT_STATUS.PENDING, transactionId: orderCode.toString(), qrCodeUrl: checkoutUrl, gatewayResponse, expiresAt }], { session });
 
     await session.commitTransaction();
-    return payment[0];
+    return formatPaymentOption(payment[0], totalAmount);
 
   } catch (error) {
     await session.abortTransaction();
