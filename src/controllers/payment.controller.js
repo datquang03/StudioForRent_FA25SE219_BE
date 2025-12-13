@@ -85,8 +85,13 @@ export const getPaymentStatusController = async (req, res) => {
     // Use syncPaymentWithPayOS to actively check and update status if pending
     const payment = await syncPaymentWithPayOS(paymentId);
 
+    // Ensure booking still exists for this payment
+    if (!payment.bookingId) {
+      throw new NotFoundError('Không tìm thấy booking cho thanh toán này');
+    }
+
     // Format response to include remainingAmount
-    const formattedPayment = formatPaymentOption(payment, payment.bookingId?.finalAmount || 0);
+    const formattedPayment = formatPaymentOption(payment, payment.bookingId.finalAmount);
 
     res.status(200).json({
       success: true,
