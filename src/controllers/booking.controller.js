@@ -10,6 +10,8 @@ import {
   updateBooking as updateBookingService,
   checkInBooking as checkInBookingService,
   checkOutBooking as checkOutBookingService,
+  getMaxExtensionTime as getMaxExtensionTimeService,
+  extendBooking as extendBookingService,
 } from '../services/booking.service.js';
 // #endregion
 
@@ -94,6 +96,42 @@ export const checkOut = asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, message: 'Check-out thành công!', data: booking });
 });
 
+// #region Extension Controllers
+
+export const getExtensionOptions = asyncHandler(async (req, res) => {
+  const bookingId = req.params.id;
+  const result = await getMaxExtensionTimeService(bookingId);
+
+  res.status(200).json({
+    success: true,
+    message: result.canExtend 
+      ? `Có thể gia hạn tối đa ${result.availableMinutes} phút`
+      : result.reason,
+    data: result
+  });
+});
+
+export const extendBookingController = asyncHandler(async (req, res) => {
+  const bookingId = req.params.id;
+  const { newEndTime } = req.body;
+  const actorId = req.user ? req.user._id : null;
+
+  if (!newEndTime) {
+    res.status(400);
+    throw new Error('Vui lòng cung cấp thời gian kết thúc mới (newEndTime)');
+  }
+
+  const result = await extendBookingService(bookingId, newEndTime, actorId);
+
+  res.status(200).json({
+    success: true,
+    message: `Gia hạn booking thành công! Số tiền cần thanh toán thêm: ${result.additionalAmount.toLocaleString('vi-VN')} VND`,
+    data: result
+  });
+});
+
+// #endregion
+
 export default {
   createBooking,
   getBookings,
@@ -102,4 +140,6 @@ export default {
   confirmBooking,
   checkIn,
   checkOut,
+  getExtensionOptions,
+  extendBookingController,
 };

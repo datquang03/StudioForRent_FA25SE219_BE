@@ -1199,6 +1199,198 @@ const formatBookingResponse = (booking) => {
 
 // #endregion
 
+// #region Booking Extension
+
+/**
+ * Tính toán thời gian gia hạn tối đa cho một booking
+ * @param {string} bookingId - ID của booking cần gia hạn
+ * @returns {Object} - { canExtend, maxEndTime, availableMinutes, currentEndTime, reason }
+ */
+export const getMaxExtensionTime = async (bookingId) => {
+  const booking = await Booking.findById(bookingId).populate('scheduleId');
+  if (!booking) throw new NotFoundError('Booking không tồn tại');
+
+  // Validate trạng thái booking
+  const allowedStatuses = [BOOKING_STATUS.CONFIRMED, BOOKING_STATUS.CHECKED_IN];
+  if (!allowedStatuses.includes(booking.status)) {
+    return {
+      canExtend: false,
+      maxEndTime: null,
+      availableMinutes: 0,
+      currentEndTime: booking.scheduleId?.endTime || null,
+      reason: booking.status === BOOKING_STATUS.PENDING 
+        ? 'Vui lòng xác nhận booking trước khi gia hạn'
+        : 'Không thể gia hạn booking đã kết thúc'
+    };
+  }
+
+  const schedule = booking.scheduleId;
+  if (!schedule) throw new NotFoundError('Lịch không tồn tại');
+
+  const currentEndTime = new Date(schedule.endTime);
+  const studioId = schedule.studioId;
+  const MIN_GAP_MS = 30 * 60 * 1000; // 30 phút buffer
+
+  // Tìm schedule kế tiếp trên cùng studio (sau currentEndTime)
+  const nextSchedule = await Schedule.findOne({
+    studioId,
+    startTime: { $gt: currentEndTime },
+    status: { $in: [SCHEDULE_STATUS.BOOKED, SCHEDULE_STATUS.AVAILABLE] }
+  }).sort({ startTime: 1 });
+
+  let maxEndTime;
+  if (nextSchedule) {
+    // Trừ 30 phút buffer để dọn dẹp
+    maxEndTime = new Date(nextSchedule.startTime.getTime() - MIN_GAP_MS);
+  } else {
+    // Không có lịch sau: cho phép gia hạn đến cuối ngày (23:59)
+    maxEndTime = new Date(currentEndTime);
+    maxEndTime.setHours(23, 59, 0, 0);
+  }
+
+  // Nếu maxEndTime <= currentEndTime thì không thể gia hạn
+  if (maxEndTime <= currentEndTime) {
+    return {
+      canExtend: false,
+      maxEndTime: currentEndTime,
+      availableMinutes: 0,
+      currentEndTime,
+      reason: 'Phòng đã có khách khác đặt ngay sau đó'
+    };
+  }
+
+  const availableMinutes = Math.floor((maxEndTime - currentEndTime) / (1000 * 60));
+
+  return {
+    canExtend: true,
+    maxEndTime,
+    availableMinutes,
+    currentEndTime,
+    reason: null
+  };
+};
+
+/**
+ * Gia hạn booking đến thời gian mới
+ * @param {string} bookingId - ID của booking
+ * @param {Date|string} newEndTime - Thời gian kết thúc mới
+ * @param {string} actorId - ID của người thực hiện (customer/staff)
+ * @returns {Object} - { booking, additionalAmount, previousEndTime, newEndTime }
+ */
+export const extendBooking = async (bookingId, newEndTime, actorId = null) => {
+  const session = await mongoose.startSession();
+  
+  try {
+    return await session.withTransaction(async () => {
+      const booking = await Booking.findById(bookingId).populate('scheduleId').session(session);
+      if (!booking) throw new NotFoundError('Booking không tồn tại');
+
+      // 1. Validate trạng thái
+      const allowedStatuses = [BOOKING_STATUS.CONFIRMED, BOOKING_STATUS.CHECKED_IN];
+      if (!allowedStatuses.includes(booking.status)) {
+        if (booking.status === BOOKING_STATUS.PENDING) {
+          throw new ValidationError('Vui lòng xác nhận booking trước khi gia hạn');
+        }
+        throw new ValidationError('Không thể gia hạn booking đã kết thúc');
+      }
+
+      // 2. Validate đã thanh toán đủ cọc (>= 30%)
+      const paidPayments = await Payment.find({
+        bookingId: booking._id,
+        status: PAYMENT_STATUS.PAID
+      }).select('amount').session(session);
+
+      const totalPaid = paidPayments.reduce((sum, p) => sum + p.amount, 0);
+      const requiredDeposit = Math.round(booking.finalAmount * 0.3);
+      if (totalPaid < requiredDeposit) {
+        throw new ValidationError(`Cần thanh toán tối thiểu 30% (${requiredDeposit.toLocaleString('vi-VN')} VND) trước khi gia hạn`);
+      }
+
+      const schedule = booking.scheduleId;
+      if (!schedule) throw new NotFoundError('Lịch không tồn tại');
+
+      const currentEndTime = new Date(schedule.endTime);
+      const requestedEndTime = new Date(newEndTime);
+
+      // 3. Validate newEndTime > currentEndTime
+      if (requestedEndTime <= currentEndTime) {
+        throw new ValidationError('Thời gian gia hạn phải lớn hơn thời gian kết thúc hiện tại');
+      }
+
+      // 4. Kiểm tra xung đột với lịch khác
+      const extensionCheck = await getMaxExtensionTime(bookingId);
+      if (!extensionCheck.canExtend) {
+        throw new ConflictError(extensionCheck.reason || 'Không thể gia hạn');
+      }
+
+      if (requestedEndTime > extensionCheck.maxEndTime) {
+        throw new ConflictError(`Chỉ có thể gia hạn tối đa đến ${extensionCheck.maxEndTime.toLocaleTimeString('vi-VN')}`);
+      }
+
+      // 5. Tính toán số tiền cần thanh toán thêm
+      const studio = await Studio.findById(schedule.studioId).session(session);
+      if (!studio) throw new NotFoundError('Studio không tồn tại');
+
+      const additionalMs = requestedEndTime.getTime() - currentEndTime.getTime();
+      const additionalHours = Math.round((additionalMs / (1000 * 60 * 60)) * 100) / 100;
+      const additionalAmount = Math.round(additionalHours * (studio.basePricePerHour || 0));
+
+      // 6. Cập nhật Schedule.endTime
+      schedule.endTime = requestedEndTime;
+      await schedule.save({ session });
+
+      // 7. Cập nhật Booking financials
+      const previousTotal = booking.totalBeforeDiscount;
+      booking.totalBeforeDiscount = Math.round((previousTotal + additionalAmount) * 100) / 100;
+      // Giữ nguyên discount amount (không apply promo cho phần gia hạn)
+      booking.finalAmount = Math.max(0, booking.totalBeforeDiscount - booking.discountAmount);
+
+      // 8. Thêm event EXTENDED
+      booking.events = booking.events || [];
+      booking.events.push({
+        type: BOOKING_EVENT_TYPE.EXTENDED,
+        timestamp: new Date(),
+        details: {
+          previousEndTime: currentEndTime,
+          newEndTime: requestedEndTime,
+          additionalHours,
+          additionalAmount
+        },
+        amount: additionalAmount,
+        actorId
+      });
+
+      await booking.save({ session });
+
+      // 9. Gửi notification (best-effort)
+      try {
+        await createAndSendNotification(
+          booking.userId,
+          NOTIFICATION_TYPE.INFO,
+          'Booking đã được gia hạn',
+          `Booking của bạn đã được gia hạn thêm ${additionalHours} giờ. Số tiền cần thanh toán thêm: ${additionalAmount.toLocaleString('vi-VN')} VND`,
+          true,
+          null,
+          booking._id
+        );
+      } catch (notifyErr) {
+        console.error('Failed to send extension notification:', notifyErr);
+      }
+
+      return {
+        booking,
+        additionalAmount,
+        previousEndTime: currentEndTime,
+        newEndTime: requestedEndTime
+      };
+    }, { writeConcern: { w: 'majority' }, readConcern: { level: 'majority' } });
+  } finally {
+    session.endSession();
+  }
+};
+
+// #endregion
+
 export default {
   createBooking,
   getBookingById,
@@ -1210,4 +1402,6 @@ export default {
   checkInBooking,
   checkOutBooking,
   getBookingsForStaff,
+  getMaxExtensionTime,
+  extendBooking,
 };
