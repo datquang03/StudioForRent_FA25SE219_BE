@@ -122,7 +122,8 @@ export const BOOKING_EVENT_TYPE = {
   REFUND_PROCESSED: 'REFUND_PROCESSED',
   CHARGE_APPLIED: 'CHARGE_APPLIED',
   CHECK_IN: 'CHECK_IN',
-  CHECK_OUT: 'CHECK_OUT'
+  CHECK_OUT: 'CHECK_OUT',
+  EXTENDED: 'EXTENDED', // Gia hạn thời gian booking
 };
 
 // Booking Detail Types (for booking_details table)
