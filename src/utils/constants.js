@@ -126,7 +126,6 @@ export const BOOKING_EVENT_TYPE = {
   EXTENDED: 'EXTENDED', // Gia hạn thời gian booking
 };
 
-
 // Booking Detail Types (for booking_details table)
 export const BOOKING_DETAIL_TYPE = {
   EQUIPMENT: "equipment",

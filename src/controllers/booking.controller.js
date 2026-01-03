@@ -13,6 +13,7 @@ import {
   getMaxExtensionTime as getMaxExtensionTimeService,
   extendBooking as extendBookingService,
 } from '../services/booking.service.js';
+import { ValidationError } from '../utils/errors.js';
 // #endregion
 
 export const createBooking = asyncHandler(async (req, res) => {
@@ -115,13 +116,20 @@ export const extendBookingController = asyncHandler(async (req, res) => {
   const bookingId = req.params.id;
   const { newEndTime } = req.body;
   const actorId = req.user ? req.user._id : null;
+  const actorRole = req.user ? req.user.role : null;
 
+  // Validate required field
   if (!newEndTime) {
-    res.status(400);
-    throw new Error('Vui lòng cung cấp thời gian kết thúc mới (newEndTime)');
+    throw new ValidationError('Vui lòng cung cấp thời gian kết thúc mới (newEndTime)');
   }
 
-  const result = await extendBookingService(bookingId, newEndTime, actorId);
+  // Validate date format
+  const parsedEndTime = new Date(newEndTime);
+  if (isNaN(parsedEndTime.getTime())) {
+    throw new ValidationError('Thời gian kết thúc không hợp lệ');
+  }
+
+  const result = await extendBookingService(bookingId, newEndTime, actorId, actorRole);
 
   res.status(200).json({
     success: true,

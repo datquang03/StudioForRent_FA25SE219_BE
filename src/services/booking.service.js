@@ -2,7 +2,7 @@
 import { Booking, Schedule, BookingDetail, RoomPolicy, Payment } from '../models/index.js';
 import mongoose from 'mongoose';
 import { NotFoundError, ValidationError, ConflictError, UnauthorizedError } from '../utils/errors.js';
-import { BOOKING_STATUS, SCHEDULE_STATUS, USER_ROLES, PAYMENT_STATUS } from '../utils/constants.js';
+import { BOOKING_STATUS, SCHEDULE_STATUS, USER_ROLES, PAYMENT_STATUS, BOOKING_EVENT_TYPE } from '../utils/constants.js';
 import { createSchedule as createScheduleService, markScheduleBooked as markScheduleBookedService, freeSchedule as freeScheduleService } from './schedule.service.js';
 import { createBookingDetails as createBookingDetailsService } from './bookingDetail.service.js';
 import { Studio, Promotion } from '../models/index.js';
@@ -1204,10 +1204,14 @@ const formatBookingResponse = (booking) => {
 /**
  * Tính toán thời gian gia hạn tối đa cho một booking
  * @param {string} bookingId - ID của booking cần gia hạn
+ * @param {Object} session - MongoDB session (optional, for transaction consistency)
  * @returns {Object} - { canExtend, maxEndTime, availableMinutes, currentEndTime, reason }
  */
-export const getMaxExtensionTime = async (bookingId) => {
-  const booking = await Booking.findById(bookingId).populate('scheduleId');
+export const getMaxExtensionTime = async (bookingId, session = null) => {
+  let bookingQuery = Booking.findById(bookingId).populate('scheduleId');
+  if (session) bookingQuery = bookingQuery.session(session);
+  const booking = await bookingQuery;
+  
   if (!booking) throw new NotFoundError('Booking không tồn tại');
 
   // Validate trạng thái booking
@@ -1232,11 +1236,13 @@ export const getMaxExtensionTime = async (bookingId) => {
   const MIN_GAP_MS = 30 * 60 * 1000; // 30 phút buffer
 
   // Tìm schedule kế tiếp trên cùng studio (sau currentEndTime)
-  const nextSchedule = await Schedule.findOne({
+  let nextScheduleQuery = Schedule.findOne({
     studioId,
     startTime: { $gt: currentEndTime },
     status: { $in: [SCHEDULE_STATUS.BOOKED, SCHEDULE_STATUS.AVAILABLE] }
   }).sort({ startTime: 1 });
+  if (session) nextScheduleQuery = nextScheduleQuery.session(session);
+  const nextSchedule = await nextScheduleQuery;
 
   let maxEndTime;
   if (nextSchedule) {
@@ -1275,15 +1281,28 @@ export const getMaxExtensionTime = async (bookingId) => {
  * @param {string} bookingId - ID của booking
  * @param {Date|string} newEndTime - Thời gian kết thúc mới
  * @param {string} actorId - ID của người thực hiện (customer/staff)
+ * @param {string} actorRole - Role của người thực hiện (để kiểm tra quyền)
  * @returns {Object} - { booking, additionalAmount, previousEndTime, newEndTime }
  */
-export const extendBooking = async (bookingId, newEndTime, actorId = null) => {
+export const extendBooking = async (bookingId, newEndTime, actorId = null, actorRole = null) => {
+  // Acquire lock to prevent concurrent extensions on the same booking
+  const lockKey = `booking:extend:${bookingId}`;
+  const lockToken = await acquireLock(lockKey);
+  if (!lockToken) {
+    throw new ConflictError('Booking đang được gia hạn bởi người dùng khác. Vui lòng thử lại.');
+  }
+
   const session = await mongoose.startSession();
   
   try {
     return await session.withTransaction(async () => {
       const booking = await Booking.findById(bookingId).populate('scheduleId').session(session);
       if (!booking) throw new NotFoundError('Booking không tồn tại');
+
+      // 0. Ownership verification: Customer chỉ có thể extend booking của chính mình
+      if (actorRole === USER_ROLES.CUSTOMER && booking.userId.toString() !== actorId?.toString()) {
+        throw new UnauthorizedError('Bạn không có quyền gia hạn booking này');
+      }
 
       // 1. Validate trạng thái
       const allowedStatuses = [BOOKING_STATUS.CONFIRMED, BOOKING_STATUS.CHECKED_IN];
@@ -1317,8 +1336,8 @@ export const extendBooking = async (bookingId, newEndTime, actorId = null) => {
         throw new ValidationError('Thời gian gia hạn phải lớn hơn thời gian kết thúc hiện tại');
       }
 
-      // 4. Kiểm tra xung đột với lịch khác
-      const extensionCheck = await getMaxExtensionTime(bookingId);
+      // 4. Kiểm tra xung đột với lịch khác (pass session for consistency)
+      const extensionCheck = await getMaxExtensionTime(bookingId, session);
       if (!extensionCheck.canExtend) {
         throw new ConflictError(extensionCheck.reason || 'Không thể gia hạn');
       }
@@ -1341,7 +1360,7 @@ export const extendBooking = async (bookingId, newEndTime, actorId = null) => {
 
       // 7. Cập nhật Booking financials
       const previousTotal = booking.totalBeforeDiscount;
-      booking.totalBeforeDiscount = Math.round((previousTotal + additionalAmount) * 100) / 100;
+      booking.totalBeforeDiscount = previousTotal + additionalAmount;
       // Giữ nguyên discount amount (không apply promo cho phần gia hạn)
       booking.finalAmount = Math.max(0, booking.totalBeforeDiscount - booking.discountAmount);
 
@@ -1362,13 +1381,25 @@ export const extendBooking = async (bookingId, newEndTime, actorId = null) => {
 
       await booking.save({ session });
 
-      // 9. Gửi notification (best-effort)
+      // 9. Gửi notification (best-effort) với format duration đẹp hơn
       try {
+        const totalMinutes = Math.round(additionalHours * 60);
+        const hoursPart = Math.floor(totalMinutes / 60);
+        const minutesPart = totalMinutes % 60;
+        let durationText;
+        if (minutesPart === 0) {
+          durationText = `${hoursPart} giờ`;
+        } else if (hoursPart === 0) {
+          durationText = `${minutesPart} phút`;
+        } else {
+          durationText = `${hoursPart} giờ ${minutesPart} phút`;
+        }
+
         await createAndSendNotification(
           booking.userId,
           NOTIFICATION_TYPE.INFO,
           'Booking đã được gia hạn',
-          `Booking của bạn đã được gia hạn thêm ${additionalHours} giờ. Số tiền cần thanh toán thêm: ${additionalAmount.toLocaleString('vi-VN')} VND`,
+          `Booking của bạn đã được gia hạn thêm ${durationText}. Số tiền cần thanh toán thêm: ${additionalAmount.toLocaleString('vi-VN')} VND`,
           true,
           null,
           booking._id
@@ -1386,6 +1417,8 @@ export const extendBooking = async (bookingId, newEndTime, actorId = null) => {
     }, { writeConcern: { w: 'majority' }, readConcern: { level: 'majority' } });
   } finally {
     session.endSession();
+    // Always release lock
+    await releaseLock(lockKey, lockToken);
   }
 };
 
