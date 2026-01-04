@@ -1235,11 +1235,11 @@ export const getMaxExtensionTime = async (bookingId, session = null) => {
   const studioId = schedule.studioId;
   const MIN_GAP_MS = 30 * 60 * 1000; // 30 phút buffer
 
-  // Tìm schedule kế tiếp trên cùng studio (sau currentEndTime)
+  // Tìm schedule kế tiếp đã được đặt trên cùng studio (sau currentEndTime)
   let nextScheduleQuery = Schedule.findOne({
     studioId,
     startTime: { $gt: currentEndTime },
-    status: { $in: [SCHEDULE_STATUS.BOOKED, SCHEDULE_STATUS.AVAILABLE] }
+    status: SCHEDULE_STATUS.BOOKED
   }).sort({ startTime: 1 });
   if (session) nextScheduleQuery = nextScheduleQuery.session(session);
   const nextSchedule = await nextScheduleQuery;
