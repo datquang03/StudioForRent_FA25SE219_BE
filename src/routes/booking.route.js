@@ -9,6 +9,8 @@ import {
   updateBooking,
   checkIn,
   checkOut,
+  getExtensionOptions,
+  extendBookingController,
 } from '../controllers/booking.controller.js';
 import { createBookingDetailsController } from '../controllers/bookingDetail.controller.js';
 import { protect, authorize } from '../middlewares/auth.js';
@@ -38,6 +40,10 @@ router.post('/:id/no-show', validateObjectId(), authorize(USER_ROLES.STAFF, USER
 // Check-in / Check-out (only staff allowed)
 router.post('/:id/checkin', validateObjectId(), authorize(USER_ROLES.STAFF), checkIn);
 router.post('/:id/checkout', validateObjectId(), authorize(USER_ROLES.STAFF), checkOut);
+
+// Extension routes (Customer and Staff can extend)
+router.get('/:id/extension-options', validateObjectId(), authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF), getExtensionOptions);
+router.post('/:id/extend', validateObjectId(), authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF), extendBookingController);
 
 // Shared route for both Customer and Staff/Admin (MUST be last)
 router.get('/:id', validateObjectId(), authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), getBooking);
