@@ -1184,7 +1184,7 @@ export const getCustomSetDesign = async (filters = {}) => {
 
 /**
  * Create a custom design request with AI-generated image
- * @param {Object} requestData - Customer request data
+ * @param {Object} requestData - Customer request data (extracted from authenticated user)
  * @returns {Object} Created custom design request
  */
 export const createCustomDesignRequest = async (requestData) => {
@@ -1200,22 +1200,12 @@ export const createCustomDesignRequest = async (requestData) => {
       customerId // Extract customerId
     } = requestData;
 
-    // Validate required fields
+    // Validate required fields (these are now provided from authenticated user session)
     if (!customerName || !email || !phoneNumber || !description) {
-      throw new ValidationError('Tên khách hàng, email, số điện thoại và mô tả là bắt buộc');
+      throw new ValidationError('Thông tin người dùng không đầy đủ. Vui lòng đảm bảo hồ sơ của bạn có đầy đủ tên, email và số điện thoại');
     }
 
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      throw new ValidationError('Email không hợp lệ');
-    }
-
-    // Validate phone number format (Vietnamese)
-    const phoneRegex = /^(0|\+84)(\s|\.)?((3[2-9])|(5[689])|(7[06-9])|(8[1-689])|(9[0-46-9]))(\d)(\s|\.)?(\d{3})(\s|\.)?(\d{3})$/;
-    if (!phoneRegex.test(phoneNumber.replace(/\s/g, ''))) {
-      throw new ValidationError('Số điện thoại không hợp lệ');
-    }
+    // Note: Email and phone validation are handled at controller level and user profile level
 
     // Validate budget if provided
     if (budget !== undefined && budget !== null) {

@@ -179,9 +179,15 @@ export const getActiveSetDesignsController = asyncHandler(async (req, res) => {
 /**
  * Create a custom design request with customer info and description
  * POST /api/set-designs/custom-request
- * Protected route (authentication required)
+ * Protected route (authentication required - Customer only)
  */
 export const createCustomDesignRequestController = asyncHandler(async (req, res) => {
+  // Ensure user is authenticated
+  if (!req.user) {
+    res.status(401);
+    throw new Error('Vui lòng đăng nhập để gửi yêu cầu thiết kế');
+  }
+
   const {
     description,
     preferredCategory,
