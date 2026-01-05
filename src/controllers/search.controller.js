@@ -2,6 +2,7 @@
 import asyncHandler from 'express-async-handler';
 import { globalSearch, getSearchSuggestions } from '../services/search.service.js';
 import { ValidationError } from '../utils/errors.js';
+import { createResponse } from '../utils/helpers.js';
 // #endregion
 
 // #region Global Search Controller
@@ -24,14 +25,14 @@ export const globalSearchController = asyncHandler(async (req, res) => {
     limit
   });
 
-  res.status(200).json({
-    success: true,
-    message: 'Tìm kiếm thành công',
-    data: result.results,
-    totalResults: result.totalResults,
-    searchedEntities: result.searchedEntities,
-    keyword: result.keyword
-  });
+  res.status(200).json(
+    createResponse(true, 'Tìm kiếm thành công', {
+      data: result.results,
+      totalResults: result.totalResults,
+      searchedEntities: result.searchedEntities,
+      keyword: result.keyword
+    })
+  );
 });
 // #endregion
 
@@ -46,9 +47,8 @@ export const searchSuggestionsController = asyncHandler(async (req, res) => {
   // Get suggestions (service handles keyword validation)
   const result = await getSearchSuggestions(keyword, parseInt(limit) || 10);
 
-  res.status(200).json({
-    success: true,
-    data: result
-  });
+  res.status(200).json(
+    createResponse(true, 'Lấy gợi ý thành công', result)
+  );
 });
 // #endregion

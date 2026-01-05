@@ -26,9 +26,9 @@ const MIN_KEYWORD_LENGTH = 2;
  * @returns {Promise<Object>} Search results grouped by entity
  */
 export const globalSearch = async ({ keyword, entities = VALID_ENTITIES, limit = DEFAULT_LIMIT }) => {
-  // Fix #11: Validate keyword type
+  // Validate keyword type
   if (typeof keyword !== 'string') {
-    throw new ValidationError('Từ khóa tìm kiếm là bắt buộc');
+    throw new ValidationError('Từ khóa tìm kiếm phải là chuỗi ký tự');
   }
 
   // Sanitize keyword (prevent ReDoS)
@@ -118,9 +118,9 @@ export const globalSearch = async ({ keyword, entities = VALID_ENTITIES, limit =
  * @returns {Promise<Object>} Suggestions array
  */
 export const getSearchSuggestions = async (keyword, limit = 10) => {
-  // Fix #7: Validate keyword type
+  // Validate keyword type
   if (typeof keyword !== 'string') {
-    throw new ValidationError('Từ khóa tìm kiếm là bắt buộc');
+    throw new ValidationError('Từ khóa tìm kiếm phải là chuỗi ký tự');
   }
 
   // Sanitize
