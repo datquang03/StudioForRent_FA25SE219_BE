@@ -61,9 +61,10 @@ router.get('/converted-custom-designs/:id', validateObjectId(), getConvertedCust
 // Get Set Design by ID
 router.get('/:id', validateObjectId(), getSetDesignByIdController);
 
-// Custom design request - Protected route (authentication required)
+// Custom design request - Protected route (authentication required - Customer only)
 router.post('/custom-request', 
   protect, 
+  authorize(USER_ROLES.CUSTOMER),
   aiLimiter, 
   upload.array('referenceImages', 5, ALLOWED_FILE_TYPES.IMAGES, FILE_SIZE_LIMITS.SET_DESIGN_IMAGE),
   createCustomDesignRequestController
