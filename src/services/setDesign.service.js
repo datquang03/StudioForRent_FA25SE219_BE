@@ -1202,7 +1202,7 @@ export const createCustomDesignRequest = async (requestData) => {
 
     // Validate required fields (these are now provided from authenticated user session)
     if (!customerName || !email || !phoneNumber || !description) {
-      throw new ValidationError('Thông tin người dùng không đầy đủ. Vui lòng đảm bảo hồ sơ của bạn có đầy đủ tên, email và số điện thoại');
+      throw new ValidationError('Thông tin yêu cầu không đầy đủ. Vui lòng cung cấp đầy đủ tên, email, số điện thoại và mô tả yêu cầu.');
     }
 
     // Note: Email and phone validation are handled at controller level and user profile level
