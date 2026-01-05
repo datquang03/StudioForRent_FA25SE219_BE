@@ -12,24 +12,14 @@ import { ValidationError } from '../utils/errors.js';
 export const globalSearchController = asyncHandler(async (req, res) => {
   const { keyword, entities, limit } = req.body;
 
-  // Validate keyword
-  if (!keyword || typeof keyword !== 'string') {
-    throw new ValidationError('Từ khóa tìm kiếm là bắt buộc');
-  }
-
-  const trimmedKeyword = keyword.trim();
-  if (trimmedKeyword.length < 2) {
-    throw new ValidationError('Từ khóa tìm kiếm phải có ít nhất 2 ký tự');
-  }
-
-  // Validate entities if provided
+  // Validate entities if provided (keyword validation moved to service layer)
   if (entities && !Array.isArray(entities)) {
     throw new ValidationError('Entities phải là một mảng');
   }
 
-  // Execute search
+  // Execute search (service handles keyword validation)
   const result = await globalSearch({
-    keyword: trimmedKeyword,
+    keyword,
     entities,
     limit
   });
@@ -53,18 +43,8 @@ export const globalSearchController = asyncHandler(async (req, res) => {
 export const searchSuggestionsController = asyncHandler(async (req, res) => {
   const { keyword, limit } = req.query;
 
-  // Validate keyword
-  if (!keyword || typeof keyword !== 'string') {
-    throw new ValidationError('Từ khóa tìm kiếm là bắt buộc');
-  }
-
-  const trimmedKeyword = keyword.trim();
-  if (trimmedKeyword.length < 1) {
-    throw new ValidationError('Từ khóa tìm kiếm không được để trống');
-  }
-
-  // Get suggestions
-  const result = await getSearchSuggestions(trimmedKeyword, parseInt(limit) || 10);
+  // Get suggestions (service handles keyword validation)
+  const result = await getSearchSuggestions(keyword, parseInt(limit) || 10);
 
   res.status(200).json({
     success: true,

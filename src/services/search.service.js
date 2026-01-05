@@ -6,12 +6,14 @@ import Promotion from '../models/Promotion/promotion.model.js';
 import SetDesign from '../models/SetDesign/setDesign.model.js';
 import { escapeRegex } from '../utils/helpers.js';
 import { STUDIO_STATUS, EQUIPMENT_STATUS, SERVICE_STATUS } from '../utils/constants.js';
+import { ValidationError } from '../utils/errors.js';
 // #endregion
 
 // #region Constants
 const VALID_ENTITIES = ['studios', 'equipment', 'services', 'promotions', 'setDesigns'];
 const DEFAULT_LIMIT = 5;
 const MAX_LIMIT = 20;
+const MIN_KEYWORD_LENGTH = 2;
 // #endregion
 
 // #region Global Search
@@ -24,9 +26,21 @@ const MAX_LIMIT = 20;
  * @returns {Promise<Object>} Search results grouped by entity
  */
 export const globalSearch = async ({ keyword, entities = VALID_ENTITIES, limit = DEFAULT_LIMIT }) => {
+  // Fix #11: Validate keyword type
+  if (typeof keyword !== 'string') {
+    throw new ValidationError('Từ khóa tìm kiếm là bắt buộc');
+  }
+
   // Sanitize keyword (prevent ReDoS)
-  const safeKeyword = keyword && keyword.length > 100 ? keyword.substring(0, 100) : keyword;
-  const escapedKeyword = escapeRegex(safeKeyword.trim());
+  const safeKeyword = keyword.length > 100 ? keyword.substring(0, 100) : keyword;
+  const trimmedKeyword = safeKeyword.trim();
+
+  // Fix #4: Check empty string after trim
+  if (trimmedKeyword.length < MIN_KEYWORD_LENGTH) {
+    throw new ValidationError('Từ khóa tìm kiếm phải có ít nhất 2 ký tự');
+  }
+
+  const escapedKeyword = escapeRegex(trimmedKeyword);
   
   // Sanitize limit
   const safeLimit = Math.min(Math.max(parseInt(limit) || DEFAULT_LIMIT, 1), MAX_LIMIT);
@@ -91,7 +105,7 @@ export const globalSearch = async ({ keyword, entities = VALID_ENTITIES, limit =
     results: response,
     totalResults,
     searchedEntities: validEntities,
-    keyword: safeKeyword
+    keyword: trimmedKeyword
   };
 };
 // #endregion
@@ -104,12 +118,25 @@ export const globalSearch = async ({ keyword, entities = VALID_ENTITIES, limit =
  * @returns {Promise<Object>} Suggestions array
  */
 export const getSearchSuggestions = async (keyword, limit = 10) => {
+  // Fix #7: Validate keyword type
+  if (typeof keyword !== 'string') {
+    throw new ValidationError('Từ khóa tìm kiếm là bắt buộc');
+  }
+
   // Sanitize
-  const safeKeyword = keyword && keyword.length > 50 ? keyword.substring(0, 50) : keyword;
-  const escapedKeyword = escapeRegex(safeKeyword.trim());
+  const safeKeyword = keyword.length > 50 ? keyword.substring(0, 50) : keyword;
+  const trimmedKeyword = safeKeyword.trim();
+
+  // Check empty string after trim
+  if (trimmedKeyword.length < 1) {
+    throw new ValidationError('Từ khóa tìm kiếm không được để trống');
+  }
+
+  const escapedKeyword = escapeRegex(trimmedKeyword);
   const safeLimit = Math.min(Math.max(parseInt(limit) || 10, 1), 20);
   
   // Search in parallel across main entities
+  // Fix #2: Unify equipment filter with globalSearch
   const [studios, equipment, services, setDesigns] = await Promise.all([
     Studio.find({
       status: STUDIO_STATUS.ACTIVE,
@@ -120,7 +147,7 @@ export const getSearchSuggestions = async (keyword, limit = 10) => {
       .lean(),
     Equipment.find({
       isDeleted: false,
-      status: EQUIPMENT_STATUS.AVAILABLE,
+      status: { $ne: EQUIPMENT_STATUS.MAINTENANCE },
       name: { $regex: escapedKeyword, $options: 'i' }
     })
       .select('name')
@@ -151,7 +178,7 @@ export const getSearchSuggestions = async (keyword, limit = 10) => {
   ];
 
   // Sort by relevance (exact match first, then starts with, then contains)
-  const lowerKeyword = safeKeyword.toLowerCase();
+  const lowerKeyword = trimmedKeyword.toLowerCase();
   suggestions.sort((a, b) => {
     const aLower = a.text.toLowerCase();
     const bLower = b.text.toLowerCase();
@@ -168,9 +195,12 @@ export const getSearchSuggestions = async (keyword, limit = 10) => {
     return aLower.localeCompare(bLower);
   });
 
+  // Fix #3: Calculate total before slice
+  const totalSuggestions = suggestions.length;
+
   return {
     suggestions: suggestions.slice(0, safeLimit),
-    total: suggestions.length
+    total: totalSuggestions
   };
 };
 // #endregion
@@ -197,9 +227,10 @@ const searchStudios = async (escapedKeyword, limit) => {
  * Search equipment
  */
 const searchEquipment = async (escapedKeyword, limit) => {
+  // Fix #6: Use EQUIPMENT_STATUS constant instead of hardcoded string
   return Equipment.find({
     isDeleted: false,
-    status: { $ne: 'maintenance' },
+    status: { $ne: EQUIPMENT_STATUS.MAINTENANCE },
     $or: [
       { name: { $regex: escapedKeyword, $options: 'i' } },
       { description: { $regex: escapedKeyword, $options: 'i' } }
