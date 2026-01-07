@@ -279,17 +279,31 @@ export const handlePaymentWebhook = async (webhookPayload) => {
   session.startTransaction();
 
   try {
-    // Validate webhook payload
-    if (!webhookPayload) {
-      throw new ValidationError('Dữ liệu webhook không hợp lệ');
-    }
-
     // Accept either raw body or an object { body, headers }
     const incoming = webhookPayload && webhookPayload.body ? webhookPayload : { body: webhookPayload, headers: {} };
     const body = incoming.body || {};
     const headers = incoming.headers || {};
 
     logger.info('Processing PayOS webhook', { body, headers: Object.keys(headers) });
+
+    // Handle PayOS test/verification webhook (sent when configuring webhook URL)
+    // PayOS sends test requests with empty body, code "00" without orderCode, or specific test patterns
+    const isTestWebhook = !body || Object.keys(body).length === 0 ||
+      (body.code === '00' && !body.orderCode && !body.data?.orderCode) ||
+      body.desc === 'success' && !body.orderCode ||
+      body.success === true && Object.keys(body).length === 1;
+    
+    if (isTestWebhook) {
+      await session.commitTransaction();
+      session.endSession();
+      logger.info('PayOS test/verification webhook received - responding with success');
+      return { success: true, message: 'Webhook endpoint verified' };
+    }
+
+    // Validate webhook payload for real transactions
+    if (!webhookPayload) {
+      throw new ValidationError('Dữ liệu webhook không hợp lệ');
+    }
 
     // Verify webhook signature using PayOS SDK if available, otherwise fallback
     let verifiedData;
