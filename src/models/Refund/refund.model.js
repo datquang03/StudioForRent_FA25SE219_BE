@@ -1,15 +1,19 @@
 import mongoose from 'mongoose';
 
 const refundSchema = new mongoose.Schema({
-  // Reference to Payment
-  paymentId: {
+  bookingId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Payment',
+    ref: 'Booking',
     required: true,
     index: true
   },
 
-  // Refund details
+  paymentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Payment',
+    index: true
+  },
+
   amount: {
     type: Number,
     required: true,
@@ -21,19 +25,19 @@ const refundSchema = new mongoose.Schema({
     trim: true
   },
 
-  // Status workflow
+  // Status workflow: PENDING_APPROVAL → PENDING → PROCESSING → COMPLETED
+  //                        ↓                ↓           ↓
+  //                    REJECTED          FAILED      FAILED
   status: {
     type: String,
-    enum: ['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED'],
-    default: 'PENDING',
+    enum: ['PENDING_APPROVAL', 'PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', 'REJECTED'],
+    default: 'PENDING_APPROVAL',
     index: true
   },
 
-  // Audit trail
   requestedAt: {
     type: Date,
     default: Date.now
-    // Removed index: true to avoid duplicate with schema.index()
   },
   requestedBy: {
     type: mongoose.Schema.Types.ObjectId,
@@ -41,24 +45,40 @@ const refundSchema = new mongoose.Schema({
     required: true
   },
 
-  // PayOS integration
-  payosRefundId: String,
-  payosResponse: mongoose.Schema.Types.Mixed,
+  destinationBank: {
+    bin: String,
+    accountNumber: String,
+    accountName: String
+  },
 
-  // Processing results
+  payoutId: String,
+  payoutReferenceId: String,
+  payoutState: {
+    type: String,
+    enum: ['PENDING', 'PROCESSING', 'SUCCESS', 'FAILED'],
+    default: 'PENDING'
+  },
+  payoutResponse: mongoose.Schema.Types.Mixed,
+
   processedAt: Date,
   processedBy: mongoose.Schema.Types.ObjectId,
-  failureReason: String
+  failureReason: String,
+
+  approvedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  approvedAt: Date,
+  rejectionReason: String
 }, {
   timestamps: true
 });
 
 // Indexes for performance
-// Ensure only one active refund (PENDING/PROCESSING) exists per payment.
-// Use a partial unique index to allow multiple historical COMPLETED/FAILED refunds.
+// Ensure only one active refund (PENDING_APPROVAL/PENDING/PROCESSING) exists per booking.
 refundSchema.index(
-  { paymentId: 1, status: 1 },
-  { unique: true, partialFilterExpression: { status: { $in: ['PENDING', 'PROCESSING'] } } }
+  { bookingId: 1, status: 1 },
+  { unique: true, partialFilterExpression: { status: { $in: ['PENDING_APPROVAL', 'PENDING', 'PROCESSING'] } } }
 );
 refundSchema.index({ status: 1, requestedAt: -1 });
 refundSchema.index({ requestedAt: 1 });
