@@ -405,12 +405,19 @@ export const handlePaymentWebhook = async (webhookPayload) => {
     const code = verifiedData.code; // "00" = success
     const desc = verifiedData.desc;
 
+    console.log('=== Processing payment after signature verification ===');
+    console.log('orderCode:', orderCode);
+    console.log('amount:', amount);
+    console.log('code:', code, 'desc:', desc);
+
     // Idempotency: try to claim a short-lived key in Redis to avoid duplicate webhook processing
     const idempotencyKey = `payos:webhook:${orderCode}`;
     let claimed = null;
     try {
       claimed = await claimIdempotencyKey(idempotencyKey, 30);
+      console.log('Idempotency claim result:', claimed);
     } catch (err) {
+      console.log('claimIdempotencyKey error, continuing:', err?.message);
       logger.warn('claimIdempotencyKey threw, continuing without redis claim', { error: err?.message || err });
       claimed = null;
     }
@@ -418,10 +425,12 @@ export const handlePaymentWebhook = async (webhookPayload) => {
     if (claimed === false) {
       // Another worker already processed this webhook recently
       await session.commitTransaction();
+      console.log('Duplicate webhook skipped by redis key for orderCode:', orderCode);
       logger.info(`Duplicate webhook skipped by redis key for orderCode=${orderCode}`);
       return { success: true, message: 'Duplicate webhook skipped' };
     }
 
+    console.log('Webhook verified, finding payment with transactionId:', orderCode.toString());
     logger.info('Webhook verified', { orderCode, code, desc });
 
     // Find payment by transaction ID (orderCode)
@@ -429,8 +438,15 @@ export const handlePaymentWebhook = async (webhookPayload) => {
       transactionId: orderCode.toString() 
     }).session(session);
 
+    console.log('Payment found:', !!payment);
+    if (payment) {
+      console.log('Payment ID:', payment._id);
+      console.log('Payment current status:', payment.status);
+    }
+
     if (!payment) {
       await session.commitTransaction();
+      console.log('Payment NOT FOUND for orderCode:', orderCode);
       logger.warn(`Payment not found for orderCode: ${orderCode}`);
       throw new NotFoundError('Không tìm thấy giao dịch thanh toán');
     }
@@ -438,12 +454,14 @@ export const handlePaymentWebhook = async (webhookPayload) => {
     // Check if already processed to prevent duplicate processing
     if (payment.status === PAYMENT_STATUS.PAID) {
       await session.commitTransaction();
+      console.log('Payment already processed:', payment._id);
       logger.info(`Payment already processed: ${payment._id}`);
       return { success: true, message: 'Payment already processed' };
     }
 
     // Update payment based on status
     const isPaid = code === '00'; // PayOS success code
+    console.log('isPaid:', isPaid);
 
     if (isPaid) {
       payment.status = PAYMENT_STATUS.PAID;
