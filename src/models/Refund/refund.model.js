@@ -1,15 +1,19 @@
 import mongoose from 'mongoose';
 
 const refundSchema = new mongoose.Schema({
-  // Reference to Payment
-  paymentId: {
+  bookingId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Payment',
+    ref: 'Booking',
     required: true,
     index: true
   },
 
-  // Refund details
+  paymentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Payment',
+    index: true
+  },
+
   amount: {
     type: Number,
     required: true,
@@ -21,19 +25,20 @@ const refundSchema = new mongoose.Schema({
     trim: true
   },
 
-  // Status workflow
+  // Status workflow (Manual Refund):
+  // PENDING_APPROVAL → APPROVED → COMPLETED
+  //         ↓
+  //     REJECTED
   status: {
     type: String,
-    enum: ['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED'],
-    default: 'PENDING',
+    enum: ['PENDING_APPROVAL', 'APPROVED', 'COMPLETED', 'REJECTED'],
+    default: 'PENDING_APPROVAL',
     index: true
   },
 
-  // Audit trail
   requestedAt: {
     type: Date,
     default: Date.now
-    // Removed index: true to avoid duplicate with schema.index()
   },
   requestedBy: {
     type: mongoose.Schema.Types.ObjectId,
@@ -41,24 +46,41 @@ const refundSchema = new mongoose.Schema({
     required: true
   },
 
-  // PayOS integration
-  payosRefundId: String,
-  payosResponse: mongoose.Schema.Types.Mixed,
+  destinationBank: {
+    bankName: String,       // Tên ngân hàng (VD: "Vietcombank", "MB Bank")
+    accountNumber: String,  // Số tài khoản
+    accountName: String     // Tên chủ tài khoản
+  },
 
-  // Processing results
+  // Manual transfer details (filled when staff confirms transfer)
+  transferDetails: {
+    transactionRef: String,  // Mã giao dịch ngân hàng
+    note: String,            // Ghi chú của staff
+    confirmedAt: Date        // Thời điểm xác nhận
+  },
+
   processedAt: Date,
-  processedBy: mongoose.Schema.Types.ObjectId,
-  failureReason: String
+  processedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  failureReason: String,
+
+  approvedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  approvedAt: Date,
+  rejectionReason: String
 }, {
   timestamps: true
 });
 
 // Indexes for performance
-// Ensure only one active refund (PENDING/PROCESSING) exists per payment.
-// Use a partial unique index to allow multiple historical COMPLETED/FAILED refunds.
+// Ensure only one active refund (PENDING_APPROVAL/APPROVED) exists per booking.
 refundSchema.index(
-  { paymentId: 1, status: 1 },
-  { unique: true, partialFilterExpression: { status: { $in: ['PENDING', 'PROCESSING'] } } }
+  { bookingId: 1, status: 1 },
+  { unique: true, partialFilterExpression: { status: { $in: ['PENDING_APPROVAL', 'APPROVED'] } } }
 );
 refundSchema.index({ status: 1, requestedAt: -1 });
 refundSchema.index({ requestedAt: 1 });
@@ -70,12 +92,6 @@ refundSchema.virtual('processingDuration').get(function() {
   }
   return null;
 });
-
-// Instance method to check if refund can be retried
-refundSchema.methods.canRetry = function() {
-  return this.status === 'FAILED' &&
-         (!this.processedAt || Date.now() - this.processedAt > 24 * 60 * 60 * 1000); // 24h cooldown
-};
 
 // Static method to get refund statistics
 refundSchema.statics.getStats = async function(startDate, endDate) {

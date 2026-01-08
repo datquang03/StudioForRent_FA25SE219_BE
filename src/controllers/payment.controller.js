@@ -293,18 +293,27 @@ export const getStaffPaymentHistoryController = async (req, res) => {
 };
 
 /**
- * Create refund request
+ * @deprecated This endpoint is deprecated. Use POST /api/bookings/:id/refund-request instead.
  * POST /api/payments/:paymentId/refund
+ * Body: { bankName, accountNumber, accountName } (NEW), old params will throw error
  */
 export const createRefundController = async (req, res) => {
   try {
     const { paymentId } = req.params;
-    const { amount, reason } = req.body;
+    const { amount, reason, bankCode, accountNumber } = req.body;
     const actorId = req.user._id;
 
     // Validate paymentId
     if (!paymentId || !isValidObjectId(paymentId)) {
       throw new ValidationError('ID thanh toán không hợp lệ');
+    }
+
+    // Validate bank info (required for manual bank transfer)
+    if (!bankCode || typeof bankCode !== 'string' || bankCode.trim().length === 0) {
+      throw new ValidationError('Mã ngân hàng (bankCode) là bắt buộc');
+    }
+    if (!accountNumber || typeof accountNumber !== 'string' || accountNumber.trim().length === 0) {
+      throw new ValidationError('Số tài khoản (accountNumber) là bắt buộc');
     }
 
     // Validate amount if provided
@@ -326,7 +335,13 @@ export const createRefundController = async (req, res) => {
 
     // Import refund service function
     const { createRefund } = await import('../services/refund.service.js');
-    const refund = await createRefund(paymentId, { amount, reason, actorId });
+    const refund = await createRefund(paymentId, { 
+      amount, 
+      reason, 
+      actorId,
+      bankCode: bankCode.trim(),
+      accountNumber: accountNumber.trim()
+    });
 
     res.status(201).json({
       success: true,
