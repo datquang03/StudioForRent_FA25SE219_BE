@@ -357,13 +357,16 @@ export const handlePaymentWebhook = async (webhookPayload) => {
         }
         
         // PayOS signature format: sorted key=value pairs joined by &
-        // Example: amount=10000&code=00&desc=success&orderCode=123456
-        // Handle nested objects by converting to JSON string
+        // Per PayOS docs: if value is null/undefined, use empty string
+        // Do NOT filter out null values
         const dataToSign = Object.keys(body.data)
           .sort()
-          .filter(key => body.data[key] !== undefined && body.data[key] !== null)
           .map(key => {
             const value = body.data[key];
+            // Per PayOS docs: null/undefined becomes empty string
+            if (value === null || value === undefined) {
+              return `${key}=`;
+            }
             // Serialize objects/arrays to JSON for consistent signing
             const serializedValue = typeof value === 'object' 
               ? JSON.stringify(value) 
