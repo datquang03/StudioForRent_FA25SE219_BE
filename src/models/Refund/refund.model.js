@@ -25,12 +25,13 @@ const refundSchema = new mongoose.Schema({
     trim: true
   },
 
-  // Status workflow: PENDING_APPROVAL → PENDING → PROCESSING → COMPLETED
-  //                        ↓                ↓           ↓
-  //                    REJECTED          FAILED      FAILED
+  // Status workflow (Manual Refund):
+  // PENDING_APPROVAL → APPROVED → COMPLETED
+  //         ↓
+  //     REJECTED
   status: {
     type: String,
-    enum: ['PENDING_APPROVAL', 'PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', 'REJECTED'],
+    enum: ['PENDING_APPROVAL', 'APPROVED', 'COMPLETED', 'REJECTED'],
     default: 'PENDING_APPROVAL',
     index: true
   },
@@ -46,22 +47,23 @@ const refundSchema = new mongoose.Schema({
   },
 
   destinationBank: {
-    bin: String,
-    accountNumber: String,
-    accountName: String
+    bankName: String,       // Tên ngân hàng (VD: "Vietcombank", "MB Bank")
+    accountNumber: String,  // Số tài khoản
+    accountName: String     // Tên chủ tài khoản
   },
 
-  payoutId: String,
-  payoutReferenceId: String,
-  payoutState: {
-    type: String,
-    enum: ['PENDING', 'PROCESSING', 'SUCCESS', 'FAILED'],
-    default: 'PENDING'
+  // Manual transfer details (filled when staff confirms transfer)
+  transferDetails: {
+    transactionRef: String,  // Mã giao dịch ngân hàng
+    note: String,            // Ghi chú của staff
+    confirmedAt: Date        // Thời điểm xác nhận
   },
-  payoutResponse: mongoose.Schema.Types.Mixed,
 
   processedAt: Date,
-  processedBy: mongoose.Schema.Types.ObjectId,
+  processedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
   failureReason: String,
 
   approvedBy: {
@@ -75,10 +77,10 @@ const refundSchema = new mongoose.Schema({
 });
 
 // Indexes for performance
-// Ensure only one active refund (PENDING_APPROVAL/PENDING/PROCESSING) exists per booking.
+// Ensure only one active refund (PENDING_APPROVAL/APPROVED) exists per booking.
 refundSchema.index(
   { bookingId: 1, status: 1 },
-  { unique: true, partialFilterExpression: { status: { $in: ['PENDING_APPROVAL', 'PENDING', 'PROCESSING'] } } }
+  { unique: true, partialFilterExpression: { status: { $in: ['PENDING_APPROVAL', 'APPROVED'] } } }
 );
 refundSchema.index({ status: 1, requestedAt: -1 });
 refundSchema.index({ requestedAt: 1 });
@@ -90,12 +92,6 @@ refundSchema.virtual('processingDuration').get(function() {
   }
   return null;
 });
-
-// Instance method to check if refund can be retried
-refundSchema.methods.canRetry = function() {
-  return this.status === 'FAILED' &&
-         (!this.processedAt || Date.now() - this.processedAt > 24 * 60 * 60 * 1000); // 24h cooldown
-};
 
 // Static method to get refund statistics
 refundSchema.statics.getStats = async function(startDate, endDate) {

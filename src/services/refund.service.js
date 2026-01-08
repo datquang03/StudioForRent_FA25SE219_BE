@@ -55,50 +55,6 @@ export const calculateRefundAmount = async (bookingId) => {
   return { totalPaid, refundPercentage, refundAmount };
 };
 
-/**
- * Call PayOS Payout API to transfer money to customer bank account
- */
-const callPayOSPayoutAPI = async ({ amount, bankCode, accountNumber, description, referenceId }) => {
-  const PAYOS_API_BASE = 'https://api.payos.vn/v2';
-  
-  const headers = {
-    'Content-Type': 'application/json',
-    'x-client-id': process.env.PAYOS_CLIENT_ID,
-    'x-api-key': process.env.PAYOS_API_KEY
-  };
-
-  const body = {
-    referenceId: referenceId,
-    amount: amount,
-    description: description.substring(0, 25),
-    toBin: bankCode,
-    toAccountNumber: accountNumber,
-    category: ['refund']
-  };
-
-  logger.info('Calling PayOS Payout API', { referenceId, amount, bankCode });
-
-  const response = await fetch(`${PAYOS_API_BASE}/payouts`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body)
-  });
-
-  const result = await response.json();
-
-  if (result.code !== '00' || !response.ok) {
-    logger.error('PayOS Payout API failed', { result });
-    throw new Error(result.desc || result.message || 'PayOS Payout failed');
-  }
-
-  logger.info('PayOS Payout API success', { 
-    payoutId: result.data?.id,
-    state: result.data?.approvalState 
-  });
-
-  return result.data;
-};
-
 // #endregion
 
 // #region Customer Functions
@@ -107,17 +63,18 @@ const callPayOSPayoutAPI = async ({ amount, bankCode, accountNumber, description
  * Create refund request for a booking (Customer action)
  * @param {string} bookingId - Booking ID to refund
  * @param {object} opts - Options object
- * @param {string} opts.bankCode - Bank BIN code - REQUIRED
+ * @param {string} opts.bankName - Bank name (e.g., "Vietcombank", "MB Bank") - REQUIRED
  * @param {string} opts.accountNumber - Customer bank account number - REQUIRED
+ * @param {string} opts.accountName - Account holder name - REQUIRED
  * @param {string} opts.userId - ID of customer creating request
  * @returns {object} Refund information
  */
 export const createRefundRequest = async (bookingId, opts = {}) => {
-  const { bankCode, accountNumber, userId } = opts;
+  const { bankName, accountNumber, accountName, userId } = opts;
 
   // Validate bank info
-  if (!bankCode || !accountNumber) {
-    throw new ValidationError('Thông tin ngân hàng (bankCode và accountNumber) là bắt buộc');
+  if (!bankName || !accountNumber || !accountName) {
+    throw new ValidationError('Thông tin ngân hàng (bankName, accountNumber, accountName) là bắt buộc');
   }
 
   // Validate booking
@@ -134,7 +91,7 @@ export const createRefundRequest = async (bookingId, opts = {}) => {
   // Check if refund already exists
   const existingRefund = await Refund.findOne({ 
     bookingId, 
-    status: { $in: ['PENDING_APPROVAL', 'PENDING', 'PROCESSING'] } 
+    status: { $in: ['PENDING_APPROVAL', 'PENDING', 'PROCESSING', 'APPROVED'] } 
   });
   if (existingRefund) {
     throw new ValidationError('Yêu cầu hoàn tiền đã tồn tại cho booking này');
@@ -159,10 +116,10 @@ export const createRefundRequest = async (bookingId, opts = {}) => {
       requestedBy: userId,
       status: 'PENDING_APPROVAL',
       destinationBank: {
-        bin: bankCode,
-        accountNumber: accountNumber
-      },
-      payoutState: 'PENDING'
+        bankName: bankName,
+        accountNumber: accountNumber,
+        accountName: accountName
+      }
     }], { session });
 
     await session.commitTransaction();
@@ -219,6 +176,7 @@ export const getPendingRefunds = async (page = 1, limit = 20) => {
 
 /**
  * Approve a refund request (Staff/Admin action)
+ * Changes status to APPROVED - Staff will then manually transfer money
  * @param {string} refundId - Refund ID to approve
  * @param {string} staffId - Staff user ID
  */
@@ -233,20 +191,33 @@ export const approveRefund = async (refundId, staffId) => {
   }
 
   // Validate bank info exists
-  if (!refund.destinationBank?.bin || !refund.destinationBank?.accountNumber) {
+  if (!refund.destinationBank?.bankName || !refund.destinationBank?.accountNumber) {
     throw new ValidationError('Thiếu thông tin ngân hàng');
   }
 
-  // Update status and start processing
-  refund.status = 'PENDING';
+  // Update status to APPROVED - waiting for manual transfer
+  refund.status = 'APPROVED';
   refund.approvedBy = staffId;
   refund.approvedAt = new Date();
   await refund.save();
 
-  // Start async payout processing
-  processPayOSRefund(refundId).catch(error => {
-    logger.error('Failed to process PayOS refund:', error);
-  });
+  // Send notification to customer about approval
+  try {
+    const booking = await Booking.findById(refund.bookingId);
+    if (booking?.userId) {
+      await createAndSendNotification(
+        booking.userId,
+        NOTIFICATION_TYPE.SUCCESS,
+        'Yêu cầu hoàn tiền đã được duyệt',
+        `Yêu cầu hoàn tiền ${refund.amount.toLocaleString()} VND đã được phê duyệt. Tiền sẽ được chuyển trong vòng 24-48 giờ.`,
+        false,
+        null,
+        refund._id
+      );
+    }
+  } catch (notifErr) {
+    logger.error('Failed to send approval notification:', notifErr);
+  }
 
   logger.info('Refund approved', { refundId, staffId });
 
@@ -304,91 +275,91 @@ export const rejectRefund = async (refundId, staffId, reason) => {
 
 // #endregion
 
-// #region Payout Processing
+// #region Manual Refund Processing
 
 /**
- * Process refund with PayOS Payout API
+ * Get all approved refunds waiting for manual transfer (Staff/Admin)
  */
-export const processPayOSRefund = async (refundId) => {
-  const refundCheck = await Refund.findById(refundId).populate('bookingId');
-  if (!refundCheck) {
-    throw new NotFoundError('Refund not found');
-  }
-  if (refundCheck.status !== 'PENDING') {
-    logger.info(`Refund ${refundId} not in PENDING status: ${refundCheck.status}`);
-    return;
+export const getApprovedRefunds = async (page = 1, limit = 20) => {
+  const skip = (page - 1) * limit;
+  
+  const [refunds, total] = await Promise.all([
+    Refund.find({ status: 'APPROVED' })
+      .populate('bookingId', 'finalAmount scheduleId userId')
+      .populate('requestedBy', 'fullName username email phone')
+      .populate('approvedBy', 'fullName username')
+      .sort({ approvedAt: -1 })
+      .skip(skip)
+      .limit(limit),
+    Refund.countDocuments({ status: 'APPROVED' })
+  ]);
+
+  return {
+    refunds,
+    total,
+    page,
+    pages: Math.ceil(total / limit)
+  };
+};
+
+/**
+ * Confirm manual refund transfer completed (Staff/Admin action)
+ * Staff calls this after manually transferring money to customer
+ * @param {string} refundId - Refund ID to confirm
+ * @param {string} staffId - Staff user ID
+ * @param {object} opts - Optional transfer details
+ * @param {string} opts.transactionRef - Bank transaction reference (optional)
+ * @param {string} opts.note - Additional note (optional)
+ */
+export const confirmManualRefund = async (refundId, staffId, opts = {}) => {
+  const { transactionRef, note } = opts;
+  
+  const refund = await Refund.findById(refundId);
+  if (!refund) {
+    throw new NotFoundError('Yêu cầu hoàn tiền không tồn tại');
   }
 
-  // Validate bank info
-  if (!refundCheck.destinationBank?.bin || !refundCheck.destinationBank?.accountNumber) {
-    await Refund.findByIdAndUpdate(refundId, {
-      status: 'FAILED',
-      payoutState: 'FAILED',
-      failureReason: 'Thiếu thông tin ngân hàng',
-      processedAt: new Date()
-    });
-    throw new ValidationError('Refund missing bank info');
+  if (refund.status !== 'APPROVED') {
+    throw new ValidationError(`Không thể xác nhận yêu cầu ở trạng thái ${refund.status}. Chỉ có thể xác nhận yêu cầu đã được duyệt.`);
   }
 
-  // Mark as PROCESSING
-  const session = await mongoose.startSession();
-  session.startTransaction();
+  // Update to COMPLETED
+  refund.status = 'COMPLETED';
+  refund.processedBy = staffId;
+  refund.processedAt = new Date();
+  
+  // Store transfer details if provided
+  if (transactionRef || note) {
+    refund.transferDetails = {
+      transactionRef: transactionRef || null,
+      note: note || null,
+      confirmedAt: new Date()
+    };
+  }
+  
+  await refund.save();
+
+  // Send success notification to customer
   try {
-    const refund = await Refund.findById(refundId).session(session);
-    if (!refund || refund.status !== 'PENDING') {
-      await session.commitTransaction();
-      return;
+    const booking = await Booking.findById(refund.bookingId);
+    if (booking?.userId) {
+      await createAndSendNotification(
+        booking.userId,
+        NOTIFICATION_TYPE.SUCCESS,
+        'Hoàn tiền thành công',
+        `Tiền hoàn ${refund.amount.toLocaleString()} VND đã được chuyển vào tài khoản ${refund.destinationBank.accountNumber} - ${refund.destinationBank.bankName}.`,
+        false,
+        null,
+        refund._id
+      );
     }
-
-    const payoutReferenceId = `refund_${refundId}_${Date.now()}`;
-    refund.status = 'PROCESSING';
-    refund.payoutState = 'PROCESSING';
-    refund.payoutReferenceId = payoutReferenceId;
-    await refund.save({ session });
-    await session.commitTransaction();
-
-    // Call PayOS Payout API
-    try {
-      const payoutResult = await callPayOSPayoutAPI({
-        amount: refund.amount,
-        bankCode: refund.destinationBank.bin,
-        accountNumber: refund.destinationBank.accountNumber,
-        description: 'Hoan tien booking',
-        referenceId: payoutReferenceId
-      });
-
-      await Refund.findByIdAndUpdate(refundId, {
-        status: 'COMPLETED',
-        payoutId: payoutResult.id,
-        payoutState: 'SUCCESS',
-        payoutResponse: payoutResult,
-        'destinationBank.accountName': payoutResult.transactions?.[0]?.toAccountName || null,
-        processedAt: new Date()
-      });
-
-      // Send success notification
-      await sendRefundNotification(refund, 'completed');
-
-    } catch (payoutError) {
-      logger.error('PayOS Payout failed:', { refundId, error: payoutError.message });
-
-      await Refund.findByIdAndUpdate(refundId, {
-        status: 'FAILED',
-        payoutState: 'FAILED',
-        failureReason: payoutError.message || 'PayOS Payout failed',
-        processedAt: new Date()
-      });
-
-      await sendRefundNotification(refund, 'failed');
-    }
-
-  } catch (error) {
-    await session.abortTransaction();
-    logger.error('Process refund failed:', error);
-    throw error;
-  } finally {
-    session.endSession();
+  } catch (notifErr) {
+    logger.error('Failed to send completion notification:', notifErr);
   }
+
+  logger.info('Manual refund confirmed', { refundId, staffId, transactionRef });
+
+  return refund;
 };
 
 // #endregion
@@ -421,6 +392,37 @@ export const getRefundsForBooking = async (bookingId) => {
  */
 export const getRefundStats = async (startDate, endDate) => {
   return await Refund.getStats(startDate, endDate);
+};
+
+/**
+ * Get all refund requests for a customer (by userId)
+ * @param {string} userId - Customer user ID
+ * @param {number} page - Page number (1-indexed)
+ * @param {number} limit - Items per page
+ * @returns {object} { refunds, total, page, pages }
+ */
+export const getMyRefunds = async (userId, page = 1, limit = 20) => {
+  const skip = (page - 1) * limit;
+  
+  // Find all bookings for this user
+  const userBookings = await Booking.find({ userId }).select('_id');
+  const bookingIds = userBookings.map(b => b._id);
+
+  const [refunds, total] = await Promise.all([
+    Refund.find({ bookingId: { $in: bookingIds } })
+      .populate('bookingId', 'finalAmount scheduleId status')
+      .sort({ requestedAt: -1 })
+      .skip(skip)
+      .limit(limit),
+    Refund.countDocuments({ bookingId: { $in: bookingIds } })
+  ]);
+
+  return {
+    refunds,
+    total,
+    page,
+    pages: Math.ceil(total / limit)
+  };
 };
 
 /**

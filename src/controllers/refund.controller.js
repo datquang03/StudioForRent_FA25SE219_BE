@@ -7,35 +7,42 @@ import {
   approveRefund,
   rejectRefund,
   getPendingRefunds,
+  getApprovedRefunds,
+  confirmManualRefund,
   getRefundById,
   getRefundsForBooking,
-  retryRefund
+  getMyRefunds
 } from '../services/refund.service.js';
 
 /**
  * Create refund request for a booking (Customer)
- * POST /api/bookings/:bookingId/refund-request
+ * POST /api/bookings/:id/refund-request
  */
 export const createRefundRequestController = asyncHandler(async (req, res) => {
-  const { bookingId } = req.params;
-  const { bankCode, accountNumber } = req.body;
+  const { id: bookingId } = req.params;
+  const { bankName, accountNumber, accountName } = req.body;
   const userId = req.user._id;
 
   if (!bookingId || !isValidObjectId(bookingId)) {
     throw new ValidationError('Booking ID không hợp lệ');
   }
 
-  if (!bankCode || typeof bankCode !== 'string' || bankCode.trim().length === 0) {
-    throw new ValidationError('Mã ngân hàng (bankCode) là bắt buộc');
+  if (!bankName || typeof bankName !== 'string' || bankName.trim().length === 0) {
+    throw new ValidationError('Tên ngân hàng (bankName) là bắt buộc');
   }
 
   if (!accountNumber || typeof accountNumber !== 'string' || accountNumber.trim().length === 0) {
     throw new ValidationError('Số tài khoản (accountNumber) là bắt buộc');
   }
 
+  if (!accountName || typeof accountName !== 'string' || accountName.trim().length === 0) {
+    throw new ValidationError('Tên chủ tài khoản (accountName) là bắt buộc');
+  }
+
   const refund = await createRefundRequest(bookingId, {
-    bankCode: bankCode.trim(),
+    bankName: bankName.trim(),
     accountNumber: accountNumber.trim(),
+    accountName: accountName.trim(),
     userId
   });
 
@@ -152,22 +159,56 @@ export const getRefundsForBookingController = asyncHandler(async (req, res) => {
 });
 
 /**
- * Retry failed refund (Staff/Admin)
- * POST /api/refunds/:refundId/retry
+ * Get my refund requests (Customer)
+ * GET /api/refunds/my-requests
  */
-export const retryRefundController = asyncHandler(async (req, res) => {
+export const getMyRefundsController = asyncHandler(async (req, res) => {
+  const userId = req.user._id;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 20;
+
+  const result = await getMyRefunds(userId, page, limit);
+
+  res.status(200).json({
+    success: true,
+    data: result
+  });
+});
+
+/**
+ * Get all approved refunds waiting for manual transfer (Staff/Admin)
+ * GET /api/refunds/approved
+ */
+export const getApprovedRefundsController = asyncHandler(async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 20;
+
+  const result = await getApprovedRefunds(page, limit);
+
+  res.status(200).json({
+    success: true,
+    data: result
+  });
+});
+
+/**
+ * Confirm manual refund transfer completed (Staff/Admin)
+ * POST /api/refunds/:refundId/confirm
+ */
+export const confirmManualRefundController = asyncHandler(async (req, res) => {
   const { refundId } = req.params;
-  const actorId = req.user._id;
+  const { transactionRef, note } = req.body;
+  const staffId = req.user._id;
 
   if (!refundId || !isValidObjectId(refundId)) {
     throw new ValidationError('Refund ID không hợp lệ');
   }
 
-  const refund = await retryRefund(refundId, actorId);
+  const refund = await confirmManualRefund(refundId, staffId, { transactionRef, note });
 
   res.status(200).json({
     success: true,
-    message: 'Đang thử lại hoàn tiền',
+    message: 'Đã xác nhận hoàn tiền thành công',
     data: refund
   });
 });

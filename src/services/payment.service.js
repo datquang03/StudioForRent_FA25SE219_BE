@@ -284,14 +284,24 @@ export const handlePaymentWebhook = async (webhookPayload) => {
     const body = incoming.body || {};
     const headers = incoming.headers || {};
 
-    logger.info('Processing PayOS webhook', { body, headers: Object.keys(headers) });
+    // Enhanced debug logging
+    logger.info('=== PayOS Webhook Received ===');
+    logger.info('Webhook body:', JSON.stringify(body, null, 2));
+    logger.info('Webhook headers:', JSON.stringify(Object.keys(headers), null, 2));
+    logger.info('Body keys:', Object.keys(body));
+    logger.info('Has orderCode:', !!body.orderCode);
+    logger.info('Has data.orderCode:', !!body.data?.orderCode);
+    logger.info('Body code:', body.code);
 
     // Handle PayOS test/verification webhook (sent when configuring webhook URL)
     // PayOS sends test requests with empty body, code "00" without orderCode, or specific test patterns
+    const hasOrderCode = body.orderCode || body.data?.orderCode;
     const isTestWebhook = !body || Object.keys(body).length === 0 ||
-      (body.code === '00' && !body.orderCode && !body.data?.orderCode) ||
-      body.desc === 'success' && !body.orderCode ||
-      body.success === true && Object.keys(body).length === 1;
+      (body.code === '00' && !hasOrderCode) ||
+      (body.desc === 'success' && !hasOrderCode) ||
+      (body.success === true && Object.keys(body).length === 1);
+    
+    logger.info('Is test webhook:', isTestWebhook, 'hasOrderCode:', hasOrderCode);
     
     if (isTestWebhook) {
       await session.commitTransaction();
@@ -308,32 +318,63 @@ export const handlePaymentWebhook = async (webhookPayload) => {
     // Verify webhook signature using PayOS SDK if available, otherwise fallback
     let verifiedData;
     try {
-      if (payos && payos.webhooks && typeof payos.webhooks.verify === 'function') {
-        verifiedData = await payos.webhooks.verify(body);
-      } else if (payos && typeof payos.verifyPaymentWebhookData === 'function') {
-        verifiedData = payos.verifyPaymentWebhookData(body);
+      logger.info('=== Signature Verification ===');
+      logger.info('payos object exists:', !!payos);
+      logger.info('payos.verifyPaymentWebhookData exists:', !!(payos && typeof payos.verifyPaymentWebhookData === 'function'));
+      
+      // PayOS SDK v2.x has verifyPaymentWebhookData method
+      if (payos && typeof payos.verifyPaymentWebhookData === 'function') {
+        logger.info('Using payos.verifyPaymentWebhookData method (SDK v2)');
+        try {
+          verifiedData = payos.verifyPaymentWebhookData(body);
+          logger.info('SDK verification successful');
+        } catch (sdkError) {
+          logger.error('SDK verification failed:', sdkError.message);
+          throw sdkError;
+        }
       } else {
-        // Fallback simple verification using checksum key (HMAC-SHA256)
-        const headerSig = headers['x-payos-signature'] || headers['x-payos-sign'] || null;
-        const signature = headerSig || body.signature || body.sign || body.data?.signature;
+        logger.info('Using fallback HMAC signature verification');
+        // Fallback: PayOS webhook format is { code, desc, data, signature }
+        // Signature is HMAC-SHA256 of sorted key=value pairs from data object
         const checksumKey = process.env.PAYOS_CHECKSUM_KEY;
+        const signature = body.signature;
+        
+        logger.info('Body signature:', signature);
+        logger.info('Checksum key exists:', !!checksumKey);
+        logger.info('Body data exists:', !!body.data);
+        
         if (!checksumKey) {
           throw new ValidationError('Missing PAYOS_CHECKSUM_KEY for webhook verification');
         }
-        const dataToSign = `${body.code || ''}${body.desc || ''}`;
+        
+        if (!body.data) {
+          throw new ValidationError('Webhook missing data field');
+        }
+        
+        // PayOS signature format: sorted key=value pairs joined by &
+        // Example: amount=10000&code=00&desc=success&orderCode=123456
+        const dataToSign = Object.keys(body.data)
+          .sort()
+          .filter(key => body.data[key] !== undefined && body.data[key] !== null)
+          .map(key => `${key}=${body.data[key]}`)
+          .join('&');
+        
         const computedSignature = crypto.createHmac('sha256', checksumKey).update(dataToSign).digest('hex');
-        logger.info('Webhook signature debug', { providedSignature: signature, computedSignature });
+        logger.info('Webhook signature debug', { 
+          providedSignature: signature?.substring(0, 16) + '...', 
+          computedSignature: computedSignature.substring(0, 16) + '...',
+          dataToSignPreview: dataToSign.substring(0, 100) + '...'
+        });
+        
         if (!signature || computedSignature.toLowerCase() !== signature.toString().toLowerCase()) {
+          logger.error('Signature mismatch! Expected:', computedSignature, 'Got:', signature);
           throw new ValidationError('Invalid webhook signature');
         }
-        // Use data field as verified payload
-        verifiedData = body.data || {
-          orderCode: body.orderCode,
-          amount: body.amount,
-          code: body.code,
-          desc: body.desc
-        };
+        
+        logger.info('Signature verified successfully (fallback method)');
+        verifiedData = body.data;
       }
+      logger.info('Verified data:', JSON.stringify(verifiedData, null, 2));
     } catch (verifyError) {
       logger.error('Webhook verification failed:', verifyError);
       throw new ValidationError('Invalid webhook signature: ' + (verifyError.message || 'verification failed'));

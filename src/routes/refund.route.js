@@ -6,12 +6,25 @@ import {
   approveRefundController,
   rejectRefundController,
   getPendingRefundsController,
+  getApprovedRefundsController,
+  confirmManualRefundController,
   getRefundDetailController,
   getRefundsForBookingController,
-  retryRefundController
+  getMyRefundsController
 } from '../controllers/refund.controller.js';
 
 const router = express.Router();
+
+/**
+ * @route   GET /api/refunds/my-requests
+ * @desc    Get my refund requests (Customer)
+ * @access  Customer (authenticated)
+ */
+router.get(
+  '/my-requests',
+  protect,
+  getMyRefundsController
+);
 
 /**
  * @route   GET /api/refunds/pending
@@ -23,6 +36,18 @@ router.get(
   protect,
   authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN),
   getPendingRefundsController
+);
+
+/**
+ * @route   GET /api/refunds/approved
+ * @desc    Get all approved refunds waiting for manual transfer (Staff/Admin only)
+ * @access  Staff, Admin
+ */
+router.get(
+  '/approved',
+  protect,
+  authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN),
+  getApprovedRefundsController
 );
 
 /**
@@ -61,15 +86,15 @@ router.post(
 );
 
 /**
- * @route   POST /api/refunds/:refundId/retry
- * @desc    Retry a failed refund (Staff/Admin only)
+ * @route   POST /api/refunds/:refundId/confirm
+ * @desc    Confirm manual refund transfer completed (Staff/Admin only)
  * @access  Staff, Admin
  */
 router.post(
-  '/:refundId/retry',
+  '/:refundId/confirm',
   protect,
   authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN),
-  retryRefundController
+  confirmManualRefundController
 );
 
 export default router;
