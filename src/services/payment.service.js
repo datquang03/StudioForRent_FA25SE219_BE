@@ -473,19 +473,27 @@ export const handlePaymentWebhook = async (webhookPayload) => {
         completedAt: new Date()
       };
       await payment.save({ session });
+      console.log('Payment status updated to PAID');
 
       logger.info(`Payment completed: ${payment._id}`);
 
       // Update booking status
+      console.log('Finding booking with ID:', payment.bookingId);
       const booking = await Booking.findById(payment.bookingId).session(session);
+      console.log('Booking found:', !!booking);
       
       if (!booking) {
+        console.error('Booking NOT FOUND for payment:', payment._id);
         logger.error(`Booking not found for payment: ${payment._id}`);
         await session.abortTransaction();
         throw new NotFoundError('Không tìm thấy booking cho giao dịch này');
       }
       
       if (booking) {
+        console.log('Booking ID:', booking._id);
+        console.log('Booking current status:', booking.status);
+        console.log('Booking finalAmount:', booking.finalAmount);
+        
         // Calculate total paid amount using find for accuracy
         const paidPayments = await Payment.find({
           bookingId: booking._id,
@@ -494,6 +502,9 @@ export const handlePaymentWebhook = async (webhookPayload) => {
 
         const totalPaid = paidPayments.reduce((sum, payment) => sum + payment.amount, 0);
         const paymentPercentage = (totalPaid / booking.finalAmount) * 100;
+
+        console.log('Total paid:', totalPaid);
+        console.log('Payment percentage:', paymentPercentage.toFixed(2) + '%');
 
         logger.info(`Booking ${booking._id} payment progress: ${paymentPercentage.toFixed(2)}%`, {
           totalPaid,
@@ -505,19 +516,24 @@ export const handlePaymentWebhook = async (webhookPayload) => {
         if (paymentPercentage >= 100) {
           booking.status = BOOKING_STATUS.CONFIRMED;
           booking.payType = PAY_TYPE.FULL;
+          console.log('Setting booking to CONFIRMED with FULL payment');
         } else if (paymentPercentage >= 50) {
           booking.status = BOOKING_STATUS.CONFIRMED;
           booking.payType = PAY_TYPE.PREPAY_50;
+          console.log('Setting booking to CONFIRMED with PREPAY_50');
         } else if (paymentPercentage >= 30) {
           booking.status = BOOKING_STATUS.CONFIRMED;
           booking.payType = PAY_TYPE.PREPAY_30;
+          console.log('Setting booking to CONFIRMED with PREPAY_30');
         }
 
         await booking.save({ session });
+        console.log('Booking saved successfully with status:', booking.status);
         logger.info(`Booking ${booking._id} updated to ${booking.status}`);
       }
 
       await session.commitTransaction();
+      console.log('=== Transaction committed successfully ===');
       return { success: true, message: 'Payment processed successfully' };
 
     } else {
