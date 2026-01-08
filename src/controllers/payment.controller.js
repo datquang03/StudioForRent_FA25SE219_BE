@@ -293,9 +293,9 @@ export const getStaffPaymentHistoryController = async (req, res) => {
 };
 
 /**
- * Create refund request
+ * @deprecated This endpoint is deprecated. Use POST /api/bookings/:id/refund-request instead.
  * POST /api/payments/:paymentId/refund
- * Body: { amount?, reason?, bankCode, accountNumber }
+ * Body: { bankName, accountNumber, accountName } (NEW), old params will throw error
  */
 export const createRefundController = async (req, res) => {
   try {
@@ -308,7 +308,7 @@ export const createRefundController = async (req, res) => {
       throw new ValidationError('ID thanh toán không hợp lệ');
     }
 
-    // Validate bank info (required for PayOS Payout)
+    // Validate bank info (required for manual bank transfer)
     if (!bankCode || typeof bankCode !== 'string' || bankCode.trim().length === 0) {
       throw new ValidationError('Mã ngân hàng (bankCode) là bắt buộc');
     }

@@ -353,10 +353,18 @@ export const handlePaymentWebhook = async (webhookPayload) => {
         
         // PayOS signature format: sorted key=value pairs joined by &
         // Example: amount=10000&code=00&desc=success&orderCode=123456
+        // Handle nested objects by converting to JSON string
         const dataToSign = Object.keys(body.data)
           .sort()
           .filter(key => body.data[key] !== undefined && body.data[key] !== null)
-          .map(key => `${key}=${body.data[key]}`)
+          .map(key => {
+            const value = body.data[key];
+            // Serialize objects/arrays to JSON for consistent signing
+            const serializedValue = typeof value === 'object' 
+              ? JSON.stringify(value) 
+              : String(value);
+            return `${key}=${serializedValue}`;
+          })
           .join('&');
         
         const computedSignature = crypto.createHmac('sha256', checksumKey).update(dataToSign).digest('hex');
@@ -367,7 +375,11 @@ export const handlePaymentWebhook = async (webhookPayload) => {
         });
         
         if (!signature || computedSignature.toLowerCase() !== signature.toString().toLowerCase()) {
-          logger.error('Signature mismatch! Expected:', computedSignature, 'Got:', signature);
+          // Security: Don't log full signatures, only truncate
+          logger.error('Signature mismatch!', {
+            expected: computedSignature.substring(0, 16) + '...',
+            received: signature?.substring(0, 16) + '...'
+          });
           throw new ValidationError('Invalid webhook signature');
         }
         

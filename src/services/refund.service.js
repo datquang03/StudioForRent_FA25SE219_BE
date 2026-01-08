@@ -425,28 +425,6 @@ export const getMyRefunds = async (userId, page = 1, limit = 20) => {
   };
 };
 
-/**
- * Retry failed refund
- */
-export const retryRefund = async (refundId, actorId) => {
-  const refund = await Refund.findById(refundId);
-  if (!refund) {
-    throw new NotFoundError('Refund not found');
-  }
-  if (!refund.canRetry()) {
-    throw new ValidationError('Refund cannot be retried at this time');
-  }
-
-  refund.status = 'PENDING';
-  refund.payoutState = 'PENDING';
-  refund.failureReason = null;
-  await refund.save();
-
-  await processPayOSRefund(refundId);
-
-  return refund;
-};
-
 // #endregion
 
 // #region Notifications
@@ -492,13 +470,14 @@ const sendRefundNotification = async (refund, type) => {
 // #region Legacy Functions
 
 /**
- * @deprecated Use createRefundRequest instead
+ * @deprecated This function is deprecated and will throw an error.
+ * Use POST /api/bookings/:id/refund-request with body: { bankName, accountNumber, accountName }
  */
 export const createRefund = async (paymentId, opts = {}) => {
-  logger.warn('createRefund is deprecated, use createRefundRequest instead');
-  const payment = await Payment.findById(paymentId);
-  if (!payment) throw new NotFoundError('Payment not found');
-  return createRefundRequest(payment.bookingId, opts);
+  logger.error('createRefund is deprecated. Use createRefundRequest via POST /api/bookings/:id/refund-request');
+  throw new ValidationError(
+    'API deprecated. Use POST /api/bookings/:id/refund-request with bankName, accountNumber, accountName'
+  );
 };
 
 // #endregion

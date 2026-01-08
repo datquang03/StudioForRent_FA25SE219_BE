@@ -1,7 +1,6 @@
 import asyncHandler from 'express-async-handler';
 import { isValidObjectId } from 'mongoose';
 import { ValidationError } from '../utils/errors.js';
-import logger from '../utils/logger.js';
 import {
   createRefundRequest,
   approveRefund,
@@ -119,6 +118,7 @@ export const rejectRefundController = asyncHandler(async (req, res) => {
 /**
  * Get refund details
  * GET /api/refunds/:refundId
+ * Customers can only view their own refunds, Staff/Admin can view all
  */
 export const getRefundDetailController = asyncHandler(async (req, res) => {
   const { refundId } = req.params;
@@ -131,6 +131,15 @@ export const getRefundDetailController = asyncHandler(async (req, res) => {
 
   if (!refund) {
     throw new ValidationError('Không tìm thấy yêu cầu hoàn tiền');
+  }
+
+  // Security check: customers can only view their own refunds
+  const userRole = req.user.role;
+  const userId = req.user._id.toString();
+  const refundRequestedBy = refund.requestedBy?._id?.toString() || refund.requestedBy?.toString();
+
+  if (userRole === 'customer' && refundRequestedBy !== userId) {
+    throw new ValidationError('Bạn không có quyền xem yêu cầu hoàn tiền này');
   }
 
   res.status(200).json({
