@@ -318,30 +318,35 @@ export const handlePaymentWebhook = async (webhookPayload) => {
     // Verify webhook signature using PayOS SDK if available, otherwise fallback
     let verifiedData;
     try {
-      logger.info('=== Signature Verification ===');
-      logger.info('payos object exists:', !!payos);
-      logger.info('payos.verifyPaymentWebhookData exists:', !!(payos && typeof payos.verifyPaymentWebhookData === 'function'));
+      console.log('=== PayOS Webhook Signature Verification ===');
+      console.log('payos object exists:', !!payos);
+      console.log('payos.verifyPaymentWebhookData exists:', !!(payos && typeof payos.verifyPaymentWebhookData === 'function'));
+      console.log('Webhook body keys:', Object.keys(body));
+      console.log('body.code:', body.code);
+      console.log('body.signature exists:', !!body.signature);
+      console.log('body.data exists:', !!body.data);
       
       // PayOS SDK v2.x has verifyPaymentWebhookData method
       if (payos && typeof payos.verifyPaymentWebhookData === 'function') {
-        logger.info('Using payos.verifyPaymentWebhookData method (SDK v2)');
+        console.log('Using payos.verifyPaymentWebhookData method (SDK v2)');
         try {
           verifiedData = payos.verifyPaymentWebhookData(body);
-          logger.info('SDK verification successful');
+          console.log('SDK verification successful');
         } catch (sdkError) {
+          console.error('SDK verification failed:', sdkError.message);
           logger.error('SDK verification failed:', sdkError.message);
           throw sdkError;
         }
       } else {
-        logger.info('Using fallback HMAC signature verification');
+        console.log('Using fallback HMAC signature verification');
         // Fallback: PayOS webhook format is { code, desc, data, signature }
         // Signature is HMAC-SHA256 of sorted key=value pairs from data object
         const checksumKey = process.env.PAYOS_CHECKSUM_KEY;
         const signature = body.signature;
         
-        logger.info('Body signature:', signature);
-        logger.info('Checksum key exists:', !!checksumKey);
-        logger.info('Body data exists:', !!body.data);
+        console.log('Checksum key length:', checksumKey?.length);
+        console.log('Signature from webhook:', signature?.substring(0, 20) + '...');
+        console.log('body.data:', JSON.stringify(body.data, null, 2));
         
         if (!checksumKey) {
           throw new ValidationError('Missing PAYOS_CHECKSUM_KEY for webhook verification');
@@ -367,27 +372,27 @@ export const handlePaymentWebhook = async (webhookPayload) => {
           })
           .join('&');
         
+        console.log('Data to sign:', dataToSign);
+        
         const computedSignature = crypto.createHmac('sha256', checksumKey).update(dataToSign).digest('hex');
-        logger.info('Webhook signature debug', { 
-          providedSignature: signature?.substring(0, 16) + '...', 
-          computedSignature: computedSignature.substring(0, 16) + '...',
-          dataToSignPreview: dataToSign.substring(0, 100) + '...'
-        });
+        console.log('Computed signature:', computedSignature.substring(0, 20) + '...');
+        console.log('Provided signature:', signature?.substring(0, 20) + '...');
+        console.log('Signatures match:', computedSignature.toLowerCase() === signature?.toString().toLowerCase());
         
         if (!signature || computedSignature.toLowerCase() !== signature.toString().toLowerCase()) {
-          // Security: Don't log full signatures, only truncate
-          logger.error('Signature mismatch!', {
-            expected: computedSignature.substring(0, 16) + '...',
-            received: signature?.substring(0, 16) + '...'
-          });
+          // Security: Log for debugging but truncate
+          const errorDetail = `Expected: ${computedSignature.substring(0, 16)}..., Got: ${signature?.substring(0, 16)}...`;
+          console.error('Signature mismatch!', errorDetail);
+          logger.error('Signature mismatch! ' + errorDetail);
           throw new ValidationError('Invalid webhook signature');
         }
         
-        logger.info('Signature verified successfully (fallback method)');
+        console.log('Signature verified successfully (fallback method)');
         verifiedData = body.data;
       }
-      logger.info('Verified data:', JSON.stringify(verifiedData, null, 2));
+      console.log('Verified data:', JSON.stringify(verifiedData, null, 2));
     } catch (verifyError) {
+      console.error('Webhook verification failed:', verifyError.message);
       logger.error('Webhook verification failed:', verifyError);
       throw new ValidationError('Invalid webhook signature: ' + (verifyError.message || 'verification failed'));
     }
