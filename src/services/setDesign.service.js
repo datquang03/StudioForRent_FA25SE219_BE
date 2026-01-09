@@ -1219,6 +1219,25 @@ export const createCustomDesignRequest = async (requestData) => {
       throw new ValidationError(`Danh mục không hợp lệ. Chọn từ: ${SET_DESIGN_CATEGORIES.join(', ')}`);
     }
 
+    // Validate reference images array
+    if (referenceImages && !Array.isArray(referenceImages)) {
+      throw new ValidationError('Hình ảnh tham khảo phải là một mảng');
+    }
+
+    // Validate max 5 reference images
+    if (referenceImages && referenceImages.length > 5) {
+      throw new ValidationError('Tối đa 5 ảnh tham khảo');
+    }
+
+    // Validate each reference image object structure
+    if (referenceImages && referenceImages.length > 0) {
+      for (const img of referenceImages) {
+        if (!img.url) {
+          throw new ValidationError('Mỗi ảnh tham khảo phải có URL');
+        }
+      }
+    }
+
     logger.info(`Creating custom design request for ${email}`);
 
     // Create the request with pending status
@@ -1543,6 +1562,17 @@ export const updateCustomDesignRequest = async (id, updateData, user) => {
         }
         request.referenceImages = updateData.referenceImages;
       }
+      // Handle new reference images from file uploads (for staff)
+      // Default behavior: Replace all existing images with new ones
+      if (updateData.newReferenceImages !== undefined) {
+        // Validate max 5 new images
+        if (updateData.newReferenceImages.length > 5) {
+          throw new ValidationError('Tối đa 5 ảnh tham khảo');
+        }
+        
+        // Replace all existing images with new ones
+        request.referenceImages = updateData.newReferenceImages;
+      }
       if (updateData.preferredCategory !== undefined) {
         if (updateData.preferredCategory && !SET_DESIGN_CATEGORIES.includes(updateData.preferredCategory)) {
           throw new ValidationError(`Danh mục không hợp lệ. Chọn từ: ${SET_DESIGN_CATEGORIES.join(', ')}`);
@@ -1633,16 +1663,30 @@ export const convertRequestToSetDesign = async (requestId, designData = {}, user
       throw new ValidationError('Giá phải là số không âm');
     }
 
+    // Collect all images from the request
+    const allImages = [];
+    
+    // Add generated images (array)
+    if (request.generatedImages && request.generatedImages.length > 0) {
+      allImages.push(...request.generatedImages.map(img => img.url || img));
+    }
+    
+    // Add reference images (array)
+    if (request.referenceImages && request.referenceImages.length > 0) {
+      allImages.push(...request.referenceImages.map(img => img.url || img));
+    }
+    
+    // Add any additional images from designData
+    if (designData.additionalImages && designData.additionalImages.length > 0) {
+      allImages.push(...designData.additionalImages);
+    }
+
     // Create SetDesign from request
     const setDesign = new SetDesign({
       name: designData.name || `Custom Design - ${request.customerName}`,
       description: request.description,
       price: request.estimatedPrice || designData.price || 0,
-      images: [
-        ...(request.generatedImage ? [request.generatedImage] : []),
-        ...request.referenceImages,
-        ...(designData.additionalImages || [])
-      ],
+      images: allImages,
       category: request.preferredCategory || 'other',
       tags: ['custom', ...(designData.tags || [])],
       isActive: designData.isActive !== undefined ? designData.isActive : true,

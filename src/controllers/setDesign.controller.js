@@ -222,25 +222,35 @@ export const createCustomDesignRequestController = asyncHandler(async (req, res)
     }
   }
 
-  // Handle uploaded reference images
+  // Handle uploaded reference images (multiple files)
   let referenceImages = [];
   if (req.files && req.files.length > 0) {
+    // Validate number of files (max 5)
+    if (req.files.length > 5) {
+      res.status(400);
+      throw new Error('Tối đa 5 ảnh tham khảo');
+    }
+
     // Upload images to Cloudinary
     const uploadedImages = await Promise.all(
       req.files.map(async (file) => {
-        const result = await uploadImage(file, {
-          folder: 'set-design-references'
-        });
-        
-        return {
-          url: result.url,
-          publicId: result.public_id,
-          filename: file.originalname,
-          format: result.format,
-          width: result.width,
-          height: result.height,
-          uploadedAt: new Date()
-        };
+        try {
+          const result = await uploadImage(file, {
+            folder: 'set-design-references'
+          });
+          
+          return {
+            url: result.url,
+            publicId: result.public_id,
+            filename: file.originalname,
+            format: result.format,
+            width: result.width,
+            height: result.height,
+            uploadedAt: new Date()
+          };
+        } catch (uploadError) {
+          throw new Error(`Lỗi khi tải ảnh ${file.originalname}: ${uploadError.message}`);
+        }
       })
     );
     
@@ -360,6 +370,41 @@ export const getCustomDesignRequestByIdController = asyncHandler(async (req, res
 export const updateCustomDesignRequestController = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const updateData = req.body;
+
+  // Handle uploaded reference images if staff is replacing them
+  if (req.files && req.files.length > 0) {
+    // Validate number of files (max 5)
+    if (req.files.length > 5) {
+      res.status(400);
+      throw new Error('Tối đa 5 ảnh tham khảo');
+    }
+
+    // Upload new images to Cloudinary
+    const uploadedImages = await Promise.all(
+      req.files.map(async (file) => {
+        try {
+          const result = await uploadImage(file, {
+            folder: 'set-design-references'
+          });
+          
+          return {
+            url: result.url,
+            publicId: result.public_id,
+            filename: file.originalname,
+            format: result.format,
+            width: result.width,
+            height: result.height,
+            uploadedAt: new Date()
+          };
+        } catch (uploadError) {
+          throw new Error(`Lỗi khi tải ảnh ${file.originalname}: ${uploadError.message}`);
+        }
+      })
+    );
+    
+    // Add new images to updateData
+    updateData.newReferenceImages = uploadedImages;
+  }
 
   const request = await updateCustomDesignRequest(id, updateData, req.user);
 
