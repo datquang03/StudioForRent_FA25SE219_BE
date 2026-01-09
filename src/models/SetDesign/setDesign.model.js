@@ -65,6 +65,26 @@ const setDesignSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+
+    // Track if this SetDesign was converted from a CustomDesignRequest
+    isConvertedFromCustomRequest: {
+      type: Boolean,
+      default: false,
+    },
+
+    // Reference to the original CustomDesignRequest (if converted)
+    sourceRequestId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'CustomDesignRequest',
+      default: null,
+    },
+
+    // Staff who created this SetDesign
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
   },
   {
     timestamps: true, // Automatically adds createdAt and updatedAt

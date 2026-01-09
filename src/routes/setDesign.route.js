@@ -24,6 +24,7 @@ import {
   getConvertedCustomDesignByIdController,
   updateConvertedCustomDesignController,
   deleteConvertedCustomDesignController,
+  getAllConvertedSetDesignsController,
 } from '../controllers/setDesign.controller.js';
 import { protect, optionalProtect } from '../middlewares/auth.js';
 import { authorize } from '../middlewares/auth.js';
@@ -44,7 +45,13 @@ router.use(generalLimiter);
 // Custom design requests management (Staff/Admin) - Moved here to avoid conflict with /:id
 router.get('/custom-requests', protect, authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), getCustomDesignRequestsController);
 router.get('/custom-requests/:id', protect, validateObjectId(), authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), getCustomDesignRequestByIdController);
-router.put('/custom-requests/:id', protect, validateObjectId(), authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), updateCustomDesignRequestController);
+router.put('/custom-requests/:id', 
+  protect, 
+  validateObjectId(), 
+  authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN),
+  upload.array('referenceImages', 5, ALLOWED_FILE_TYPES.IMAGES, FILE_SIZE_LIMITS.SET_DESIGN_IMAGE),
+  updateCustomDesignRequestController
+);
 router.patch('/custom-requests/:id/status', protect, validateObjectId(), authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), updateCustomDesignRequestStatusController);
 router.delete('/custom-requests/:id', protect, validateObjectId(), authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), deleteCustomDesignRequestController);
 
@@ -52,6 +59,7 @@ router.delete('/custom-requests/:id', protect, validateObjectId(), authorize(USE
 router.get('/active', getActiveSetDesignsController);
 router.get('/category/:category', getSetDesignsByCategoryController);
 router.get('/custom-request', protect, getCustomSetDesignController);
+router.get('/converted', protect, authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), getAllConvertedSetDesignsController);
 router.get('/', getSetDesignsController);
 
 // Converted custom designs - Public GET endpoints

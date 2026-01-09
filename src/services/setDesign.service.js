@@ -69,7 +69,16 @@ export const getSetDesigns = async (options = {}) => {
       sortOrder = 'desc'
     } = options;
 
-    const query = { isActive: true };
+    // Only get regular set designs (NOT converted from custom requests)
+    const query = { 
+      isActive: true,
+      $or: [
+        // Regular designs explicitly marked as not converted
+        { isConvertedFromCustomRequest: false },
+        // Legacy designs where the field is not set
+        { isConvertedFromCustomRequest: { $exists: false } }
+      ]
+    };
 
     // Add category filter
     if (category && category !== 'all') {
@@ -321,7 +330,19 @@ export const createSetDesign = async (designData, user) => {
       throw new ValidationError(`Danh mục không hợp lệ. Chọn từ: ${SET_DESIGN_CATEGORIES.join(', ')}`);
     }
 
-    const design = new SetDesign(designData);
+    // Create set design with all model fields
+    const design = new SetDesign({
+      name: designData.name,
+      description: designData.description,
+      price: designData.price || 0,
+      images: designData.images || [],
+      isActive: designData.isActive !== undefined ? designData.isActive : true,
+      category: designData.category || 'other',
+      tags: designData.tags || [],
+      isConvertedFromCustomRequest: false,
+      sourceRequestId: null,
+      createdBy: user._id,
+    });
     await design.save();
     logger.info(`New set design created: ${design.name} by user: ${user._id}`);
     return design;
@@ -1219,6 +1240,25 @@ export const createCustomDesignRequest = async (requestData) => {
       throw new ValidationError(`Danh mục không hợp lệ. Chọn từ: ${SET_DESIGN_CATEGORIES.join(', ')}`);
     }
 
+    // Validate reference images array
+    if (referenceImages && !Array.isArray(referenceImages)) {
+      throw new ValidationError('Hình ảnh tham khảo phải là một mảng');
+    }
+
+    // Validate max 5 reference images
+    if (referenceImages && referenceImages.length > 5) {
+      throw new ValidationError('Tối đa 5 ảnh tham khảo');
+    }
+
+    // Validate each reference image object structure
+    if (referenceImages && referenceImages.length > 0) {
+      for (const img of referenceImages) {
+        if (!img.url) {
+          throw new ValidationError('Mỗi ảnh tham khảo phải có URL');
+        }
+      }
+    }
+
     logger.info(`Creating custom design request for ${email}`);
 
     // Create the request with pending status
@@ -1498,6 +1538,12 @@ export const updateCustomDesignRequest = async (id, updateData, user) => {
         if (!Array.isArray(updateData.referenceImages) || updateData.referenceImages.length > 5) {
           throw new ValidationError('Hình ảnh tham khảo phải là mảng và không quá 5 ảnh');
         }
+        // Validate each reference image object structure
+        for (const img of updateData.referenceImages) {
+          if (!img.url) {
+            throw new ValidationError('Mỗi ảnh tham khảo phải có URL');
+          }
+        }
         request.referenceImages = updateData.referenceImages;
       }
       if (updateData.preferredCategory !== undefined) {
@@ -1541,7 +1587,30 @@ export const updateCustomDesignRequest = async (id, updateData, user) => {
         if (!Array.isArray(updateData.referenceImages) || updateData.referenceImages.length > 5) {
           throw new ValidationError('Hình ảnh tham khảo phải là mảng và không quá 5 ảnh');
         }
+        // Validate each reference image object structure
+        for (const img of updateData.referenceImages) {
+          if (!img.url) {
+            throw new ValidationError('Mỗi ảnh tham khảo phải có URL');
+          }
+        }
         request.referenceImages = updateData.referenceImages;
+      }
+      // Handle new reference images from file uploads (for staff)
+      // Default behavior: Replace all existing images with new ones
+      if (updateData.newReferenceImages !== undefined) {
+        // Validate max 5 new images
+        if (updateData.newReferenceImages.length > 5) {
+          throw new ValidationError('Tối đa 5 ảnh tham khảo');
+        }
+        // Validate each reference image object structure
+        for (const img of updateData.newReferenceImages) {
+          if (!img.url) {
+            throw new ValidationError('Mỗi ảnh tham khảo phải có URL');
+          }
+        }
+        
+        // Replace all existing images with new ones
+        request.referenceImages = updateData.newReferenceImages;
       }
       if (updateData.preferredCategory !== undefined) {
         if (updateData.preferredCategory && !SET_DESIGN_CATEGORIES.includes(updateData.preferredCategory)) {
@@ -1633,20 +1702,54 @@ export const convertRequestToSetDesign = async (requestId, designData = {}, user
       throw new ValidationError('Giá phải là số không âm');
     }
 
+    // Collect all images from the request
+    const allImages = [];
+    
+    // Add generated images (array)
+    if (request.generatedImages && request.generatedImages.length > 0) {
+    request.generatedImages.forEach((img) => {
+        if (typeof img === 'string') {
+          allImages.push(img);
+        } else if (img && typeof img.url === 'string') {
+          allImages.push(img.url);
+        }
+      });
+    }
+    
+    // Add reference images (array)
+    if (request.referenceImages && request.referenceImages.length > 0) {
+      request.referenceImages.forEach((img) => {
+        if (typeof img === 'string') {
+          allImages.push(img);
+        } else if (img && typeof img.url === 'string') {
+          allImages.push(img.url);
+        }
+      });
+    }
+    
+    // Add any additional images from designData
+    if (designData.additionalImages && designData.additionalImages.length > 0) {
+      designData.additionalImages.forEach((img) => {
+        if (typeof img === 'string') {
+          allImages.push(img);
+        } else if (img && typeof img.url === 'string') {
+          allImages.push(img.url);
+        }
+      });
+    }
+
     // Create SetDesign from request
     const setDesign = new SetDesign({
       name: designData.name || `Custom Design - ${request.customerName}`,
       description: request.description,
       price: request.estimatedPrice || designData.price || 0,
-      images: [
-        ...(request.generatedImage ? [request.generatedImage] : []),
-        ...request.referenceImages,
-        ...(designData.additionalImages || [])
-      ],
+      images: allImages,
       category: request.preferredCategory || 'other',
       tags: ['custom', ...(designData.tags || [])],
       isActive: designData.isActive !== undefined ? designData.isActive : true,
-      createdBy: user._id
+      createdBy: user._id,
+      isConvertedFromCustomRequest: true,
+      sourceRequestId: requestId
     });
     await setDesign.save();
     
@@ -1739,6 +1842,73 @@ export const getConvertedCustomDesigns = async (filters = {}) => {
       throw error;
     }
     logger.error('Error getting converted custom designs:', error);
+    throw new Error('Lỗi khi lấy danh sách set design đã chuyển đổi');
+  }
+};
+
+/**
+ * Get all converted SetDesigns (SetDesigns created from custom requests)
+ * This queries the SetDesign model directly using the isConvertedFromCustomRequest flag
+ * @param {Object} options - Query options
+ * @returns {{designs: Array, pagination: {page: number, limit: number, total: number, pages: number}}}
+ *          Paginated result of converted set designs
+ */
+export const getAllConvertedSetDesigns = async (options = {}) => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      category,
+      search,
+      sortBy = 'createdAt',
+      sortOrder = 'desc'
+    } = options;
+
+    // Only get converted set designs
+    const query = { 
+      isActive: true,
+      isConvertedFromCustomRequest: true
+    };
+
+    // Add category filter
+    if (category && category !== 'all') {
+      query.category = category;
+    }
+
+    // Add search filter
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const sortOptions = {};
+    sortOptions[sortBy] = sortOrder === 'desc' ? -1 : 1;
+
+    const skip = (page - 1) * limit;
+
+    const [designs, total] = await Promise.all([
+      SetDesign.find(query)
+        .populate('sourceRequestId', 'customerName')
+        .populate('createdBy', 'name')
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(limit),
+      SetDesign.countDocuments(query)
+    ]);
+
+    return {
+      designs,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    };
+  } catch (error) {
+    logger.error('Error getting all converted set designs:', error);
     throw new Error('Lỗi khi lấy danh sách set design đã chuyển đổi');
   }
 };
