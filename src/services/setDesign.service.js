@@ -72,7 +72,12 @@ export const getSetDesigns = async (options = {}) => {
     // Only get regular set designs (NOT converted from custom requests)
     const query = { 
       isActive: true,
-      isConvertedFromCustomRequest: { $ne: true }
+      $or: [
+        // Regular designs explicitly marked as not converted
+        { isConvertedFromCustomRequest: false },
+        // Legacy designs where the field is not set
+        { isConvertedFromCustomRequest: { $exists: false } }
+      ]
     };
 
     // Add category filter
@@ -1533,6 +1538,12 @@ export const updateCustomDesignRequest = async (id, updateData, user) => {
         if (!Array.isArray(updateData.referenceImages) || updateData.referenceImages.length > 5) {
           throw new ValidationError('Hình ảnh tham khảo phải là mảng và không quá 5 ảnh');
         }
+        // Validate each reference image object structure
+        for (const img of updateData.referenceImages) {
+          if (!img.url) {
+            throw new ValidationError('Mỗi ảnh tham khảo phải có URL');
+          }
+        }
         request.referenceImages = updateData.referenceImages;
       }
       if (updateData.preferredCategory !== undefined) {
@@ -1576,6 +1587,12 @@ export const updateCustomDesignRequest = async (id, updateData, user) => {
         if (!Array.isArray(updateData.referenceImages) || updateData.referenceImages.length > 5) {
           throw new ValidationError('Hình ảnh tham khảo phải là mảng và không quá 5 ảnh');
         }
+        // Validate each reference image object structure
+        for (const img of updateData.referenceImages) {
+          if (!img.url) {
+            throw new ValidationError('Mỗi ảnh tham khảo phải có URL');
+          }
+        }
         request.referenceImages = updateData.referenceImages;
       }
       // Handle new reference images from file uploads (for staff)
@@ -1584,6 +1601,12 @@ export const updateCustomDesignRequest = async (id, updateData, user) => {
         // Validate max 5 new images
         if (updateData.newReferenceImages.length > 5) {
           throw new ValidationError('Tối đa 5 ảnh tham khảo');
+        }
+        // Validate each reference image object structure
+        for (const img of updateData.newReferenceImages) {
+          if (!img.url) {
+            throw new ValidationError('Mỗi ảnh tham khảo phải có URL');
+          }
         }
         
         // Replace all existing images with new ones
@@ -1684,17 +1707,35 @@ export const convertRequestToSetDesign = async (requestId, designData = {}, user
     
     // Add generated images (array)
     if (request.generatedImages && request.generatedImages.length > 0) {
-      allImages.push(...request.generatedImages.map(img => img.url || img));
+    request.generatedImages.forEach((img) => {
+        if (typeof img === 'string') {
+          allImages.push(img);
+        } else if (img && typeof img.url === 'string') {
+          allImages.push(img.url);
+        }
+      });
     }
     
     // Add reference images (array)
     if (request.referenceImages && request.referenceImages.length > 0) {
-      allImages.push(...request.referenceImages.map(img => img.url || img));
+      request.referenceImages.forEach((img) => {
+        if (typeof img === 'string') {
+          allImages.push(img);
+        } else if (img && typeof img.url === 'string') {
+          allImages.push(img.url);
+        }
+      });
     }
     
     // Add any additional images from designData
     if (designData.additionalImages && designData.additionalImages.length > 0) {
-      allImages.push(...designData.additionalImages);
+      designData.additionalImages.forEach((img) => {
+        if (typeof img === 'string') {
+          allImages.push(img);
+        } else if (img && typeof img.url === 'string') {
+          allImages.push(img.url);
+        }
+      });
     }
 
     // Create SetDesign from request
@@ -1809,7 +1850,8 @@ export const getConvertedCustomDesigns = async (filters = {}) => {
  * Get all converted SetDesigns (SetDesigns created from custom requests)
  * This queries the SetDesign model directly using the isConvertedFromCustomRequest flag
  * @param {Object} options - Query options
- * @returns {Object} Paginated converted set designs
+ * @returns {{designs: Array, pagination: {page: number, limit: number, total: number, pages: number}}}
+ *          Paginated result of converted set designs
  */
 export const getAllConvertedSetDesigns = async (options = {}) => {
   try {
@@ -1848,8 +1890,8 @@ export const getAllConvertedSetDesigns = async (options = {}) => {
 
     const [designs, total] = await Promise.all([
       SetDesign.find(query)
-        .populate('sourceRequestId', 'customerName email phoneNumber')
-        .populate('createdBy', 'name email')
+        .populate('sourceRequestId', 'customerName')
+        .populate('createdBy', 'name')
         .sort(sortOptions)
         .skip(skip)
         .limit(limit),

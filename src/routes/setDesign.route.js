@@ -59,7 +59,7 @@ router.delete('/custom-requests/:id', protect, validateObjectId(), authorize(USE
 router.get('/active', getActiveSetDesignsController);
 router.get('/category/:category', getSetDesignsByCategoryController);
 router.get('/custom-request', protect, getCustomSetDesignController);
-router.get('/converted', getAllConvertedSetDesignsController);
+router.get('/converted', protect, authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), getAllConvertedSetDesignsController);
 router.get('/', getSetDesignsController);
 
 // Converted custom designs - Public GET endpoints

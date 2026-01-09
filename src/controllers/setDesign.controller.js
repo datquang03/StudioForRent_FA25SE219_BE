@@ -249,11 +249,7 @@ export const createCustomDesignRequestController = asyncHandler(async (req, res)
   // Handle uploaded reference images (multiple files)
   let referenceImages = [];
   if (req.files && req.files.length > 0) {
-    // Validate number of files (max 5)
-    if (req.files.length > 5) {
-      res.status(400);
-      throw new Error('Tối đa 5 ảnh tham khảo');
-    }
+    
 
     // Upload images to Cloudinary
     const uploadedImages = await Promise.all(
@@ -397,11 +393,7 @@ export const updateCustomDesignRequestController = asyncHandler(async (req, res)
 
   // Handle uploaded reference images if staff is replacing them
   if (req.files && req.files.length > 0) {
-    // Validate number of files (max 5)
-    if (req.files.length > 5) {
-      res.status(400);
-      throw new Error('Tối đa 5 ảnh tham khảo');
-    }
+    
 
     // Upload new images to Cloudinary
     const uploadedImages = await Promise.all(
@@ -427,7 +419,7 @@ export const updateCustomDesignRequestController = asyncHandler(async (req, res)
     );
     
     // Add new images to updateData
-    updateData.newReferenceImages = uploadedImages;
+    updateData.referenceImages = uploadedImages;
   }
 
   const request = await updateCustomDesignRequest(id, updateData, req.user);
