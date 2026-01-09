@@ -26,6 +26,7 @@ import {
   getConvertedCustomDesignById,
   updateConvertedCustomDesign,
   deleteConvertedCustomDesign,
+  getAllConvertedSetDesigns,
 } from '../services/setDesign.service.js';
 import { uploadMultipleImages } from '../services/upload.service.js';
 // #endregion
@@ -47,6 +48,29 @@ export const getSetDesignsController = asyncHandler(async (req, res) => {
   };
 
   const result = await getSetDesigns(options);
+
+  res.status(200).json({
+    success: true,
+    data: result.designs,
+    pagination: result.pagination
+  });
+});
+
+/**
+ * Get all converted set designs (from custom requests)
+ * GET /api/set-designs/converted
+ */
+export const getAllConvertedSetDesignsController = asyncHandler(async (req, res) => {
+  const options = {
+    page: parseInt(req.query.page) || 1,
+    limit: parseInt(req.query.limit) || 10,
+    category: req.query.category,
+    search: req.query.search,
+    sortBy: req.query.sortBy || 'createdAt',
+    sortOrder: req.query.sortOrder || 'desc'
+  };
+
+  const result = await getAllConvertedSetDesigns(options);
 
   res.status(200).json({
     success: true,

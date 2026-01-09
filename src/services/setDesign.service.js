@@ -69,7 +69,11 @@ export const getSetDesigns = async (options = {}) => {
       sortOrder = 'desc'
     } = options;
 
-    const query = { isActive: true };
+    // Only get regular set designs (NOT converted from custom requests)
+    const query = { 
+      isActive: true,
+      isConvertedFromCustomRequest: { $ne: true }
+    };
 
     // Add category filter
     if (category && category !== 'all') {
@@ -321,7 +325,19 @@ export const createSetDesign = async (designData, user) => {
       throw new ValidationError(`Danh mục không hợp lệ. Chọn từ: ${SET_DESIGN_CATEGORIES.join(', ')}`);
     }
 
-    const design = new SetDesign(designData);
+    // Create set design with all model fields
+    const design = new SetDesign({
+      name: designData.name,
+      description: designData.description,
+      price: designData.price || 0,
+      images: designData.images || [],
+      isActive: designData.isActive !== undefined ? designData.isActive : true,
+      category: designData.category || 'other',
+      tags: designData.tags || [],
+      isConvertedFromCustomRequest: false,
+      sourceRequestId: null,
+      createdBy: user._id,
+    });
     await design.save();
     logger.info(`New set design created: ${design.name} by user: ${user._id}`);
     return design;
@@ -1690,7 +1706,9 @@ export const convertRequestToSetDesign = async (requestId, designData = {}, user
       category: request.preferredCategory || 'other',
       tags: ['custom', ...(designData.tags || [])],
       isActive: designData.isActive !== undefined ? designData.isActive : true,
-      createdBy: user._id
+      createdBy: user._id,
+      isConvertedFromCustomRequest: true,
+      sourceRequestId: requestId
     });
     await setDesign.save();
     
@@ -1783,6 +1801,72 @@ export const getConvertedCustomDesigns = async (filters = {}) => {
       throw error;
     }
     logger.error('Error getting converted custom designs:', error);
+    throw new Error('Lỗi khi lấy danh sách set design đã chuyển đổi');
+  }
+};
+
+/**
+ * Get all converted SetDesigns (SetDesigns created from custom requests)
+ * This queries the SetDesign model directly using the isConvertedFromCustomRequest flag
+ * @param {Object} options - Query options
+ * @returns {Object} Paginated converted set designs
+ */
+export const getAllConvertedSetDesigns = async (options = {}) => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      category,
+      search,
+      sortBy = 'createdAt',
+      sortOrder = 'desc'
+    } = options;
+
+    // Only get converted set designs
+    const query = { 
+      isActive: true,
+      isConvertedFromCustomRequest: true
+    };
+
+    // Add category filter
+    if (category && category !== 'all') {
+      query.category = category;
+    }
+
+    // Add search filter
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const sortOptions = {};
+    sortOptions[sortBy] = sortOrder === 'desc' ? -1 : 1;
+
+    const skip = (page - 1) * limit;
+
+    const [designs, total] = await Promise.all([
+      SetDesign.find(query)
+        .populate('sourceRequestId', 'customerName email phoneNumber')
+        .populate('createdBy', 'name email')
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(limit),
+      SetDesign.countDocuments(query)
+    ]);
+
+    return {
+      designs,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    };
+  } catch (error) {
+    logger.error('Error getting all converted set designs:', error);
     throw new Error('Lỗi khi lấy danh sách set design đã chuyển đổi');
   }
 };

@@ -24,6 +24,7 @@ import {
   getConvertedCustomDesignByIdController,
   updateConvertedCustomDesignController,
   deleteConvertedCustomDesignController,
+  getAllConvertedSetDesignsController,
 } from '../controllers/setDesign.controller.js';
 import { protect, optionalProtect } from '../middlewares/auth.js';
 import { authorize } from '../middlewares/auth.js';
@@ -58,6 +59,7 @@ router.delete('/custom-requests/:id', protect, validateObjectId(), authorize(USE
 router.get('/active', getActiveSetDesignsController);
 router.get('/category/:category', getSetDesignsByCategoryController);
 router.get('/custom-request', protect, getCustomSetDesignController);
+router.get('/converted', getAllConvertedSetDesignsController);
 router.get('/', getSetDesignsController);
 
 // Converted custom designs - Public GET endpoints
