@@ -315,38 +315,20 @@ export const handlePaymentWebhook = async (webhookPayload) => {
       throw new ValidationError('Dữ liệu webhook không hợp lệ');
     }
 
-    // Verify webhook signature using PayOS SDK if available, otherwise fallback
+    // Verify webhook signature
     let verifiedData;
     try {
-      console.log('=== PayOS Webhook Signature Verification ===');
-      console.log('payos object exists:', !!payos);
-      console.log('payos.verifyPaymentWebhookData exists:', !!(payos && typeof payos.verifyPaymentWebhookData === 'function'));
-      console.log('Webhook body keys:', Object.keys(body));
-      console.log('body.code:', body.code);
-      console.log('body.signature exists:', !!body.signature);
-      console.log('body.data exists:', !!body.data);
-      
-      // PayOS SDK v2.x has verifyPaymentWebhookData method
       if (payos && typeof payos.verifyPaymentWebhookData === 'function') {
-        console.log('Using payos.verifyPaymentWebhookData method (SDK v2)');
         try {
           verifiedData = payos.verifyPaymentWebhookData(body);
-          console.log('SDK verification successful');
         } catch (sdkError) {
-          console.error('SDK verification failed:', sdkError.message);
           logger.error('SDK verification failed:', sdkError.message);
           throw sdkError;
         }
       } else {
-        console.log('Using fallback HMAC signature verification');
-        // Fallback: PayOS webhook format is { code, desc, data, signature }
-        // Signature is HMAC-SHA256 of sorted key=value pairs from data object
+        // Fallback HMAC verification
         const checksumKey = process.env.PAYOS_CHECKSUM_KEY;
         const signature = body.signature;
-        
-        console.log('Checksum key length:', checksumKey?.length);
-        console.log('Signature from webhook:', signature?.substring(0, 20) + '...');
-        console.log('body.data:', JSON.stringify(body.data, null, 2));
         
         if (!checksumKey) {
           throw new ValidationError('Missing PAYOS_CHECKSUM_KEY for webhook verification');
@@ -356,18 +338,14 @@ export const handlePaymentWebhook = async (webhookPayload) => {
           throw new ValidationError('Webhook missing data field');
         }
         
-        // PayOS signature format: sorted key=value pairs joined by &
-        // Per PayOS docs: if value is null/undefined, use empty string
-        // Do NOT filter out null values
+        // PayOS signature: sorted key=value pairs, null/undefined as empty string
         const dataToSign = Object.keys(body.data)
           .sort()
           .map(key => {
             const value = body.data[key];
-            // Per PayOS docs: null/undefined becomes empty string
             if (value === null || value === undefined) {
               return `${key}=`;
             }
-            // Serialize objects/arrays to JSON for consistent signing
             const serializedValue = typeof value === 'object' 
               ? JSON.stringify(value) 
               : String(value);
@@ -375,93 +353,64 @@ export const handlePaymentWebhook = async (webhookPayload) => {
           })
           .join('&');
         
-        console.log('Data to sign:', dataToSign);
-        
         const computedSignature = crypto.createHmac('sha256', checksumKey).update(dataToSign).digest('hex');
-        console.log('Computed signature:', computedSignature.substring(0, 20) + '...');
-        console.log('Provided signature:', signature?.substring(0, 20) + '...');
-        console.log('Signatures match:', computedSignature.toLowerCase() === signature?.toString().toLowerCase());
         
         if (!signature || computedSignature.toLowerCase() !== signature.toString().toLowerCase()) {
-          // Security: Log for debugging but truncate
-          const errorDetail = `Expected: ${computedSignature.substring(0, 16)}..., Got: ${signature?.substring(0, 16)}...`;
-          console.error('Signature mismatch!', errorDetail);
-          logger.error('Signature mismatch! ' + errorDetail);
+          logger.error('Signature mismatch!', {
+            expected: computedSignature.substring(0, 16) + '...',
+            received: signature?.substring(0, 16) + '...'
+          });
           throw new ValidationError('Invalid webhook signature');
         }
         
-        console.log('Signature verified successfully (fallback method)');
         verifiedData = body.data;
       }
-      console.log('Verified data:', JSON.stringify(verifiedData, null, 2));
     } catch (verifyError) {
-      console.error('Webhook verification failed:', verifyError.message);
       logger.error('Webhook verification failed:', verifyError);
       throw new ValidationError('Invalid webhook signature: ' + (verifyError.message || 'verification failed'));
     }
 
     const orderCode = verifiedData.orderCode;
     const amount = verifiedData.amount;
-    const code = verifiedData.code; // "00" = success
+    const code = verifiedData.code;
     const desc = verifiedData.desc;
 
-    console.log('=== Processing payment after signature verification ===');
-    console.log('orderCode:', orderCode);
-    console.log('amount:', amount);
-    console.log('code:', code, 'desc:', desc);
-
-    // Idempotency: try to claim a short-lived key in Redis to avoid duplicate webhook processing
+    // Idempotency check via Redis
     const idempotencyKey = `payos:webhook:${orderCode}`;
     let claimed = null;
     try {
       claimed = await claimIdempotencyKey(idempotencyKey, 30);
-      console.log('Idempotency claim result:', claimed);
     } catch (err) {
-      console.log('claimIdempotencyKey error, continuing:', err?.message);
       logger.warn('claimIdempotencyKey threw, continuing without redis claim', { error: err?.message || err });
       claimed = null;
     }
 
     if (claimed === false) {
-      // Another worker already processed this webhook recently
       await session.commitTransaction();
-      console.log('Duplicate webhook skipped by redis key for orderCode:', orderCode);
-      logger.info(`Duplicate webhook skipped by redis key for orderCode=${orderCode}`);
+      logger.info(`Duplicate webhook skipped for orderCode=${orderCode}`);
       return { success: true, message: 'Duplicate webhook skipped' };
     }
 
-    console.log('Webhook verified, finding payment with transactionId:', orderCode.toString());
     logger.info('Webhook verified', { orderCode, code, desc });
 
-    // Find payment by transaction ID (orderCode)
+    // Find payment
     const payment = await Payment.findOne({ 
       transactionId: orderCode.toString() 
     }).session(session);
 
-    console.log('Payment found:', !!payment);
-    if (payment) {
-      console.log('Payment ID:', payment._id);
-      console.log('Payment current status:', payment.status);
-    }
-
     if (!payment) {
       await session.commitTransaction();
-      console.log('Payment NOT FOUND for orderCode:', orderCode);
       logger.warn(`Payment not found for orderCode: ${orderCode}`);
       throw new NotFoundError('Không tìm thấy giao dịch thanh toán');
     }
 
-    // Check if already processed to prevent duplicate processing
     if (payment.status === PAYMENT_STATUS.PAID) {
       await session.commitTransaction();
-      console.log('Payment already processed:', payment._id);
       logger.info(`Payment already processed: ${payment._id}`);
       return { success: true, message: 'Payment already processed' };
     }
 
-    // Update payment based on status
-    const isPaid = code === '00'; // PayOS success code
-    console.log('isPaid:', isPaid);
+    const isPaid = code === '00';
 
     if (isPaid) {
       payment.status = PAYMENT_STATUS.PAID;
@@ -473,71 +422,57 @@ export const handlePaymentWebhook = async (webhookPayload) => {
         completedAt: new Date()
       };
       await payment.save({ session });
-      console.log('Payment status updated to PAID');
-
       logger.info(`Payment completed: ${payment._id}`);
 
-      // Update booking status
-      console.log('Finding booking with ID:', payment.bookingId);
+      // Update booking
       const booking = await Booking.findById(payment.bookingId).session(session);
-      console.log('Booking found:', !!booking);
       
       if (!booking) {
-        console.error('Booking NOT FOUND for payment:', payment._id);
         logger.error(`Booking not found for payment: ${payment._id}`);
         await session.abortTransaction();
         throw new NotFoundError('Không tìm thấy booking cho giao dịch này');
       }
       
-      if (booking) {
-        console.log('Booking ID:', booking._id);
-        console.log('Booking current status:', booking.status);
-        console.log('Booking finalAmount:', booking.finalAmount);
-        
-        // Calculate total paid amount using find for accuracy
-        const paidPayments = await Payment.find({
-          bookingId: booking._id,
-          status: PAYMENT_STATUS.PAID
-        }).select('amount').session(session);
+      // Calculate payment progress
+      const paidPayments = await Payment.find({
+        bookingId: booking._id,
+        status: PAYMENT_STATUS.PAID
+      }).select('amount').session(session);
 
-        const totalPaid = paidPayments.reduce((sum, payment) => sum + payment.amount, 0);
-        const paymentPercentage = (totalPaid / booking.finalAmount) * 100;
+      const totalPaid = paidPayments.reduce((sum, p) => sum + p.amount, 0);
+      const paymentPercentage = (totalPaid / booking.finalAmount) * 100;
 
-        console.log('Total paid:', totalPaid);
-        console.log('Payment percentage:', paymentPercentage.toFixed(2) + '%');
+      logger.info(`Booking ${booking._id} payment progress: ${paymentPercentage.toFixed(2)}%`, {
+        totalPaid,
+        finalAmount: booking.finalAmount
+      });
 
-        logger.info(`Booking ${booking._id} payment progress: ${paymentPercentage.toFixed(2)}%`, {
-          totalPaid,
-          finalAmount: booking.finalAmount
-        });
-
-        // Update booking status and payType based on payment progress
-        // Use slight tolerance (epsilon) to handle floating point or rounding issues
-        if (paymentPercentage >= 100) {
-          booking.status = BOOKING_STATUS.CONFIRMED;
-          booking.payType = PAY_TYPE.FULL;
-          console.log('Setting booking to CONFIRMED with FULL payment');
-        } else if (paymentPercentage >= 50) {
-          booking.status = BOOKING_STATUS.CONFIRMED;
-          booking.payType = PAY_TYPE.PREPAY_50;
-          console.log('Setting booking to CONFIRMED with PREPAY_50');
-        } else if (paymentPercentage >= 30) {
-          booking.status = BOOKING_STATUS.CONFIRMED;
-          booking.payType = PAY_TYPE.PREPAY_30;
-          console.log('Setting booking to CONFIRMED with PREPAY_30');
-        }
-
-        await booking.save({ session });
-        console.log('Booking saved successfully with status:', booking.status);
-        logger.info(`Booking ${booking._id} updated to ${booking.status}`);
+      // Update booking status based on payment percentage
+      if (paymentPercentage >= 100) {
+        booking.status = BOOKING_STATUS.CONFIRMED;
+        booking.payType = PAY_TYPE.FULL;
+      } else if (paymentPercentage >= 50) {
+        booking.status = BOOKING_STATUS.CONFIRMED;
+        booking.payType = PAY_TYPE.PREPAY_50;
+      } else if (paymentPercentage >= 30) {
+        booking.status = BOOKING_STATUS.CONFIRMED;
+        booking.payType = PAY_TYPE.PREPAY_30;
       }
 
+      // Update financials
+      booking.financials = {
+        ...booking.financials,
+        originalAmount: booking.finalAmount,
+        netAmount: totalPaid
+      };
+
+      await booking.save({ session });
+      logger.info(`Booking ${booking._id} updated to ${booking.status}`);
+
       await session.commitTransaction();
-      console.log('=== Transaction committed successfully ===');
       return { success: true, message: 'Payment processed successfully' };
 
     } else {
-      // Payment failed or cancelled
       payment.status = PAYMENT_STATUS.CANCELLED;
       payment.gatewayResponse = {
         ...payment.gatewayResponse,

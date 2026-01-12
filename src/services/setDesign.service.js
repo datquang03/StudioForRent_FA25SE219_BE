@@ -1807,6 +1807,7 @@ export const getConvertedCustomDesigns = async (filters = {}) => {
       CustomDesignRequest.find(requestQuery)
         .populate('convertedToDesignId')
         .populate('processedBy', 'name email')
+        .populate('customerId', 'fullName email avatar')
         .sort({ updatedAt: -1 })
         .skip(skip)
         .limit(safeLimit)
@@ -1820,6 +1821,7 @@ export const getConvertedCustomDesigns = async (filters = {}) => {
       customerName: request.customerName,
       email: request.email,
       phoneNumber: request.phoneNumber,
+      customerAvatar: request.customerId?.avatar || null,
       originalDescription: request.description,
       requestedAt: request.createdAt,
       convertedAt: request.updatedAt,
