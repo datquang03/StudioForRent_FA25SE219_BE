@@ -440,7 +440,18 @@ export const handlePaymentWebhook = async (webhookPayload) => {
       }).select('amount').session(session);
 
       const totalPaid = paidPayments.reduce((sum, p) => sum + p.amount, 0);
-      const paymentPercentage = (totalPaid / booking.finalAmount) * 100;
+      
+      // Handle edge case: avoid division by zero
+      let paymentPercentage = 0;
+      if (typeof booking.finalAmount === 'number' && booking.finalAmount > 0) {
+        paymentPercentage = (totalPaid / booking.finalAmount) * 100;
+      } else {
+        logger.warn(`Invalid finalAmount for booking ${booking._id}`, {
+          bookingId: booking._id,
+          finalAmount: booking.finalAmount,
+          totalPaid
+        });
+      }
 
       logger.info(`Booking ${booking._id} payment progress: ${paymentPercentage.toFixed(2)}%`, {
         totalPaid,
@@ -459,7 +470,8 @@ export const handlePaymentWebhook = async (webhookPayload) => {
         booking.payType = PAY_TYPE.PREPAY_30;
       }
 
-      // Update financials
+      // Update financials - netAmount tracks cumulative amount paid by customer
+      // (differs from cancellation/no-show contexts where netAmount = originalAmount - refund or chargeAmount)
       booking.financials = {
         ...booking.financials,
         originalAmount: booking.finalAmount,
