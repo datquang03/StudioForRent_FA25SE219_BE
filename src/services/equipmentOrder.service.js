@@ -639,7 +639,13 @@ const verifyPayOSWebhookSignature = (body) => {
       .update(dataToSign)
       .digest('hex');
 
-    return computedSignature.toLowerCase() === signature.toString().toLowerCase();
+    // Use constant-time comparison to prevent timing attacks
+    const computedBuffer = Buffer.from(computedSignature.toLowerCase(), 'utf8');
+    const receivedBuffer = Buffer.from(signature.toString().toLowerCase(), 'utf8');
+    if (computedBuffer.length !== receivedBuffer.length) {
+      return false;
+    }
+    return crypto.timingSafeEqual(computedBuffer, receivedBuffer);
   } catch (error) {
     logger.error('Webhook signature verification error:', error);
     return false;
@@ -657,7 +663,6 @@ export const handleEquipmentPaymentWebhook = async (webhookPayload) => {
 
   try {
     const body = webhookPayload?.body || webhookPayload || {};
-    const headers = webhookPayload?.headers || {};
     const { orderCode, code, desc, data } = body;
 
     // Verify webhook signature (signature is in body.signature per PayOS format)
