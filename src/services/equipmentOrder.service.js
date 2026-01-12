@@ -610,33 +610,42 @@ export const createEquipmentPayment = async (orderId, user) => {
 /**
  * Verify PayOS webhook signature
  * @param {Object} body - Webhook body
- * @param {string} signature - Signature from headers
  * @returns {boolean} Is signature valid
  */
-const verifyPayOSWebhookSignature = (body, signature) => {
+const verifyPayOSWebhookSignature = (body) => {
   try {
-    if (!signature || !process.env.PAYOS_CHECKSUM_KEY) {
+    const signature = body.signature;
+    if (!signature || !process.env.PAYOS_CHECKSUM_KEY || !body.data) {
       return false;
     }
 
-    // PayOS webhook signature format: HMAC-SHA256 of sorted JSON string
-    const sortedBody = Object.keys(body)
+    // PayOS signature: sorted key=value from body.data, null/undefined as empty string
+    const dataToSign = Object.keys(body.data)
       .sort()
-      .reduce((obj, key) => {
-        obj[key] = body[key];
-        return obj;
-      }, {});
+      .map(key => {
+        const value = body.data[key];
+        if (value === null || value === undefined) {
+          return `${key}=`;
+        }
+        const serializedValue = typeof value === 'object' 
+          ? JSON.stringify(value) 
+          : String(value);
+        return `${key}=${serializedValue}`;
+      })
+      .join('&');
 
-    const dataStr = JSON.stringify(sortedBody);
-    const expectedSignature = crypto
+    const computedSignature = crypto
       .createHmac('sha256', process.env.PAYOS_CHECKSUM_KEY)
-      .update(dataStr)
+      .update(dataToSign)
       .digest('hex');
 
-    return crypto.timingSafeEqual(
-      Buffer.from(signature),
-      Buffer.from(expectedSignature)
-    );
+    // Use constant-time comparison to prevent timing attacks
+    const computedBuffer = Buffer.from(computedSignature.toLowerCase(), 'utf8');
+    const receivedBuffer = Buffer.from(signature.toString().toLowerCase(), 'utf8');
+    if (computedBuffer.length !== receivedBuffer.length) {
+      return false;
+    }
+    return crypto.timingSafeEqual(computedBuffer, receivedBuffer);
   } catch (error) {
     logger.error('Webhook signature verification error:', error);
     return false;
@@ -654,12 +663,10 @@ export const handleEquipmentPaymentWebhook = async (webhookPayload) => {
 
   try {
     const body = webhookPayload?.body || webhookPayload || {};
-    const headers = webhookPayload?.headers || {};
     const { orderCode, code, desc, data } = body;
 
-    // Verify webhook signature
-    const signature = headers['x-payos-signature'] || headers['X-PayOS-Signature'];
-    if (!verifyPayOSWebhookSignature(body, signature)) {
+    // Verify webhook signature (signature is in body.signature per PayOS format)
+    if (!verifyPayOSWebhookSignature(body)) {
       logger.warn('Invalid PayOS webhook signature', { orderCode });
       throw new ValidationError('Invalid webhook signature');
     }

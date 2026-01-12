@@ -3,6 +3,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import OpenAI from 'openai';
 import mongoose from 'mongoose';
 import SetDesign from '../models/SetDesign/setDesign.model.js';
+import SetDesignOrder from '../models/SetDesignOrder/setDesignOrder.model.js';
 import CustomDesignRequest from '../models/CustomDesignRequest/customDesignRequest.model.js';
 import logger from '../utils/logger.js';
 import cloudinary from '../config/cloudinary.js';
@@ -152,15 +153,21 @@ export const getSetDesignById = async (id) => {
  * Staff/Admin: Can view any converted design
  * @param {string} id - SetDesign ID
  * @param {Object} user - Current user
- * @returns {Object} SetDesign with original request info
+ * @returns {Object} SetDesign with original request info and payment status
  */
 export const getConvertedCustomDesignById = async (id) => {
   try {
     validateObjectId(id, 'ID set design');
 
-    const [design, request] = await Promise.all([
+    const [design, request, orders] = await Promise.all([
       SetDesign.findById(id),
-      CustomDesignRequest.findOne({ convertedToDesignId: id }).populate('processedBy', 'name email')
+      CustomDesignRequest.findOne({ convertedToDesignId: id })
+        .populate('processedBy', 'name email')
+        .populate('customerId', 'fullName email avatar'),
+      SetDesignOrder.find({ setDesignId: id })
+        .populate('customerId', 'fullName email')
+        .sort({ createdAt: -1 })
+        .lean()
     ]);
 
     if (!design) {
@@ -171,7 +178,21 @@ export const getConvertedCustomDesignById = async (id) => {
       throw new NotFoundError('Đây không phải là set design được chuyển đổi từ custom request');
     }
 
-    // Public API - no ownership check
+    // Build payment summary from orders
+    const paymentSummary = {
+      totalOrders: orders.length,
+      orders: orders.map(order => ({
+        orderId: order._id,
+        orderCode: order.orderCode,
+        customerId: order.customerId,
+        quantity: order.quantity,
+        totalAmount: order.totalAmount,
+        paidAmount: order.paidAmount,
+        status: order.status,
+        paymentStatus: order.paymentStatus,
+        createdAt: order.createdAt
+      }))
+    };
 
     return {
       setDesign: design,
@@ -180,12 +201,14 @@ export const getConvertedCustomDesignById = async (id) => {
         customerName: request.customerName,
         email: request.email,
         phoneNumber: request.phoneNumber,
+        customerAvatar: request.customerId?.avatar || null,
         originalDescription: request.description,
         requestedAt: request.createdAt,
         convertedAt: request.updatedAt,
         processedBy: request.processedBy,
         estimatedPrice: request.estimatedPrice
-      }
+      },
+      paymentInfo: paymentSummary
     };
   } catch (error) {
     logger.error('Error getting converted custom design:', error);
