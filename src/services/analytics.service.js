@@ -236,7 +236,8 @@ export const getBookingStats = async () => {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+    // Use start of today without mutating now
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
     const [
       totalBookings,
@@ -256,10 +257,9 @@ export const getBookingStats = async () => {
       Booking.countDocuments({ status: BOOKING_STATUS.COMPLETED }),
       Booking.countDocuments({ status: BOOKING_STATUS.CANCELLED }),
       Booking.countDocuments({ createdAt: { $gte: startOfMonth } }),
-      Booking.countDocuments({ createdAt: { $gte: startOfLastMonth, $lte: endOfLastMonth } }),
-      Booking.countDocuments({
-        createdAt: { $gte: new Date(now.setHours(0, 0, 0, 0)) }
-      })
+      // Use $lt startOfMonth for accurate last month range
+      Booking.countDocuments({ createdAt: { $gte: startOfLastMonth, $lt: startOfMonth } }),
+      Booking.countDocuments({ createdAt: { $gte: startOfToday } })
     ]);
 
     // Calculate growth percentage
@@ -296,25 +296,25 @@ export const getRevenueStats = async () => {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
     const startOfYear = new Date(now.getFullYear(), 0, 1);
 
-    // Aggregate total revenue from paid payments
+    // Aggregate total revenue from paid payments with paidAt existence check
     const [totalRevenue, monthlyRevenue, lastMonthRevenue, yearlyRevenue, paymentStats] = await Promise.all([
       Payment.aggregate([
         { $match: { status: PAYMENT_STATUS.PAID } },
         { $group: { _id: null, total: { $sum: '$amount' } } }
       ]),
       Payment.aggregate([
-        { $match: { status: PAYMENT_STATUS.PAID, paidAt: { $gte: startOfMonth } } },
+        { $match: { status: PAYMENT_STATUS.PAID, paidAt: { $exists: true, $gte: startOfMonth } } },
         { $group: { _id: null, total: { $sum: '$amount' } } }
       ]),
       Payment.aggregate([
-        { $match: { status: PAYMENT_STATUS.PAID, paidAt: { $gte: startOfLastMonth, $lte: endOfLastMonth } } },
+        // Use $lt startOfMonth for accurate last month range
+        { $match: { status: PAYMENT_STATUS.PAID, paidAt: { $exists: true, $gte: startOfLastMonth, $lt: startOfMonth } } },
         { $group: { _id: null, total: { $sum: '$amount' } } }
       ]),
       Payment.aggregate([
-        { $match: { status: PAYMENT_STATUS.PAID, paidAt: { $gte: startOfYear } } },
+        { $match: { status: PAYMENT_STATUS.PAID, paidAt: { $exists: true, $gte: startOfYear } } },
         { $group: { _id: null, total: { $sum: '$amount' } } }
       ]),
       Payment.aggregate([

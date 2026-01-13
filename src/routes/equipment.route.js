@@ -55,7 +55,10 @@ router.post('/:id/image',
 router.patch('/:id', validateObjectId(), validateEquipmentUpdate, updateEquipmentController);
 router.delete('/:id', validateObjectId(), deleteEquipmentController);
 
-// Reset quantities (DEV/TESTING ONLY - Staff/Admin)
-router.post('/:id/reset-quantities', validateObjectId(), resetEquipmentQuantitiesController);
+// Reset quantities (DEV/TESTING ONLY - disabled in production)
+if (process.env.NODE_ENV !== 'production') {
+  router.post('/:id/reset-quantities', validateObjectId(), resetEquipmentQuantitiesController);
+}
 
 export default router;
+
