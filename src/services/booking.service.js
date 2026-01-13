@@ -650,27 +650,39 @@ export const cancelBooking = async (bookingId) => {
       }
 
       // Calculate refund using policy snapshot
+      // IMPORTANT: Refund should be based on ACTUAL PAID amount, not finalAmount
       let refundResult = null;
       if (booking.policySnapshots?.cancellation && booking.scheduleId) {
         try {
           const schedule = await Schedule.findById(booking.scheduleId).session(session);
+          
+          // Get total paid amount from Payment records
+          const paidPayments = await Payment.find({
+            bookingId: booking._id,
+            status: PAYMENT_STATUS.PAID
+          }).select('amount').session(session);
+          const totalPaid = paidPayments.reduce((sum, p) => sum + p.amount, 0);
+          
+          // Calculate refund based on PAID amount, not booking total
           refundResult = RoomPolicyService.calculateRefund(
             booking.policySnapshots.cancellation,
             new Date(schedule.startTime),
             new Date(), // cancellation time = now
-            booking.finalAmount
+            totalPaid   // Use actual paid amount instead of finalAmount
           );
 
           // Update financials
           booking.financials.originalAmount = booking.finalAmount;
+          booking.financials.paidAmount = totalPaid;
           booking.financials.refundAmount = refundResult.refundAmount;
-          booking.financials.netAmount = booking.finalAmount - refundResult.refundAmount;
+          booking.financials.netAmount = totalPaid - refundResult.refundAmount; // Amount retained
 
-          // Add cancellation event
+          // Add cancellation event with detailed info
           booking.events.push({
             type: 'CANCELLED',
             timestamp: new Date(),
             details: {
+              totalPaid,
               refundPercentage: refundResult.refundPercentage,
               tier: refundResult.tier,
               hoursBeforeBooking: refundResult.hoursBeforeBooking
