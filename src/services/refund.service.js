@@ -66,11 +66,12 @@ export const calculateRefundAmount = async (bookingId) => {
  * @param {string} opts.bankName - Bank name (e.g., "Vietcombank", "MB Bank") - REQUIRED
  * @param {string} opts.accountNumber - Customer bank account number - REQUIRED
  * @param {string} opts.accountName - Account holder name - REQUIRED
+ * @param {string} opts.reason - Customer's reason for refund (optional)
  * @param {string} opts.userId - ID of customer creating request
  * @returns {object} Refund information
  */
 export const createRefundRequest = async (bookingId, opts = {}) => {
-  const { bankName, accountNumber, accountName, userId } = opts;
+  const { bankName, accountNumber, accountName, reason, userId } = opts;
 
   // Validate bank info
   if (!bankName || !accountNumber || !accountName) {
@@ -109,10 +110,15 @@ export const createRefundRequest = async (bookingId, opts = {}) => {
   session.startTransaction();
 
   try {
+    // Use customer's reason if provided, otherwise generate default
+    const refundReason = reason 
+      ? reason 
+      : `Hoàn tiền booking - ${refundPercentage}% theo chính sách`;
+
     const refund = await Refund.create([{
       bookingId,
       amount: refundAmount,
-      reason: `Hoàn tiền booking - ${refundPercentage}% theo chính sách`,
+      reason: refundReason,
       requestedBy: userId,
       status: 'PENDING_APPROVAL',
       destinationBank: {
@@ -310,9 +316,10 @@ export const getApprovedRefunds = async (page = 1, limit = 20) => {
  * @param {object} opts - Optional transfer details
  * @param {string} opts.transactionRef - Bank transaction reference (optional)
  * @param {string} opts.note - Additional note (optional)
+ * @param {string} opts.proofImageUrl - Cloudinary URL of transfer screenshot (optional)
  */
 export const confirmManualRefund = async (refundId, staffId, opts = {}) => {
-  const { transactionRef, note } = opts;
+  const { transactionRef, note, proofImageUrl } = opts;
   
   const refund = await Refund.findById(refundId);
   if (!refund) {
@@ -328,14 +335,13 @@ export const confirmManualRefund = async (refundId, staffId, opts = {}) => {
   refund.processedBy = staffId;
   refund.processedAt = new Date();
   
-  // Store transfer details if provided
-  if (transactionRef || note) {
-    refund.transferDetails = {
-      transactionRef: transactionRef || null,
-      note: note || null,
-      confirmedAt: new Date()
-    };
-  }
+  // Store transfer details (always set confirmedAt)
+  refund.transferDetails = {
+    transactionRef: transactionRef || null,
+    note: note || null,
+    proofImageUrl: proofImageUrl || null,
+    confirmedAt: new Date()
+  };
   
   await refund.save();
 

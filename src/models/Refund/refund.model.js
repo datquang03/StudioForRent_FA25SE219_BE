@@ -56,6 +56,7 @@ const refundSchema = new mongoose.Schema({
   transferDetails: {
     transactionRef: String,  // Mã giao dịch ngân hàng
     note: String,            // Ghi chú của staff
+    proofImageUrl: String,   // Cloudinary URL of transfer screenshot (ảnh chứng từ)
     confirmedAt: Date        // Thời điểm xác nhận
   },
 

@@ -1,5 +1,7 @@
 import express from 'express';
 import { protect, authorize } from '../middlewares/auth.js';
+import { upload } from '../middlewares/upload.js';
+import { ALLOWED_FILE_TYPES, FILE_SIZE_LIMITS } from '../config/upload.config.js';
 import { USER_ROLES } from '../utils/constants.js';
 import {
   approveRefundController,
@@ -87,11 +89,14 @@ router.post(
  * @route   POST /api/refunds/:refundId/confirm
  * @desc    Confirm manual refund transfer completed (Staff/Admin only)
  * @access  Staff, Admin
+ * @body    transactionRef (optional), note (optional)
+ * @file    proofImage (optional) - JPEG/PNG, max 5MB
  */
 router.post(
   '/:refundId/confirm',
   protect,
   authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN),
+  upload.single('proofImage', ALLOWED_FILE_TYPES.IMAGES, FILE_SIZE_LIMITS.IMAGE),
   confirmManualRefundController
 );
 
