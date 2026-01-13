@@ -1,6 +1,7 @@
 // #region Imports
-import { User, Studio, Equipment, Promotion, Notification } from '../models/index.js';
+import { User, Studio, Equipment, Promotion, Notification, Booking, Payment } from '../models/index.js';
 import logger from '../utils/logger.js';
+import { BOOKING_STATUS, PAYMENT_STATUS } from '../utils/constants.js';
 // #endregion
 
 // #region Analytics Service
@@ -227,6 +228,141 @@ export const getNotificationStats = async () => {
 };
 
 /**
+ * Lấy thống kê bookings
+ * @returns {Object} Booking statistics
+ */
+export const getBookingStats = async () => {
+  try {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    // Use start of today without mutating now
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const [
+      totalBookings,
+      pendingBookings,
+      confirmedBookings,
+      checkedInBookings,
+      completedBookings,
+      cancelledBookings,
+      thisMonthBookings,
+      lastMonthBookings,
+      todayBookings
+    ] = await Promise.all([
+      Booking.countDocuments(),
+      Booking.countDocuments({ status: BOOKING_STATUS.PENDING }),
+      Booking.countDocuments({ status: BOOKING_STATUS.CONFIRMED }),
+      Booking.countDocuments({ status: BOOKING_STATUS.CHECKED_IN }),
+      Booking.countDocuments({ status: BOOKING_STATUS.COMPLETED }),
+      Booking.countDocuments({ status: BOOKING_STATUS.CANCELLED }),
+      Booking.countDocuments({ createdAt: { $gte: startOfMonth } }),
+      // Use $lt startOfMonth for accurate last month range
+      Booking.countDocuments({ createdAt: { $gte: startOfLastMonth, $lt: startOfMonth } }),
+      Booking.countDocuments({ createdAt: { $gte: startOfToday } })
+    ]);
+
+    // Calculate growth percentage
+    const bookingGrowth = lastMonthBookings > 0 
+      ? (((thisMonthBookings - lastMonthBookings) / lastMonthBookings) * 100).toFixed(2)
+      : thisMonthBookings > 0 ? 100 : 0;
+
+    return {
+      total: totalBookings,
+      byStatus: {
+        pending: pendingBookings,
+        confirmed: confirmedBookings,
+        checked_in: checkedInBookings,
+        completed: completedBookings,
+        cancelled: cancelledBookings
+      },
+      thisMonth: thisMonthBookings,
+      lastMonth: lastMonthBookings,
+      today: todayBookings,
+      growth: parseFloat(bookingGrowth)
+    };
+  } catch (error) {
+    logger.error('Error getting booking stats:', error);
+    throw error;
+  }
+};
+
+/**
+ * Lấy thống kê doanh thu từ payments
+ * @returns {Object} Revenue statistics
+ */
+export const getRevenueStats = async () => {
+  try {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const startOfYear = new Date(now.getFullYear(), 0, 1);
+
+    // Aggregate total revenue from paid payments with paidAt existence check
+    const [totalRevenue, monthlyRevenue, lastMonthRevenue, yearlyRevenue, paymentStats] = await Promise.all([
+      Payment.aggregate([
+        { $match: { status: PAYMENT_STATUS.PAID } },
+        { $group: { _id: null, total: { $sum: '$amount' } } }
+      ]),
+      Payment.aggregate([
+        { $match: { status: PAYMENT_STATUS.PAID, paidAt: { $exists: true, $gte: startOfMonth } } },
+        { $group: { _id: null, total: { $sum: '$amount' } } }
+      ]),
+      Payment.aggregate([
+        // Use $lt startOfMonth for accurate last month range
+        { $match: { status: PAYMENT_STATUS.PAID, paidAt: { $exists: true, $gte: startOfLastMonth, $lt: startOfMonth } } },
+        { $group: { _id: null, total: { $sum: '$amount' } } }
+      ]),
+      Payment.aggregate([
+        { $match: { status: PAYMENT_STATUS.PAID, paidAt: { $exists: true, $gte: startOfYear } } },
+        { $group: { _id: null, total: { $sum: '$amount' } } }
+      ]),
+      Payment.aggregate([
+        {
+          $group: {
+            _id: '$status',
+            count: { $sum: 1 },
+            total: { $sum: '$amount' }
+          }
+        }
+      ])
+    ]);
+
+    const total = totalRevenue[0]?.total || 0;
+    const monthly = monthlyRevenue[0]?.total || 0;
+    const lastMonth = lastMonthRevenue[0]?.total || 0;
+    const yearly = yearlyRevenue[0]?.total || 0;
+
+    // Calculate growth percentage
+    const revenueGrowth = lastMonth > 0 
+      ? (((monthly - lastMonth) / lastMonth) * 100).toFixed(2)
+      : monthly > 0 ? 100 : 0;
+
+    // Build payment status breakdown
+    const paymentsByStatus = {};
+    paymentStats.forEach(stat => {
+      paymentsByStatus[stat._id] = {
+        count: stat.count,
+        amount: stat.total
+      };
+    });
+
+    return {
+      total,
+      monthly,
+      lastMonth,
+      yearly,
+      growth: parseFloat(revenueGrowth),
+      byStatus: paymentsByStatus,
+      currency: 'VND'
+    };
+  } catch (error) {
+    logger.error('Error getting revenue stats:', error);
+    throw error;
+  }
+};
+
+/**
  * Lấy toàn bộ dashboard statistics
  * @returns {Object} Complete dashboard stats
  */
@@ -237,13 +373,17 @@ export const getDashboardStats = async () => {
       studioStats,
       equipmentStats,
       promotionStats,
-      notificationStats
+      notificationStats,
+      bookingStats,
+      revenueStats
     ] = await Promise.all([
       getUserStats(),
       getStudioStats(),
       getEquipmentStats(),
       getPromotionStats(),
-      getNotificationStats()
+      getNotificationStats(),
+      getBookingStats(),
+      getRevenueStats()
     ]);
 
     return {
@@ -252,11 +392,8 @@ export const getDashboardStats = async () => {
       equipment: equipmentStats,
       promotions: promotionStats,
       notifications: notificationStats,
-      revenue: {
-        total: 0, // Placeholder for future booking/payment integration
-        monthly: 0,
-        growth: 0
-      },
+      bookings: bookingStats,
+      revenue: revenueStats,
       generatedAt: new Date()
     };
   } catch (error) {
@@ -264,6 +401,7 @@ export const getDashboardStats = async () => {
     throw error;
   }
 };
+
 
 /**
  * Cleanup orphaned notifications (notifications của users đã bị xóa)

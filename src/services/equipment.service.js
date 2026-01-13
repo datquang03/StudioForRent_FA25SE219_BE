@@ -456,4 +456,45 @@ export const setMaintenanceQuantity = async (equipmentId, newMaintenanceQty) => 
 
   return equipment;
 };
+
+/**
+ * Reset equipment quantities (DEV/TESTING ONLY)
+ * Reset inUseQty to 0 and recalculate availableQty
+ * @param {string} equipmentId - Equipment ID
+ * @returns {Object} Updated equipment
+ */
+export const resetEquipmentQuantities = async (equipmentId) => {
+  const equipment = await Equipment.findById(equipmentId);
+
+  if (!equipment) {
+    throw new NotFoundError('Equipment không tồn tại!');
+  }
+
+  if (equipment.isDeleted) {
+    throw new ValidationError('Equipment đã bị xóa!');
+  }
+
+  // Store old values for logging
+  const oldInUseQty = equipment.inUseQty;
+  const oldAvailableQty = equipment.availableQty;
+
+  // Reset inUseQty to 0, recalculate availableQty
+  equipment.inUseQty = 0;
+  equipment.availableQty = equipment.totalQty - equipment.maintenanceQty;
+
+  // Recalculate status
+  equipment.status = calculateEquipmentStatus(equipment);
+
+  await equipment.save();
+
+  return {
+    equipment,
+    reset: {
+      oldInUseQty,
+      oldAvailableQty,
+      newInUseQty: equipment.inUseQty,
+      newAvailableQty: equipment.availableQty,
+    }
+  };
+};
 // #endregion
