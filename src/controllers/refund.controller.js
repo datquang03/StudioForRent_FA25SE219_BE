@@ -12,6 +12,7 @@ import {
   getRefundsForBooking,
   getMyRefunds
 } from '../services/refund.service.js';
+import { uploadImage } from '../services/upload.service.js';
 
 /**
  * Create refund request for a booking (Customer)
@@ -19,7 +20,7 @@ import {
  */
 export const createRefundRequestController = asyncHandler(async (req, res) => {
   const { id: bookingId } = req.params;
-  const { bankName, accountNumber, accountName } = req.body;
+  const { bankName, accountNumber, accountName, reason } = req.body;
   const userId = req.user._id;
 
   if (!bookingId || !isValidObjectId(bookingId)) {
@@ -42,6 +43,7 @@ export const createRefundRequestController = asyncHandler(async (req, res) => {
     bankName: bankName.trim(),
     accountNumber: accountNumber.trim(),
     accountName: accountName.trim(),
+    reason: reason ? reason.trim() : null,
     userId
   });
 
@@ -203,6 +205,7 @@ export const getApprovedRefundsController = asyncHandler(async (req, res) => {
 /**
  * Confirm manual refund transfer completed (Staff/Admin)
  * POST /api/refunds/:refundId/confirm
+ * Supports multipart/form-data with optional proof image upload
  */
 export const confirmManualRefundController = asyncHandler(async (req, res) => {
   const { refundId } = req.params;
@@ -213,7 +216,20 @@ export const confirmManualRefundController = asyncHandler(async (req, res) => {
     throw new ValidationError('Refund ID không hợp lệ');
   }
 
-  const refund = await confirmManualRefund(refundId, staffId, { transactionRef, note });
+  // Handle proof image upload if provided
+  let proofImageUrl = null;
+  if (req.file) {
+    const uploadResult = await uploadImage(req.file, {
+      folder: 'studio-rental/refund-proofs'
+    });
+    proofImageUrl = uploadResult.url;
+  }
+
+  const refund = await confirmManualRefund(refundId, staffId, { 
+    transactionRef, 
+    note, 
+    proofImageUrl 
+  });
 
   res.status(200).json({
     success: true,
