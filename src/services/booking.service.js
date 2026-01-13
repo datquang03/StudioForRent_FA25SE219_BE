@@ -347,6 +347,21 @@ export const getBookingById = async (id, userId = null, userRole = null) => {
     policySnapshots: booking.policySnapshots,
     events: booking.events,
     financials: booking.financials,
+    // Computed payment summary for frontend convenience
+    paymentSummary: (() => {
+      const totalAmount = booking.finalAmount || 0;
+      const paidAmount = booking.financials?.netAmount || 0;
+      const remainingAmount = Math.max(0, totalAmount - paidAmount);
+      const paidPercentage = totalAmount > 0 ? Math.round((paidAmount / totalAmount) * 100) : 0;
+      return {
+        totalAmount,
+        paidAmount,
+        remainingAmount,
+        paidPercentage,
+        isPaidFully: paidAmount >= totalAmount,
+        currency: 'VND'
+      };
+    })(),
     notes: booking.notes,
     createdAt: booking.createdAt,
     updatedAt: booking.updatedAt,
@@ -356,6 +371,7 @@ export const getBookingById = async (id, userId = null, userRole = null) => {
 
   return formattedBooking;
 };
+
 
 export const getBookings = async ({ userId, page = 1, limit = 20, status } = {}) => {
   const safePage = Math.max(parseInt(page) || 1, 1);
@@ -1161,6 +1177,12 @@ const calculateScheduleDetails = (schedule) => {
 
 // Helper function: Format booking response
 const formatBookingResponse = (booking) => {
+  // Calculate payment summary
+  const totalAmount = booking.finalAmount || 0;
+  const paidAmount = booking.financials?.netAmount || 0;
+  const remainingAmount = Math.max(0, totalAmount - paidAmount);
+  const paidPercentage = totalAmount > 0 ? Math.round((paidAmount / totalAmount) * 100) : 0;
+
   return {
     _id: booking._id,
     customer: {
@@ -1191,11 +1213,20 @@ const formatBookingResponse = (booking) => {
       discountPercentage: booking.promotion.discountPercentage,
       discountAmount: booking.promotion.discountAmount
     } : null,
+    paymentSummary: {
+      totalAmount,
+      paidAmount,
+      remainingAmount,
+      paidPercentage,
+      isPaidFully: paidAmount >= totalAmount,
+      currency: 'VND'
+    },
     createdAt: booking.createdAt,
     checkInAt: booking.checkInAt,
     checkOutAt: booking.checkOutAt
   };
 };
+
 
 // #endregion
 
