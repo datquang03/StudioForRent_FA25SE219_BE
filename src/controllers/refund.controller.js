@@ -209,7 +209,7 @@ export const getApprovedRefundsController = asyncHandler(async (req, res) => {
  */
 export const confirmManualRefundController = asyncHandler(async (req, res) => {
   const { refundId } = req.params;
-  const { transactionRef, note } = req.body;
+  const { transactionRef, note } = req.body || {}; // Handle undefined req.body in multipart/form-data
   const staffId = req.user._id;
 
   if (!refundId || !isValidObjectId(refundId)) {
