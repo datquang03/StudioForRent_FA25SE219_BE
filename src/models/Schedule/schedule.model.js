@@ -36,8 +36,8 @@ const scheduleSchema = new mongoose.Schema(
     bookingId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Booking",
-      unique: true, // unique tự động tạo index
-      sparse: true, // Cho phép nhiều null values
+      default: null,
+      // Note: unique constraint removed - multiple schedules can be available (bookingId = null)
     },
   },
   {
