@@ -9,6 +9,7 @@ import {
   deleteEquipmentController,
   setMaintenanceQuantityController,
   uploadEquipmentImage,
+  resetEquipmentQuantitiesController,
 } from '../controllers/equipment.controller.js';
 import { protect, authorize } from '../middlewares/auth.js';
 import { USER_ROLES } from '../utils/constants.js';
@@ -53,5 +54,8 @@ router.post('/:id/image',
 // Resource routes (update and delete only)
 router.patch('/:id', validateObjectId(), validateEquipmentUpdate, updateEquipmentController);
 router.delete('/:id', validateObjectId(), deleteEquipmentController);
+
+// Reset quantities (DEV/TESTING ONLY - Staff/Admin)
+router.post('/:id/reset-quantities', validateObjectId(), resetEquipmentQuantitiesController);
 
 export default router;

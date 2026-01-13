@@ -9,6 +9,7 @@ import {
   updateEquipment,
   deleteEquipment,
   setMaintenanceQuantity,
+  resetEquipmentQuantities,
 } from '../services/equipment.service.js';
 import { uploadImage } from '../services/upload.service.js';
 // #endregion
@@ -183,6 +184,24 @@ export const uploadEquipmentImage = asyncHandler(async (req, res) => {
       equipment,
       imageUrl
     }
+  });
+});
+// #endregion
+
+// #region Reset Equipment Quantities (DEV/TESTING)
+/**
+ * Reset equipment quantities for testing (staff/admin only)
+ * Resets inUseQty to 0 and recalculates availableQty
+ */
+export const resetEquipmentQuantitiesController = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const result = await resetEquipmentQuantities(id);
+
+  res.status(200).json({
+    success: true,
+    message: 'Reset equipment quantities thành công!',
+    data: result,
   });
 });
 // #endregion
