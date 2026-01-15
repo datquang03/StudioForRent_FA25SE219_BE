@@ -181,16 +181,25 @@ export const paymentWebhookController = asyncHandler(async (req, res) => {
       rawBody: req.rawBody 
     };
     
-    logger.info('Received PayOS webhook', { 
+    logger.info('Received PayOS webhook for SetDesign', { 
       orderCode: req.body?.orderCode,
-      hasSignature: !!(req.headers['x-payos-signature'] || req.headers['X-PayOS-Signature'])
+      code: req.body?.code,
+      desc: req.body?.desc,
+      hasSignatureInBody: !!req.body?.signature,
+      hasDataInBody: !!req.body?.data,
+      dataKeys: req.body?.data ? Object.keys(req.body.data) : [],
     });
 
-    await handleSetDesignPaymentWebhook(webhookPayload);
+    const result = await handleSetDesignPaymentWebhook(webhookPayload);
+    
+    logger.info('SetDesign webhook processed successfully', { result });
 
     res.status(200).json({ success: true });
   } catch (error) {
-    logger.error('Set design payment webhook error:', error);
+    logger.error('Set design payment webhook error:', {
+      message: error.message,
+      stack: error.stack,
+    });
     
     // Return 200 even on error to prevent PayOS from retrying invalid signatures
     if (error.message === 'Invalid webhook signature') {
@@ -203,6 +212,7 @@ export const paymentWebhookController = asyncHandler(async (req, res) => {
     res.status(500).json({ success: false, message: msg });
   }
 });
+
 
 /**
  * Get payment status
