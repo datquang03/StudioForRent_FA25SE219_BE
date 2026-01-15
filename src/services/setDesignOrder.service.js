@@ -666,6 +666,15 @@ export const handleSetDesignPaymentWebhook = async (webhookPayload) => {
 
     // Update payment status based on webhook
     const isSuccess = code === '00' ;
+    
+    logger.info('SetDesign webhook - processing payment', {
+      isSuccess,
+      code,
+      paymentId: payment._id,
+      paymentStatus: payment.status,
+      paymentAmount: payment.amount,
+      orderId: payment.orderId,
+    });
 
     if (isSuccess) {
       payment.status = PAYMENT_STATUS.PAID;
@@ -675,23 +684,37 @@ export const handleSetDesignPaymentWebhook = async (webhookPayload) => {
       // Update order
       const order = await SetDesignOrder.findById(payment.orderId).session(session);
       if (order) {
+        const previousPaidAmount = order.paidAmount;
         // Prevent paidAmount from exceeding totalAmount (protection against race conditions/duplicate webhooks)
         order.paidAmount = Math.min(order.paidAmount + payment.amount, order.totalAmount);
+        
+        logger.info('SetDesign webhook - updating order', {
+          orderId: order._id,
+          previousPaidAmount,
+          newPaidAmount: order.paidAmount,
+          totalAmount: order.totalAmount,
+          paymentAmount: payment.amount,
+          willBeFullyPaid: order.paidAmount >= order.totalAmount,
+        });
         
         // Check if fully paid
         if (order.paidAmount >= order.totalAmount) {
           order.paymentStatus = PAYMENT_STATUS.PAID;
           order.status = SET_DESIGN_ORDER_STATUS.CONFIRMED;
           order.confirmedAt = new Date();
+          logger.info('SetDesign order confirmed after full payment', { orderId: order._id });
         }
         
         await order.save({ session });
+      } else {
+        logger.warn('SetDesign webhook - order not found', { orderId: payment.orderId });
       }
 
       await payment.save({ session });
       await session.commitTransaction();
 
       logger.info(`Set design payment ${payment._id} marked as PAID`);
+
 
       // Send notification after transaction commit
       // Note: If notification sending fails, payment status remains PAID and user may not be notified.
