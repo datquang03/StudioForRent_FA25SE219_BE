@@ -107,10 +107,66 @@ export const createPaymentOptions = async (bookingId) => {
       throw new ValidationError('Booking đã có thanh toán thành công, không thể tạo mới');
     }
 
-    if (existingPayments.length > 0) {
+    // Filter and handle pending payments - check if they're still valid
+    const pendingPayments = existingPayments.filter(p => p.status === PAYMENT_STATUS.PENDING);
+    const now = new Date();
+    const validPayments = [];
+    
+    for (const payment of pendingPayments) {
+      const isExpired = payment.expiresAt && new Date(payment.expiresAt) < now;
+      
+      let isPayOSLinkValid = true;
+      if (!isExpired && payment.transactionId) {
+        try {
+          if (payos && typeof payos.getPaymentLinkInformation === 'function') {
+            const payosInfo = await payos.getPaymentLinkInformation(payment.transactionId);
+            if (payosInfo && (payosInfo.status === 'CANCELLED' || payosInfo.status === 'EXPIRED')) {
+              isPayOSLinkValid = false;
+              logger.info('PayOS link is no longer valid', {
+                bookingId,
+                paymentId: payment._id,
+                payosStatus: payosInfo.status,
+              });
+            }
+          }
+        } catch (payosCheckError) {
+          logger.warn('Could not verify PayOS link status', {
+            bookingId,
+            paymentId: payment._id,
+            error: payosCheckError.message,
+          });
+          // If payment is more than 10 minutes old, consider it potentially invalid
+          const createdAt = new Date(payment.createdAt);
+          const ageMinutes = (now - createdAt) / (1000 * 60);
+          if (ageMinutes > 10) {
+            isPayOSLinkValid = false;
+          }
+        }
+      }
+
+      if (isExpired || !isPayOSLinkValid) {
+        // Cancel expired/invalid payment
+        payment.status = PAYMENT_STATUS.CANCELLED;
+        payment.gatewayResponse = {
+          ...payment.gatewayResponse,
+          cancelledAt: new Date(),
+          cancelReason: isExpired ? 'Payment link expired' : 'PayOS link no longer valid',
+        };
+        await payment.save({ session });
+        logger.info('Cancelled expired/invalid payment', {
+          bookingId,
+          paymentId: payment._id,
+        });
+      } else {
+        validPayments.push(payment);
+      }
+    }
+
+    // If there are still valid pending payments, return them
+    if (validPayments.length > 0) {
       await session.commitTransaction();
-      logger.info(`Returning existing payment options for booking ${bookingId}`);
-      return existingPayments.map(payment => formatPaymentOption(payment, booking.finalAmount));
+      logger.info(`Returning existing valid payment options for booking ${bookingId}`);
+      return validPayments.map(payment => formatPaymentOption(payment, booking.finalAmount));
     }
 
     const totalAmount = booking.finalAmount;
@@ -698,11 +754,68 @@ export const createPaymentForOption = async (bookingId, opts = {}) => {
 
     const amount = payType === PAY_TYPE.FULL ? totalAmount : Math.ceil(totalAmount * (payType === PAY_TYPE.PREPAY_30 ? 0.3 : 0.5));
 
-    // Idempotency: return existing pending payment for same booking+payType
+    // Idempotency: check existing pending payment for same booking+payType
     const existing = await Payment.findOne({ bookingId, payType, status: PAYMENT_STATUS.PENDING }).session(session);
     if (existing) {
-      await session.commitTransaction();
-      return formatPaymentOption(existing, totalAmount);
+      // Check if the existing payment link has expired
+      const now = new Date();
+      const isExpired = existing.expiresAt && new Date(existing.expiresAt) < now;
+      
+      // Also check with PayOS if the link is still valid
+      let isPayOSLinkValid = true;
+      if (!isExpired && existing.transactionId) {
+        try {
+          if (payos && typeof payos.getPaymentLinkInformation === 'function') {
+            const payosInfo = await payos.getPaymentLinkInformation(existing.transactionId);
+            // PayOS returns status: PENDING, PAID, CANCELLED, EXPIRED
+            if (payosInfo && (payosInfo.status === 'CANCELLED' || payosInfo.status === 'EXPIRED')) {
+              isPayOSLinkValid = false;
+              logger.info('PayOS link is no longer valid', {
+                bookingId,
+                paymentId: existing._id,
+                payosStatus: payosInfo.status,
+              });
+            }
+          }
+        } catch (payosCheckError) {
+          // If we can't check PayOS, assume the link might be invalid if it's old
+          logger.warn('Could not verify PayOS link status', {
+            bookingId,
+            paymentId: existing._id,
+            error: payosCheckError.message,
+          });
+          // If payment is more than 10 minutes old, consider it potentially invalid
+          const createdAt = new Date(existing.createdAt);
+          const ageMinutes = (now - createdAt) / (1000 * 60);
+          if (ageMinutes > 10) {
+            isPayOSLinkValid = false;
+          }
+        }
+      }
+
+      // If payment expired or PayOS link invalid, cancel it and create new one
+      if (isExpired || !isPayOSLinkValid) {
+        logger.info('Cancelling expired/invalid payment and creating new one', {
+          bookingId,
+          paymentId: existing._id,
+          isExpired,
+          isPayOSLinkValid,
+        });
+        
+        existing.status = PAYMENT_STATUS.CANCELLED;
+        existing.gatewayResponse = {
+          ...existing.gatewayResponse,
+          cancelledAt: new Date(),
+          cancelReason: isExpired ? 'Payment link expired' : 'PayOS link no longer valid',
+        };
+        await existing.save({ session });
+        
+        // Continue to create new payment below
+      } else {
+        // Payment is still valid, return existing
+        await session.commitTransaction();
+        return formatPaymentOption(existing, totalAmount);
+      }
     }
 
     const orderCode = generateOrderCode();
