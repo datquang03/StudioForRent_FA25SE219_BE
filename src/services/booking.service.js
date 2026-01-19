@@ -697,6 +697,57 @@ export const cancelBooking = async (bookingId) => {
       }
 
       booking.status = BOOKING_STATUS.CANCELLED;
+
+      // Cancel all pending payments for this booking
+      try {
+        const pendingPayments = await Payment.find({
+          bookingId: booking._id,
+          status: PAYMENT_STATUS.PENDING
+        }).session(session);
+
+        // Import PayOS once outside the loop for better performance
+        let payosClient = null;
+        try {
+          const payosModule = await import('../config/payos.js');
+          payosClient = payosModule.default;
+        } catch (importErr) {
+          console.warn('Failed to import PayOS module', { error: importErr.message });
+        }
+
+        for (const payment of pendingPayments) {
+          payment.status = PAYMENT_STATUS.CANCELLED;
+          payment.gatewayResponse = {
+            ...payment.gatewayResponse,
+            cancelledAt: new Date(),
+            cancelReason: 'Booking cancelled by user'
+          };
+          await payment.save({ session });
+
+          // Cancel payment link with PayOS (best-effort, don't block if fails)
+          if (payosClient && typeof payosClient.cancelPaymentLink === 'function') {
+            try {
+              await payosClient.cancelPaymentLink(Number(payment.transactionId), 'Booking cancelled');
+            } catch (payosErr) {
+              console.warn('Failed to cancel PayOS payment link', {
+                paymentId: payment._id,
+                transactionId: payment.transactionId,
+                error: payosErr.message
+              });
+            }
+          }
+        }
+
+        if (pendingPayments.length > 0) {
+          console.log(`Cancelled ${pendingPayments.length} pending payment(s) for booking ${bookingId}`);
+        }
+      } catch (paymentCancelErr) {
+        // Log but don't block booking cancellation
+        console.error('Failed to cancel pending payments', {
+          bookingId,
+          error: paymentCancelErr.message
+        });
+      }
+
       await booking.save({ session });
 
       // free schedule if linked
