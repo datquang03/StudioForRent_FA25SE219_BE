@@ -37,7 +37,6 @@ const scheduleSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Booking",
       default: null,
-      // Note: unique constraint removed - multiple schedules can be available (bookingId = null)
     },
   },
   {

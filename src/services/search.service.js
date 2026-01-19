@@ -136,7 +136,6 @@ export const getSearchSuggestions = async (keyword, limit = 10) => {
   const safeLimit = Math.min(Math.max(parseInt(limit) || 10, 1), 20);
   
   // Search in parallel across main entities
-  // Fix #2: Unify equipment filter with globalSearch
   const [studios, equipment, services, setDesigns] = await Promise.all([
     Studio.find({
       status: STUDIO_STATUS.ACTIVE,
