@@ -135,10 +135,10 @@ export const createPaymentOptions = async (bookingId) => {
             paymentId: payment._id,
             error: payosCheckError.message,
           });
-          // If payment is more than 10 minutes old, consider it potentially invalid
+           // If payment is more than 15 minutes old, consider it potentially invalid (matches expiresAt)
           const createdAt = new Date(payment.createdAt);
           const ageMinutes = (now - createdAt) / (1000 * 60);
-          if (ageMinutes > 10) {
+          if (ageMinutes > 15) {
             isPayOSLinkValid = false;
           }
         }
@@ -784,10 +784,10 @@ export const createPaymentForOption = async (bookingId, opts = {}) => {
             paymentId: existing._id,
             error: payosCheckError.message,
           });
-          // If payment is more than 10 minutes old, consider it potentially invalid
+          // If payment is more than 15 minutes old, consider it potentially invalid
           const createdAt = new Date(existing.createdAt);
           const ageMinutes = (now - createdAt) / (1000 * 60);
-          if (ageMinutes > 10) {
+          if (ageMinutes > 15) {
             isPayOSLinkValid = false;
           }
         }

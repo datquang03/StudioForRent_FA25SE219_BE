@@ -449,10 +449,10 @@ export const createSetDesignPayment = async (orderId, paymentData, user) => {
             paymentId: existingPayment._id,
             error: payosCheckError.message,
           });
-          // If payment is more than 10 minutes old, consider it potentially invalid
+          // If payment is more than 15 minutes old, consider it potentially invalid (aligned with expiresAt)
           const createdAt = new Date(existingPayment.createdAt);
           const ageMinutes = (now - createdAt) / (1000 * 60);
-          if (ageMinutes > 10) {
+          if (ageMinutes > 15) {
             isPayOSLinkValid = false;
           }
         }
@@ -695,7 +695,6 @@ export const handleSetDesignPaymentWebhook = async (webhookPayload) => {
 
     if (isTestWebhook) {
       await session.commitTransaction();
-      session.endSession();
       logger.info('PayOS test/verification webhook received for SetDesign - responding with success');
       return { success: true, message: 'Webhook endpoint verified' };
     }
