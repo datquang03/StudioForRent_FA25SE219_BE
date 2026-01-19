@@ -53,6 +53,75 @@ export const createPaymentOptionsController = async (req, res) => {
 };
 
 /**
+ * Get payment options info (without creating payment links)
+ * GET /api/payments/options-info/:bookingId
+ * Returns calculated payment options for frontend display
+ */
+export const getPaymentOptionsInfoController = async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+
+    if (!bookingId || !isValidObjectId(bookingId)) {
+      throw new ValidationError('ID booking không hợp lệ');
+    }
+
+    const booking = await Booking.findById(bookingId).select('finalAmount status');
+
+    if (!booking) {
+      throw new NotFoundError('Booking không tồn tại');
+    }
+
+    if (booking.status === 'cancelled') {
+      throw new ValidationError('Booking đã bị hủy');
+    }
+
+    if (booking.status === 'completed') {
+      throw new ValidationError('Booking đã hoàn thành');
+    }
+
+    const options = [
+      {
+        percentage: 30,
+        amount: Math.ceil(booking.finalAmount * 0.3),
+        payType: 'prepay_30',
+        description: 'Đặt cọc 30%',
+        remainingAmount: booking.finalAmount - Math.ceil(booking.finalAmount * 0.3)
+      },
+      {
+        percentage: 50,
+        amount: Math.ceil(booking.finalAmount * 0.5),
+        payType: 'prepay_50',
+        description: 'Đặt cọc 50%',
+        remainingAmount: booking.finalAmount - Math.ceil(booking.finalAmount * 0.5)
+      },
+      {
+        percentage: 100,
+        amount: booking.finalAmount,
+        payType: 'full',
+        description: 'Thanh toán đầy đủ',
+        remainingAmount: 0
+      }
+    ];
+
+    res.status(200).json({
+      success: true,
+      message: 'Lấy thông tin tùy chọn thanh toán thành công',
+      data: {
+        bookingId,
+        totalAmount: booking.finalAmount,
+        options
+      }
+    });
+  } catch (error) {
+    logger.error('Get payment options info error:', error);
+    res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message || 'Lỗi máy chủ nội bộ'
+    });
+  }
+};
+
+/**
  * PayOS webhook handler
  * POST /api/payments/webhook
  */

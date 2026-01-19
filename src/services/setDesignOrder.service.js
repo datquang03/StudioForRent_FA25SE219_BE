@@ -343,6 +343,49 @@ export const cancelSetDesignOrder = async (orderId, user, reason) => {
     order.cancelledAt = new Date();
     order.cancelReason = reason || 'Cancelled by customer';
 
+    // Cancel all pending payments for this order
+    try {
+      const pendingPayments = await SetDesignPayment.find({
+        orderId: order._id,
+        status: PAYMENT_STATUS.PENDING
+      });
+
+      for (const payment of pendingPayments) {
+        payment.status = PAYMENT_STATUS.CANCELLED;
+        payment.gatewayResponse = {
+          ...payment.gatewayResponse,
+          cancelledAt: new Date(),
+          cancelReason: 'Order cancelled by user'
+        };
+        await payment.save();
+
+        // Cancel payment link with PayOS (best-effort, don't block if fails)
+        try {
+          if (payos && typeof payos.cancelPaymentLink === 'function') {
+            await payos.cancelPaymentLink(Number(payment.transactionId), 'Order cancelled');
+            logger.info(`PayOS payment link cancelled for SetDesign: ${payment.transactionId}`);
+          }
+        } catch (payosErr) {
+          // Log but don't fail - PayOS cancel is best-effort
+          logger.warn('Failed to cancel PayOS payment link for SetDesign', {
+            paymentId: payment._id,
+            transactionId: payment.transactionId,
+            error: payosErr.message
+          });
+        }
+      }
+
+      if (pendingPayments.length > 0) {
+        logger.info(`Cancelled ${pendingPayments.length} pending payment(s) for SetDesign order ${orderId}`);
+      }
+    } catch (paymentCancelErr) {
+      // Log but don't block order cancellation
+      logger.error('Failed to cancel pending SetDesign payments', {
+        orderId,
+        error: paymentCancelErr.message
+      });
+    }
+
     await order.save();
 
     logger.info(`Set design order ${orderId} cancelled by customer ${user._id}`);
@@ -635,18 +678,31 @@ export const handleSetDesignPaymentWebhook = async (webhookPayload) => {
 
   try {
     const body = webhookPayload?.body || webhookPayload || {};
-    const { orderCode, code, desc, data } = body;
+    const { data } = body;
 
     // Verify webhook signature (signature is in body.signature per PayOS format)
     if (!verifyPayOSWebhookSignature(body)) {
-      logger.warn('Invalid PayOS webhook signature', { orderCode });
+      logger.warn('Invalid PayOS webhook signature', { orderCode: body.orderCode || data?.orderCode });
       throw new ValidationError('Invalid webhook signature');
     }
 
-    logger.info('Processing set design payment webhook', { orderCode, code });
+    // Extract payment result from data (NOT from body root level)
+    // PayOS structure: body.code = request status, body.data.code = payment result
+    const paymentCode = data?.code || body.code;
+    const orderCode = data?.orderCode || body.orderCode;
+    const amount = data?.amount;
+    const desc = data?.desc || body.desc;
+
+    logger.info('Processing set design payment webhook', { 
+      orderCode, 
+      paymentCode,
+      bodyCode: body.code,
+      dataCode: data?.code,
+      amount 
+    });
 
     // Find payment by transaction ID
-    const transactionId = orderCode?.toString() || data?.orderCode?.toString();
+    const transactionId = orderCode?.toString();
     if (!transactionId) {
       throw new ValidationError('Missing orderCode in webhook');
     }
@@ -665,14 +721,16 @@ export const handleSetDesignPaymentWebhook = async (webhookPayload) => {
     }
 
     // Update payment status based on webhook
-    const isSuccess = code === '00' ;
+    // PayOS returns code "00" for successful payment in body.data
+    const isSuccess = paymentCode === '00';
     
     logger.info('SetDesign webhook - processing payment', {
       isSuccess,
-      code,
+      paymentCode,
       paymentId: payment._id,
       paymentStatus: payment.status,
       paymentAmount: payment.amount,
+      webhookAmount: amount,
       orderId: payment.orderId,
     });
 

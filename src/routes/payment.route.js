@@ -4,6 +4,7 @@ import { protect, authorize } from '../middlewares/auth.js';
 import { generalLimiter } from '../middlewares/rateLimiter.js';
 import {
   createPaymentOptionsController,
+  getPaymentOptionsInfoController,
   paymentWebhookController,
   getPaymentStatusController,
   createSinglePaymentController,
@@ -34,6 +35,18 @@ router.post(
   protect,
   authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN),
   createPaymentOptionsController
+);
+
+/**
+ * GET /api/payments/options-info/:bookingId
+ * Get payment options info WITHOUT creating payment links (for on-demand approach)
+ */
+router.get(
+  '/options-info/:bookingId',
+  generalLimiter,
+  protect,
+  authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN),
+  getPaymentOptionsInfoController
 );
 
 /**
