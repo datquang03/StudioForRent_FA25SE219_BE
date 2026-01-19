@@ -1,14 +1,17 @@
 //#region Imports
 import mongoose from 'mongoose';
+import { randomBytes } from 'crypto';
 import crypto from 'crypto';
 import SetDesign from '../models/SetDesign/setDesign.model.js';
 import SetDesignOrder, { SET_DESIGN_ORDER_STATUS } from '../models/SetDesignOrder/setDesignOrder.model.js';
 import SetDesignPayment from '../models/SetDesignPayment/setDesignPayment.model.js';
-import payos, { getPayOSCreatePaymentFn } from '../config/payos.js';
+import payos from '../config/payos.js';
 import { PAYMENT_STATUS, PAY_TYPE } from '../utils/constants.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
 import { NOTIFICATION_TYPE } from '../utils/constants.js';
+import { createAndSendNotification } from './notification.service.js';
+import { claimIdempotencyKey } from '../utils/redisHelpers.js';
 //#endregion
 
 // PayOS description maximum length
@@ -18,21 +21,24 @@ const truncate = (str, len) => (str && str.length > len ? str.slice(0, len) : st
 
 /**
  * Generate unique order code for PayOS
- * PayOS requires: positive integer, max 9007199254740991
+ * Uses timestamp + random 3 digits for uniqueness (safe for PayOS number constraints)
+ * Same method as payment.service.js for consistency
  */
 const generateOrderCode = () => {
-  // Use timestamp in seconds + random to keep number smaller
-  const timestampSeconds = Math.floor(Date.now() / 1000);
-  const random = Math.floor(Math.random() * 10000); // 0-9999
-  return Number(`${timestampSeconds}${random.toString().padStart(4, '0')}`);
+  // Date.now() is ~13 digits. Max safe integer is 16 digits.
+  // We can append 3 digits safely.
+  const timestamp = Date.now();
+  const random = crypto.randomBytes(2).readUInt16BE(0) % 1000;
+  return Number(`${timestamp}${random.toString().padStart(3, '0')}`);
 };
 
 /**
  * Generate unique payment code
+ * Format: SDP-{timestamp}-{percentage}-{random}
  */
 const generatePaymentCode = (orderId, percentage) => {
   const timestamp = Date.now();
-  const random = crypto.randomBytes(4).toString('hex').toUpperCase();
+  const random = randomBytes(4).toString('hex').toUpperCase();
   return `SDP-${timestamp}-${percentage}-${random}`;
 };
 
@@ -416,12 +422,69 @@ export const createSetDesignPayment = async (orderId, paymentData, user) => {
     }).session(session);
 
     if (existingPayment) {
-      await session.commitTransaction();
-      return {
-        payment: existingPayment,
-        checkoutUrl: existingPayment.qrCodeUrl,
-        message: 'Đã có link thanh toán cho đơn hàng này',
-      };
+      // Check if the existing payment link has expired
+      const now = new Date();
+      const isExpired = existingPayment.expiresAt && new Date(existingPayment.expiresAt) < now;
+      
+      // Also check with PayOS if the link is still valid (optional - for extra safety)
+      let isPayOSLinkValid = true;
+      if (!isExpired && existingPayment.transactionId) {
+        try {
+          if (payos && typeof payos.getPaymentLinkInformation === 'function') {
+            const payosInfo = await payos.getPaymentLinkInformation(existingPayment.transactionId);
+            // PayOS returns status: PENDING, PAID, CANCELLED, EXPIRED
+            if (payosInfo && (payosInfo.status === 'CANCELLED' || payosInfo.status === 'EXPIRED')) {
+              isPayOSLinkValid = false;
+              logger.info('PayOS link is no longer valid', {
+                orderId,
+                paymentId: existingPayment._id,
+                payosStatus: payosInfo.status,
+              });
+            }
+          }
+        } catch (payosCheckError) {
+          // If we can't check PayOS, assume the link might be invalid if it's old
+          logger.warn('Could not verify PayOS link status', {
+            orderId,
+            paymentId: existingPayment._id,
+            error: payosCheckError.message,
+          });
+          // If payment is more than 15 minutes old, consider it potentially invalid (aligned with expiresAt)
+          const createdAt = new Date(existingPayment.createdAt);
+          const ageMinutes = (now - createdAt) / (1000 * 60);
+          if (ageMinutes > 15) {
+            isPayOSLinkValid = false;
+          }
+        }
+      }
+
+      // If payment expired or PayOS link invalid, cancel it and create new one
+      if (isExpired || !isPayOSLinkValid) {
+        logger.info('Cancelling expired/invalid payment and creating new one', {
+          orderId,
+          paymentId: existingPayment._id,
+          isExpired,
+          isPayOSLinkValid,
+        });
+        
+        existingPayment.status = PAYMENT_STATUS.CANCELLED;
+        existingPayment.gatewayResponse = {
+          ...existingPayment.gatewayResponse,
+          cancelledAt: new Date(),
+          cancelReason: isExpired ? 'Payment link expired' : 'PayOS link no longer valid',
+        };
+        await existingPayment.save({ session });
+        
+        // Continue to create new payment below
+      } else {
+        // Payment is still valid, return existing
+        await session.commitTransaction();
+        return {
+          payment: existingPayment,
+          checkoutUrl: existingPayment.qrCodeUrl,
+          message: 'Đã có link thanh toán cho đơn hàng này',
+        };
+      }
     }
 
     // Calculate remaining amount
@@ -510,22 +573,34 @@ export const createSetDesignPayment = async (orderId, paymentData, user) => {
       logger.info('Creating PayOS payment link for set design order', {
         orderCode: payosOrderCode,
         amount: paymentAmount,
+        description: paymentRequestData.description,
       });
 
-      const createPaymentLinkFn = getPayOSCreatePaymentFn();
-      const paymentLinkResponse = await createPaymentLinkFn(paymentRequestData);
-
-      if (!paymentLinkResponse || !paymentLinkResponse.checkoutUrl) {
-        throw new Error('PayOS did not return a valid payment link response');
+      // SDK compatibility: support createPaymentLink or paymentRequests.create (same as payment.service.js)
+      let paymentLinkResponse;
+      if (payos && typeof payos.createPaymentLink === 'function') {
+        paymentLinkResponse = await payos.createPaymentLink(paymentRequestData);
+      } else if (payos && typeof payos.paymentRequests?.create === 'function') {
+        paymentLinkResponse = await payos.paymentRequests.create(paymentRequestData);
+      } else {
+        throw new Error('PayOS client does not support createPaymentLink or paymentRequests.create');
       }
 
-      checkoutUrl = paymentLinkResponse.checkoutUrl;
+      // Normalize response (support different SDK shapes) - same pattern as payment.service.js
+      checkoutUrl = paymentLinkResponse?.checkoutUrl || paymentLinkResponse?.data?.checkoutUrl || paymentLinkResponse?.data?.url || paymentLinkResponse?.url || null;
       qrCodeUrl = paymentLinkResponse?.qrCode || paymentLinkResponse?.data?.qrCode || null;
       gatewayResponse = {
         ...gatewayResponse,
         paymentLinkId: paymentLinkResponse?.paymentLinkId || paymentLinkResponse?.data?.id || null,
         qrCode: qrCodeUrl,
+        bin: paymentLinkResponse?.bin || paymentLinkResponse?.data?.bin || null,
+        accountNumber: paymentLinkResponse?.accountNumber || paymentLinkResponse?.data?.accountNumber || null,
       };
+
+      logger.info('PayOS response received for set design', {
+        orderCode: payosOrderCode,
+        hasCheckoutUrl: !!checkoutUrl,
+      });
 
       if (!checkoutUrl) {
         throw new Error('PayOS did not return a valid checkout URL');
@@ -533,12 +608,15 @@ export const createSetDesignPayment = async (orderId, paymentData, user) => {
     } catch (payosError) {
       logger.error('PayOS API Error for set design:', {
         message: payosError.message,
+        code: payosError.code,
         orderCode: payosOrderCode,
       });
-      throw new Error(`Payment gateway error: ${payosError.message}`);
+      throw new Error(`Payment gateway error: ${payosError.message || 'Failed to create payment link'}`);
     }
 
-    // Create payment record
+    // Create payment record with expiration time (15 minutes - same as payment.service.js)
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
     const payment = new SetDesignPayment({
       orderId,
       paymentCode,
@@ -548,6 +626,7 @@ export const createSetDesignPayment = async (orderId, paymentData, user) => {
       transactionId: payosOrderCode.toString(),
       qrCodeUrl: checkoutUrl,
       gatewayResponse,
+      expiresAt,
     });
 
     await payment.save({ session });
@@ -580,52 +659,8 @@ export const createSetDesignPayment = async (orderId, paymentData, user) => {
 };
 
 /**
- * Verify PayOS webhook signature
- * @param {Object} body - Webhook body
- * @returns {boolean} Is signature valid
- */
-const verifyPayOSWebhookSignature = (body) => {
-  try {
-    const signature = body.signature;
-    if (!signature || !process.env.PAYOS_CHECKSUM_KEY || !body.data) {
-      return false;
-    }
-
-    // PayOS signature: sorted key=value from body.data, null/undefined as empty string
-    const dataToSign = Object.keys(body.data)
-      .sort()
-      .map(key => {
-        const value = body.data[key];
-        if (value === null || value === undefined) {
-          return `${key}=`;
-        }
-        const serializedValue = typeof value === 'object' 
-          ? JSON.stringify(value) 
-          : String(value);
-        return `${key}=${serializedValue}`;
-      })
-      .join('&');
-
-    const computedSignature = crypto
-      .createHmac('sha256', process.env.PAYOS_CHECKSUM_KEY)
-      .update(dataToSign)
-      .digest('hex');
-
-    // Use constant-time comparison to prevent timing attacks
-    const computedBuffer = Buffer.from(computedSignature.toLowerCase(), 'utf8');
-    const receivedBuffer = Buffer.from(signature.toString().toLowerCase(), 'utf8');
-    if (computedBuffer.length !== receivedBuffer.length) {
-      return false;
-    }
-    return crypto.timingSafeEqual(computedBuffer, receivedBuffer);
-  } catch (error) {
-    logger.error('Webhook signature verification error:', error);
-    return false;
-  }
-};
-
-/**
  * Handle PayOS webhook for set design payment
+ * Uses same pattern as payment.service.js for consistency
  * @param {Object} webhookPayload - Webhook payload from PayOS
  * @returns {Object} Webhook processing result
  */
@@ -634,52 +669,160 @@ export const handleSetDesignPaymentWebhook = async (webhookPayload) => {
   session.startTransaction();
 
   try {
-    const body = webhookPayload?.body || webhookPayload || {};
-    const { orderCode, code, desc, data } = body;
+    // Accept either raw body or an object { body, headers }
+    const incoming = webhookPayload && webhookPayload.body ? webhookPayload : { body: webhookPayload, headers: {} };
+    const body = incoming.body || {};
+    const headers = incoming.headers || {};
 
-    // Verify webhook signature (signature is in body.signature per PayOS format)
-    if (!verifyPayOSWebhookSignature(body)) {
-      logger.warn('Invalid PayOS webhook signature', { orderCode });
-      throw new ValidationError('Invalid webhook signature');
+    // Enhanced debug logging (same as payment.service.js)
+    logger.info('=== PayOS SetDesign Webhook Received ===');
+    logger.info('Webhook body:', JSON.stringify(body, null, 2));
+    logger.info('Webhook headers:', JSON.stringify(Object.keys(headers), null, 2));
+    logger.info('Body keys:', Object.keys(body));
+    logger.info('Has orderCode:', !!body.orderCode);
+    logger.info('Has data.orderCode:', !!body.data?.orderCode);
+    logger.info('Body code:', body.code);
+
+    // Handle PayOS test/verification webhook (sent when configuring webhook URL)
+    // Same pattern as payment.service.js
+    const hasOrderCode = body.orderCode || body.data?.orderCode;
+    const isTestWebhook = !body || Object.keys(body).length === 0 ||
+      (body.code === '00' && !hasOrderCode) ||
+      (body.desc === 'success' && !hasOrderCode) ||
+      (body.success === true && Object.keys(body).length === 1);
+
+    logger.info('Is test webhook:', isTestWebhook, 'hasOrderCode:', hasOrderCode);
+
+    if (isTestWebhook) {
+      await session.commitTransaction();
+      logger.info('PayOS test/verification webhook received for SetDesign - responding with success');
+      return { success: true, message: 'Webhook endpoint verified' };
     }
 
-    logger.info('Processing set design payment webhook', { orderCode, code });
+    // Validate webhook payload for real transactions
+    if (!webhookPayload) {
+      throw new ValidationError('Dữ liệu webhook không hợp lệ');
+    }
+
+    // Verify webhook signature using SDK or fallback HMAC (same as payment.service.js)
+    let verifiedData;
+    try {
+      if (payos && typeof payos.verifyPaymentWebhookData === 'function') {
+        try {
+          verifiedData = payos.verifyPaymentWebhookData(body);
+        } catch (sdkError) {
+          logger.error('SDK verification failed for SetDesign:', sdkError.message);
+          throw sdkError;
+        }
+      } else {
+        // Fallback HMAC verification
+        const checksumKey = process.env.PAYOS_CHECKSUM_KEY;
+        const signature = body.signature;
+
+        if (!checksumKey) {
+          throw new ValidationError('Missing PAYOS_CHECKSUM_KEY for webhook verification');
+        }
+
+        if (!body.data) {
+          throw new ValidationError('Webhook missing data field');
+        }
+
+        // PayOS signature: sorted key=value pairs, null/undefined as empty string
+        const dataToSign = Object.keys(body.data)
+          .sort()
+          .map(key => {
+            const value = body.data[key];
+            if (value === null || value === undefined) {
+              return `${key}=`;
+            }
+            const serializedValue = typeof value === 'object'
+              ? JSON.stringify(value)
+              : String(value);
+            return `${key}=${serializedValue}`;
+          })
+          .join('&');
+
+        const computedSignature = crypto.createHmac('sha256', checksumKey).update(dataToSign).digest('hex');
+
+        if (!signature || computedSignature.toLowerCase() !== signature.toString().toLowerCase()) {
+          logger.error('Signature mismatch for SetDesign!', {
+            expected: computedSignature.substring(0, 16) + '...',
+            received: signature?.substring(0, 16) + '...',
+          });
+          throw new ValidationError('Invalid webhook signature');
+        }
+
+        verifiedData = body.data;
+      }
+    } catch (verifyError) {
+      logger.error('Webhook verification failed for SetDesign:', verifyError);
+      throw new ValidationError('Invalid webhook signature: ' + (verifyError.message || 'verification failed'));
+    }
+
+    const orderCode = verifiedData.orderCode;
+    const amount = verifiedData.amount;
+    const code = verifiedData.code;
+    const desc = verifiedData.desc;
+
+    // Idempotency check via Redis (same as payment.service.js)
+    const idempotencyKey = `payos:setdesign:webhook:${orderCode}`;
+    let claimed = null;
+    try {
+      claimed = await claimIdempotencyKey(idempotencyKey, 30);
+    } catch (err) {
+      logger.warn('claimIdempotencyKey threw for SetDesign, continuing without redis claim', { error: err?.message || err });
+      claimed = null;
+    }
+
+    if (claimed === false) {
+      await session.commitTransaction();
+      logger.info(`Duplicate SetDesign webhook skipped for orderCode=${orderCode}`);
+      return { success: true, message: 'Duplicate webhook skipped' };
+    }
+
+    logger.info('SetDesign webhook verified', { orderCode, code, desc });
 
     // Find payment by transaction ID
-    const transactionId = orderCode?.toString() || data?.orderCode?.toString();
-    if (!transactionId) {
-      throw new ValidationError('Missing orderCode in webhook');
-    }
+    const payment = await SetDesignPayment.findOne({
+      transactionId: orderCode.toString(),
+    }).session(session);
 
-    const payment = await SetDesignPayment.findOne({ transactionId }).session(session);
     if (!payment) {
-      // Not a set design payment, ignore (generic response to prevent info leakage)
       await session.commitTransaction();
-      return { success: true };
+      logger.warn(`SetDesign payment not found for orderCode: ${orderCode}`);
+      // Return success to avoid PayOS retrying for non-existent payments
+      return { success: true, message: 'Payment not found for this order type' };
     }
 
     // Check if already processed
-    if (payment.status !== PAYMENT_STATUS.PENDING) {
+    if (payment.status === PAYMENT_STATUS.PAID) {
       await session.commitTransaction();
-      return { success: true };
+      logger.info(`SetDesign payment already processed: ${payment._id}`);
+      return { success: true, message: 'Payment already processed' };
     }
 
     // Update payment status based on webhook
-    const isSuccess = code === '00' ;
-    
+    const isPaid = code === '00';
+
     logger.info('SetDesign webhook - processing payment', {
-      isSuccess,
+      isPaid,
       code,
       paymentId: payment._id,
       paymentStatus: payment.status,
       paymentAmount: payment.amount,
+      webhookAmount: amount,
       orderId: payment.orderId,
     });
 
-    if (isSuccess) {
+    if (isPaid) {
       payment.status = PAYMENT_STATUS.PAID;
       payment.paidAt = new Date();
-      payment.gatewayResponse = { ...payment.gatewayResponse, webhook: body };
+      payment.gatewayResponse = {
+        ...payment.gatewayResponse,
+        webhookData: verifiedData,
+        webhookAmount: amount,
+        completedAt: new Date(),
+      };
 
       // Update order
       const order = await SetDesignOrder.findById(payment.orderId).session(session);
@@ -687,7 +830,7 @@ export const handleSetDesignPaymentWebhook = async (webhookPayload) => {
         const previousPaidAmount = order.paidAmount;
         // Prevent paidAmount from exceeding totalAmount (protection against race conditions/duplicate webhooks)
         order.paidAmount = Math.min(order.paidAmount + payment.amount, order.totalAmount);
-        
+
         logger.info('SetDesign webhook - updating order', {
           orderId: order._id,
           previousPaidAmount,
@@ -696,7 +839,7 @@ export const handleSetDesignPaymentWebhook = async (webhookPayload) => {
           paymentAmount: payment.amount,
           willBeFullyPaid: order.paidAmount >= order.totalAmount,
         });
-        
+
         // Check if fully paid
         if (order.paidAmount >= order.totalAmount) {
           order.paymentStatus = PAYMENT_STATUS.PAID;
@@ -704,7 +847,7 @@ export const handleSetDesignPaymentWebhook = async (webhookPayload) => {
           order.confirmedAt = new Date();
           logger.info('SetDesign order confirmed after full payment', { orderId: order._id });
         }
-        
+
         await order.save({ session });
       } else {
         logger.warn('SetDesign webhook - order not found', { orderId: payment.orderId });
@@ -714,7 +857,6 @@ export const handleSetDesignPaymentWebhook = async (webhookPayload) => {
       await session.commitTransaction();
 
       logger.info(`Set design payment ${payment._id} marked as PAID`);
-
 
       // Send notification after transaction commit
       // Note: If notification sending fails, payment status remains PAID and user may not be notified.
@@ -744,21 +886,32 @@ export const handleSetDesignPaymentWebhook = async (webhookPayload) => {
         // Consider implementing retry logic via background job or admin alert for production
       }
 
-      return { success: true };
+      return { success: true, message: 'Payment processed successfully' };
     } else {
-      payment.status = PAYMENT_STATUS.FAILED;
-      payment.gatewayResponse = { ...payment.gatewayResponse, webhook: body };
+      payment.status = PAYMENT_STATUS.CANCELLED;
+      payment.gatewayResponse = {
+        ...payment.gatewayResponse,
+        webhookData: verifiedData,
+        cancelledAt: new Date(),
+        failureReason: desc,
+      };
       await payment.save({ session });
       await session.commitTransaction();
 
-      logger.info(`Set design payment ${payment._id} marked as FAILED`);
+      logger.info(`Set design payment ${payment._id} marked as CANCELLED, reason: ${desc}`);
 
-      return { success: true };
+      return { success: true, message: 'Payment cancelled' };
     }
   } catch (error) {
     await session.abortTransaction();
-    logger.error('Handle set design payment webhook error:', error);
-    throw error;
+    if (error instanceof ValidationError || error instanceof NotFoundError) {
+      throw error;
+    }
+    logger.error('Handle set design payment webhook error:', {
+      error: error.message,
+      stack: error.stack,
+    });
+    throw new Error('Lỗi khi xử lý webhook thanh toán SetDesign');
   } finally {
     session.endSession();
   }
