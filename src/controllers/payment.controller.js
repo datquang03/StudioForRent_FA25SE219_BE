@@ -19,7 +19,7 @@ import { ValidationError, NotFoundError } from '../utils/errors.js';
 import Payment from '../models/Payment/payment.model.js';
 import Booking from '../models/Booking/booking.model.js';
 import Schedule from '../models/Schedule/schedule.model.js';
-import { USER_ROLES } from '../utils/constants.js';
+import { USER_ROLES, BOOKING_STATUS } from '../utils/constants.js';
 import logger from '../utils/logger.js';
 import { isValidObjectId, isPositiveNumber } from '../utils/validators.js';
 //#endregion
@@ -65,17 +65,23 @@ export const getPaymentOptionsInfoController = async (req, res) => {
       throw new ValidationError('ID booking không hợp lệ');
     }
 
-    const booking = await Booking.findById(bookingId).select('finalAmount status');
+    const booking = await Booking.findById(bookingId).select('finalAmount status userId');
 
     if (!booking) {
       throw new NotFoundError('Booking không tồn tại');
     }
 
-    if (booking.status === 'cancelled') {
+    // Check ownership for customer role
+    const isCustomer = req.user && req.user.role === USER_ROLES.CUSTOMER;
+    if (isCustomer && booking.userId?.toString() !== req.user._id?.toString()) {
+      throw new ValidationError('Bạn không có quyền truy cập thông tin thanh toán của booking này');
+    }
+
+    if (booking.status === BOOKING_STATUS.CANCELLED) {
       throw new ValidationError('Booking đã bị hủy');
     }
 
-    if (booking.status === 'completed') {
+    if (booking.status === BOOKING_STATUS.COMPLETED) {
       throw new ValidationError('Booking đã hoàn thành');
     }
 

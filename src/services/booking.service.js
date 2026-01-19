@@ -705,6 +705,15 @@ export const cancelBooking = async (bookingId) => {
           status: PAYMENT_STATUS.PENDING
         }).session(session);
 
+        // Import PayOS once outside the loop for better performance
+        let payosClient = null;
+        try {
+          const payosModule = await import('../config/payos.js');
+          payosClient = payosModule.default;
+        } catch (importErr) {
+          console.warn('Failed to import PayOS module', { error: importErr.message });
+        }
+
         for (const payment of pendingPayments) {
           payment.status = PAYMENT_STATUS.CANCELLED;
           payment.gatewayResponse = {
@@ -715,18 +724,16 @@ export const cancelBooking = async (bookingId) => {
           await payment.save({ session });
 
           // Cancel payment link with PayOS (best-effort, don't block if fails)
-          try {
-            const payos = (await import('../config/payos.js')).default;
-            if (payos && typeof payos.cancelPaymentLink === 'function') {
-              await payos.cancelPaymentLink(Number(payment.transactionId), 'Booking cancelled');
+          if (payosClient && typeof payosClient.cancelPaymentLink === 'function') {
+            try {
+              await payosClient.cancelPaymentLink(Number(payment.transactionId), 'Booking cancelled');
+            } catch (payosErr) {
+              console.warn('Failed to cancel PayOS payment link', {
+                paymentId: payment._id,
+                transactionId: payment.transactionId,
+                error: payosErr.message
+              });
             }
-          } catch (payosErr) {
-            // Log but don't fail - PayOS cancel is best-effort
-            console.warn('Failed to cancel PayOS payment link', {
-              paymentId: payment._id,
-              transactionId: payment.transactionId,
-              error: payosErr.message
-            });
           }
         }
 
