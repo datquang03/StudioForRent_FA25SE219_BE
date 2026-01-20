@@ -123,8 +123,6 @@ const promotionSchema = new mongoose.Schema(
       min: [0, 'Số lần sử dụng không được âm!']
     },
     
-    // ========== NEW FIELDS FOR BUSINESS CONSTRAINTS ==========
-    
     // Giới hạn số lần dùng per user (null = unlimited)
     usageLimitPerUser: {
       type: Number,
@@ -173,8 +171,6 @@ const promotionSchema = new mongoose.Schema(
       default: 0,
       min: [0, 'Tổng tiền đã giảm không được âm!']
     },
-    
-    // ========== END NEW FIELDS ==========
     
     // Trạng thái kích hoạt
     isActive: {
