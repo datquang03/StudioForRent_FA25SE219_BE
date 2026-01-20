@@ -149,12 +149,26 @@ const promotionSchema = new mongoose.Schema(
       startHour: {
         type: Number,
         min: [0, 'Giờ bắt đầu phải >= 0!'],
-        max: [23, 'Giờ bắt đầu phải <= 23!']
+        max: [23, 'Giờ bắt đầu phải <= 23!'],
+        validate: {
+          validator: function(value) {
+            if (value == null || this.applicableHours?.endHour == null) return true;
+            return value < this.applicableHours.endHour;
+          },
+          message: 'Giờ bắt đầu phải nhỏ hơn giờ kết thúc!'
+        }
       },
       endHour: {
         type: Number,
-        min: [0, 'Giờ kết thúc phải >= 0!'],
-        max: [23, 'Giờ kết thúc phải <= 23!']
+        min: [1, 'Giờ kết thúc phải >= 1!'],
+        max: [24, 'Giờ kết thúc phải <= 24!'],
+        validate: {
+          validator: function(value) {
+            if (value == null || this.applicableHours?.startHour == null) return true;
+            return this.applicableHours.startHour < value;
+          },
+          message: 'Giờ kết thúc phải lớn hơn giờ bắt đầu!'
+        }
       }
     },
     

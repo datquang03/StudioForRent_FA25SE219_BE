@@ -355,7 +355,7 @@ export const validateAndApplyPromotion = async (code, customerId, subtotal) => {
     
     if (currentHour < startHour || currentHour >= endHour) {
       throw new ValidationError(
-        `Mã này chỉ áp dụng từ ${startHour}:00 đến ${endHour}:00!`
+        `Mã này chỉ áp dụng từ ${startHour}:00 đến trước ${endHour}:00!`
       );
     }
   }
@@ -389,8 +389,15 @@ export const validateAndApplyPromotion = async (code, customerId, subtotal) => {
   // Kiểm tra budget còn lại (không cho discount vượt quá remaining budget)
   if (promotion.maxTotalDiscountAmount !== null) {
     const remainingBudget = promotion.maxTotalDiscountAmount - promotion.totalDiscountedAmount;
+    
+    // Nếu ngân sách đã hết, không cho áp dụng
+    if (remainingBudget <= 0) {
+      throw new ValidationError("Ngân sách cho mã khuyến mãi này đã hết, vui lòng chọn mã khác!");
+    }
+    
+    // Nếu discount vượt quá budget còn lại, giới hạn theo budget
     if (discountAmount > remainingBudget) {
-      discountAmount = Math.max(0, remainingBudget);
+      discountAmount = remainingBudget;
     }
   }
   
@@ -421,10 +428,13 @@ export const validateAndApplyPromotion = async (code, customerId, subtotal) => {
  * @returns {Object} - Updated promotion
  */
 export const incrementPromotionUsage = async (promotionId, discountAmount = 0) => {
+  // Validate discountAmount is non-negative to prevent budget cap bypass
+  if (discountAmount < 0) discountAmount = 0;
+  
   const updateData = { 
     $inc: { 
       usageCount: 1,
-      totalDiscountedAmount: discountAmount // NEW: Track total discounted for budget cap
+      totalDiscountedAmount: discountAmount // Track total discounted for budget cap
     } 
   };
 
