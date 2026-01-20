@@ -313,19 +313,64 @@ export const validateAndApplyPromotion = async (code, customerId, subtotal) => {
     if (promotion.usageLimit !== null && promotion.usageCount >= promotion.usageLimit) {
       throw new ValidationError("Mã khuyến mãi đã hết lượt sử dụng!");
     }
+
+    // Check budget cap (moved from isValid for better error message)
+    if (promotion.maxTotalDiscountAmount !== null && 
+        promotion.totalDiscountedAmount >= promotion.maxTotalDiscountAmount) {
+      throw new ValidationError("Mã khuyến mãi đã hết ngân sách!");
+    }
   }
 
-  // 3. Kiểm tra đơn hàng tối thiểu
+  // 3. Kiểm tra số lần sử dụng per user (NEW)
+  if (promotion.usageLimitPerUser !== null && customerId) {
+    const userUsageCount = await Booking.countDocuments({
+      userId: customerId,
+      promoId: promotion._id,
+      status: { $nin: ['cancelled'] } // Chỉ đếm booking không bị hủy
+    });
+
+    if (userUsageCount >= promotion.usageLimitPerUser) {
+      throw new ValidationError(
+        `Bạn đã sử dụng mã này ${userUsageCount} lần. Giới hạn: ${promotion.usageLimitPerUser} lần/người!`
+      );
+    }
+  }
+
+  // 4. Kiểm tra ngày áp dụng trong tuần (NEW)
+  if (promotion.applicableDays && promotion.applicableDays.length > 0) {
+    const todayDay = new Date().getDay(); // 0=Sunday, 1-6=Monday-Saturday
+    if (!promotion.applicableDays.includes(todayDay)) {
+      const dayNames = ['Chủ Nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
+      const validDays = promotion.applicableDays.map(d => dayNames[d]).join(', ');
+      throw new ValidationError(`Mã này chỉ áp dụng vào: ${validDays}!`);
+    }
+  }
+
+  // 5. Kiểm tra giờ áp dụng trong ngày (NEW)
+  if (promotion.applicableHours && 
+      promotion.applicableHours.startHour !== undefined && 
+      promotion.applicableHours.endHour !== undefined) {
+    const currentHour = new Date().getHours();
+    const { startHour, endHour } = promotion.applicableHours;
+    
+    if (currentHour < startHour || currentHour >= endHour) {
+      throw new ValidationError(
+        `Mã này chỉ áp dụng từ ${startHour}:00 đến ${endHour}:00!`
+      );
+    }
+  }
+
+  // 6. Kiểm tra đơn hàng tối thiểu
   if (subtotal < promotion.minOrderValue) {
     throw new ValidationError(
       `Đơn hàng tối thiểu ${promotion.minOrderValue.toLocaleString()} VND để áp dụng mã này!`
     );
   }
 
-  // 4. Kiểm tra đối tượng áp dụng (first_time / return customer)
+  // 7. Kiểm tra đối tượng áp dụng (first_time / return customer)
   if (promotion.applicableFor !== PROMOTION_APPLICABLE_FOR.ALL) {
     const bookingCount = await Booking.countDocuments({
-      customerId,
+      userId: customerId,
       status: { $in: ["confirmed", "checked_in", "completed"] },
     });
 
@@ -338,8 +383,17 @@ export const validateAndApplyPromotion = async (code, customerId, subtotal) => {
     }
   }
 
-  // 5. Tính discount amount
-  const discountAmount = promotion.calculateDiscount(subtotal);
+  // 8. Tính discount amount
+  let discountAmount = promotion.calculateDiscount(subtotal);
+  
+  // Kiểm tra budget còn lại (không cho discount vượt quá remaining budget)
+  if (promotion.maxTotalDiscountAmount !== null) {
+    const remainingBudget = promotion.maxTotalDiscountAmount - promotion.totalDiscountedAmount;
+    if (discountAmount > remainingBudget) {
+      discountAmount = Math.max(0, remainingBudget);
+    }
+  }
+  
   const finalAmount = subtotal - discountAmount;
 
   return {
@@ -349,6 +403,9 @@ export const validateAndApplyPromotion = async (code, customerId, subtotal) => {
       name: promotion.name,
       discountType: promotion.discountType,
       discountValue: promotion.discountValue,
+      usageLimitPerUser: promotion.usageLimitPerUser,
+      applicableDays: promotion.applicableDays,
+      applicableHours: promotion.applicableHours,
     },
     discountAmount,
     finalAmount: Math.max(0, finalAmount), // Không cho âm
@@ -358,14 +415,22 @@ export const validateAndApplyPromotion = async (code, customerId, subtotal) => {
 
 //#region Increment Usage Count (Called after booking confirmed)
 /**
- * Tăng usage count của promotion (gọi sau khi booking thành công)
- * @param {String} promotionId
+ * Tăng usage count của promotion và tracking total discounted (gọi sau khi booking thành công)
+ * @param {String} promotionId - ID của promotion
+ * @param {Number} discountAmount - Số tiền đã giảm cho đơn hàng này (để tracking budget)
  * @returns {Object} - Updated promotion
  */
-export const incrementPromotionUsage = async (promotionId) => {
+export const incrementPromotionUsage = async (promotionId, discountAmount = 0) => {
+  const updateData = { 
+    $inc: { 
+      usageCount: 1,
+      totalDiscountedAmount: discountAmount // NEW: Track total discounted for budget cap
+    } 
+  };
+
   const promotion = await Promotion.findByIdAndUpdate(
     promotionId,
-    { $inc: { usageCount: 1 } },
+    updateData,
     { new: true }
   );
 

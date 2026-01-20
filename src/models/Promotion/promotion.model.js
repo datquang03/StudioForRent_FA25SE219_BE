@@ -123,6 +123,59 @@ const promotionSchema = new mongoose.Schema(
       min: [0, 'Số lần sử dụng không được âm!']
     },
     
+    // ========== NEW FIELDS FOR BUSINESS CONSTRAINTS ==========
+    
+    // Giới hạn số lần dùng per user (null = unlimited)
+    usageLimitPerUser: {
+      type: Number,
+      default: null,
+      min: [1, 'Giới hạn sử dụng mỗi người phải >= 1!']
+    },
+    
+    // Ngày áp dụng trong tuần (0=Sunday, 1-6=Monday-Saturday)
+    // null hoặc [] = tất cả các ngày
+    applicableDays: {
+      type: [Number],
+      default: null,
+      validate: {
+        validator: function(arr) {
+          if (!arr || arr.length === 0) return true;
+          return arr.every(d => Number.isInteger(d) && d >= 0 && d <= 6);
+        },
+        message: 'Ngày áp dụng phải từ 0 (Chủ Nhật) đến 6 (Thứ 7)!'
+      }
+    },
+    
+    // Giờ áp dụng trong ngày (null = cả ngày)
+    applicableHours: {
+      startHour: {
+        type: Number,
+        min: [0, 'Giờ bắt đầu phải >= 0!'],
+        max: [23, 'Giờ bắt đầu phải <= 23!']
+      },
+      endHour: {
+        type: Number,
+        min: [0, 'Giờ kết thúc phải >= 0!'],
+        max: [23, 'Giờ kết thúc phải <= 23!']
+      }
+    },
+    
+    // Budget cap: Tổng ngân sách tối đa cho campaign (null = unlimited)
+    maxTotalDiscountAmount: {
+      type: Number,
+      default: null,
+      min: [0, 'Ngân sách tối đa phải >= 0!']
+    },
+    
+    // Tracking: Tổng số tiền đã giảm cho khách
+    totalDiscountedAmount: {
+      type: Number,
+      default: 0,
+      min: [0, 'Tổng tiền đã giảm không được âm!']
+    },
+    
+    // ========== END NEW FIELDS ==========
+    
     // Trạng thái kích hoạt
     isActive: {
       type: Boolean,
@@ -164,11 +217,17 @@ promotionSchema.methods = {
     // Kiểm tra active
     if (!this.isActive) return false;
     
-    // Kiểm tra thời gian
+    // Kiểm tra thời gian (startDate, endDate)
     if (now < this.startDate || now > this.endDate) return false;
     
-    // Kiểm tra usage limit
+    // Kiểm tra usage limit (tổng toàn hệ thống)
     if (this.usageLimit !== null && this.usageCount >= this.usageLimit) return false;
+    
+    // Kiểm tra budget cap
+    if (this.maxTotalDiscountAmount !== null && 
+        this.totalDiscountedAmount >= this.maxTotalDiscountAmount) {
+      return false;
+    }
     
     return true;
   },
