@@ -861,20 +861,17 @@ export const handleSetDesignPaymentWebhook = async (webhookPayload) => {
       // Send notification after transaction commit
       // Note: If notification sending fails, payment status remains PAID and user may not be notified.
       // This is acceptable as payment processing is critical, while notifications are supplementary.
-      // Failed notifications are logged and can be retried via admin dashboard or background job.
       try {
         if (order) {
-          await createAndSendNotification({
-            userId: order.customerId,
-            type: NOTIFICATION_TYPE.PAYMENT_SUCCESS,
-            data: {
-              orderId: order._id,
-              orderCode: order.orderCode,
-              paymentId: payment._id,
-              amount: payment.amount,
-              message: `Thanh toán ${payment.amount.toLocaleString()} VND cho đơn hàng ${order.orderCode} đã thành công`,
-            },
-          });
+          await createAndSendNotification(
+            order.customerId,
+            NOTIFICATION_TYPE.PAYMENT_SUCCESS,
+            'Thanh toán thành công',
+            `Thanh toán ${payment.amount.toLocaleString()} VND cho đơn hàng ${order.orderCode} đã thành công`,
+            false, // sendEmail
+            null, // io
+            order._id // relatedId
+          );
         }
       } catch (notifyErr) {
         logger.error('Failed to send payment success notification', { 
@@ -882,8 +879,6 @@ export const handleSetDesignPaymentWebhook = async (webhookPayload) => {
           paymentId: payment._id,
           orderId: order?._id 
         });
-        // Payment is already committed, notification failure is logged but does not affect payment status
-        // Consider implementing retry logic via background job or admin alert for production
       }
 
       return { success: true, message: 'Payment processed successfully' };

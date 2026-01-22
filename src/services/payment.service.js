@@ -455,6 +455,19 @@ export const handlePaymentWebhook = async (webhookPayload) => {
     }).session(session);
 
     if (!payment) {
+      // Check if it's a Set Design payment
+      const { default: SetDesignPayment } = await import('../models/SetDesignPayment/setDesignPayment.model.js');
+      const setDesignPayment = await SetDesignPayment.findOne({ transactionId: orderCode.toString() }).session(session);
+      
+      if (setDesignPayment) {
+        await session.commitTransaction();
+        session.endSession(); // End this session before starting a new one in the other service
+        
+        logger.info(`Redirecting webhook to SetDesign handler for orderCode: ${orderCode}`);
+        const { handleSetDesignPaymentWebhook } = await import('./setDesignOrder.service.js');
+        return await handleSetDesignPaymentWebhook(webhookPayload);
+      }
+
       await session.commitTransaction();
       logger.warn(`Payment not found for orderCode: ${orderCode}`);
       throw new NotFoundError('Không tìm thấy giao dịch thanh toán');
@@ -556,7 +569,9 @@ export const handlePaymentWebhook = async (webhookPayload) => {
     }
 
   } catch (error) {
-    await session.abortTransaction();
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
     if (error instanceof ValidationError || error instanceof NotFoundError) {
       throw error;
     }
