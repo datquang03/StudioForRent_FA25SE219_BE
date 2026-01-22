@@ -55,12 +55,16 @@ export const getAllStudios = async ({ page = 1, limit = 10, status, search, sort
   };
 };
 
-export const getStudioById = async (studioId) => {
+export const getStudioById = async (studioId, options = {}) => {
   const cacheKey = `studio:${studioId}`;
   
   // Try to get from cache first
   const cachedStudio = await cacheGet(cacheKey);
   if (cachedStudio) {
+    // If getting from cache, we still need to check status if publicOnly requested
+    if (options.publicOnly && cachedStudio.status !== STUDIO_STATUS.ACTIVE) {
+      throw new NotFoundError('Studio không tồn tại hoặc không khả dụng!');
+    }
     return cachedStudio;
   }
   
@@ -69,6 +73,11 @@ export const getStudioById = async (studioId) => {
   
   if (!studio) {
     throw new NotFoundError('Studio không tồn tại!');
+  }
+
+  // Check status if publicOnly requested
+  if (options.publicOnly && studio.status !== STUDIO_STATUS.ACTIVE) {
+    throw new NotFoundError('Studio không tồn tại hoặc không khả dụng!');
   }
   
   // Cache the result for 5 minutes (300 seconds)

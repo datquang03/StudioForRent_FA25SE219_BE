@@ -1,4 +1,5 @@
-import { REGEX_PATTERNS } from "./constants.js";
+import { REGEX_PATTERNS, REPORT_STATUS } from "./constants.js";
+import { ValidationError } from './errors.js';
 
 /**
  * Kiểm tra email hợp lệ
@@ -63,4 +64,44 @@ export const isPositiveNumber = (value) => {
 export const isValidObjectId = (id) => {
   const objectIdPattern = /^[0-9a-fA-F]{24}$/;
   return objectIdPattern.test(id);
+};
+
+// Define allowed transitions
+export const REPORT_TRANSITIONS = {
+  [REPORT_STATUS.PENDING]: [REPORT_STATUS.IN_PROGRESS, REPORT_STATUS.CLOSED, REPORT_STATUS.RESOLVED],
+  [REPORT_STATUS.IN_PROGRESS]: [REPORT_STATUS.RESOLVED, REPORT_STATUS.PENDING, REPORT_STATUS.CLOSED],
+  [REPORT_STATUS.RESOLVED]: [REPORT_STATUS.CLOSED, REPORT_STATUS.IN_PROGRESS],
+  [REPORT_STATUS.CLOSED]: [] // Final state
+};
+
+// Refund transitions (hardcoded strings in model currently, matching here)
+export const REFUND_TRANSITIONS = {
+  'PENDING_APPROVAL': ['APPROVED', 'REJECTED'],
+  // Allow rollback to PENDING_APPROVAL for correction (Human-in-the-loop flexibility)
+  'APPROVED': ['COMPLETED', 'PENDING_APPROVAL'],
+  'REJECTED': ['PENDING_APPROVAL'],
+  'COMPLETED': [] // Final state
+};
+
+/**
+ * Validate status transition
+ * @param {string} currentStatus - Current status
+ * @param {string} newStatus - Target status
+ * @param {object} allowedTransitions - Map of current status to allowed next statuses
+ * @param {string} entityName - Name of entity for error message
+ */
+export const validateStatusTransition = (currentStatus, newStatus, allowedTransitions, entityName = 'Entity') => {
+  if (!currentStatus || !newStatus) return;
+  if (currentStatus === newStatus) return;
+
+  const allowed = allowedTransitions[currentStatus] || [];
+  if (!allowed.includes(newStatus)) {
+    const detailMessage = allowed.length === 0
+      ? 'Trạng thái hiện tại là trạng thái cuối cùng và không thể thay đổi thêm.'
+      : `Các trạng thái hợp lệ tiếp theo: ${allowed.join(', ')}`;
+      
+    throw new ValidationError(
+      `Không thể chuyển trạng thái ${entityName} từ '${currentStatus}' sang '${newStatus}'. ${detailMessage}`
+    );
+  }
 };

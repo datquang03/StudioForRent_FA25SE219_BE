@@ -25,10 +25,15 @@ const refundSchema = new mongoose.Schema({
     trim: true
   },
 
-  // Status workflow (Manual Refund):
+  // Proof images uploaded by customer (optional, max 3)
+  proofImages: [{
+    type: String  // Cloudinary URLs
+  }],
+
+  // Refund status workflow
+  // Source of truth for allowed transitions: validators.js (REFUND_TRANSITIONS)
   // PENDING_APPROVAL → APPROVED → COMPLETED
-  //         ↓
-  //     REJECTED
+  //                └────────────→ REJECTED
   status: {
     type: String,
     enum: ['PENDING_APPROVAL', 'APPROVED', 'COMPLETED', 'REJECTED'],

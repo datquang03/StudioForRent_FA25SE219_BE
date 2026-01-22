@@ -8,6 +8,7 @@ import logger from '../utils/logger.js';
 import { createAndSendNotification } from './notification.service.js';
 import { NOTIFICATION_TYPE } from '../utils/constants.js';
 import RoomPolicyService from './roomPolicy.service.js';
+import { validateStatusTransition, REFUND_TRANSITIONS } from '../utils/validators.js';
 import Schedule from '../models/Schedule/schedule.model.js';
 
 // #region Helper Functions
@@ -71,7 +72,7 @@ export const calculateRefundAmount = async (bookingId) => {
  * @returns {object} Refund information
  */
 export const createRefundRequest = async (bookingId, opts = {}) => {
-  const { bankName, accountNumber, accountName, reason, userId } = opts;
+  const { bankName, accountNumber, accountName, reason, userId, proofImageUrls = [] } = opts;
 
   // Validate bank info
   if (!bankName || !accountNumber || !accountName) {
@@ -119,6 +120,7 @@ export const createRefundRequest = async (bookingId, opts = {}) => {
       bookingId,
       amount: refundAmount,
       reason: refundReason,
+      proofImages: proofImageUrls,
       requestedBy: userId,
       status: 'PENDING_APPROVAL',
       destinationBank: {
@@ -192,9 +194,8 @@ export const approveRefund = async (refundId, staffId) => {
     throw new NotFoundError('Yêu cầu hoàn tiền không tồn tại');
   }
 
-  if (refund.status !== 'PENDING_APPROVAL') {
-    throw new ValidationError(`Không thể phê duyệt yêu cầu ở trạng thái ${refund.status}`);
-  }
+  // Validate transition: PENDING_APPROVAL -> APPROVED
+  validateStatusTransition(refund.status, 'APPROVED', REFUND_TRANSITIONS, 'Refund');
 
   // Validate bank info exists
   if (!refund.destinationBank?.bankName || !refund.destinationBank?.accountNumber) {
@@ -246,9 +247,8 @@ export const rejectRefund = async (refundId, staffId, reason) => {
     throw new NotFoundError('Yêu cầu hoàn tiền không tồn tại');
   }
 
-  if (refund.status !== 'PENDING_APPROVAL') {
-    throw new ValidationError(`Không thể từ chối yêu cầu ở trạng thái ${refund.status}`);
-  }
+  // Validate transition: PENDING_APPROVAL -> REJECTED
+  validateStatusTransition(refund.status, 'REJECTED', REFUND_TRANSITIONS, 'Refund');
 
   refund.status = 'REJECTED';
   refund.approvedBy = staffId;
@@ -326,9 +326,8 @@ export const confirmManualRefund = async (refundId, staffId, opts = {}) => {
     throw new NotFoundError('Yêu cầu hoàn tiền không tồn tại');
   }
 
-  if (refund.status !== 'APPROVED') {
-    throw new ValidationError(`Không thể xác nhận yêu cầu ở trạng thái ${refund.status}. Chỉ có thể xác nhận yêu cầu đã được duyệt.`);
-  }
+  // Validate transition: APPROVED -> COMPLETED
+  validateStatusTransition(refund.status, 'COMPLETED', REFUND_TRANSITIONS, 'Refund');
 
   // Update to COMPLETED
   refund.status = 'COMPLETED';

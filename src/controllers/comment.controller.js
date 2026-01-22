@@ -7,6 +7,7 @@ import {
   deleteCommentService,
   toggleCommentLikeService,
   toggleReplyLikeService,
+  getCommentByIdService,
 } from "../services/comment.service.js";
 
 /**
@@ -125,6 +126,18 @@ export const likeComment = asyncHandler(async (req, res) => {
  */
 export const likeReply = asyncHandler(async (req, res) => {
   const comment = await toggleReplyLikeService(req.params.id, req.params.replyId, req.user._id);
+  res.status(200).json({
+    success: true,
+    data: comment,
+  });
+});
+
+/**
+ * Get comment by ID
+ * GET /api/comments/:id
+ */
+export const getCommentById = asyncHandler(async (req, res) => {
+  const comment = await getCommentByIdService(req.params.id);
   res.status(200).json({
     success: true,
     data: comment,

@@ -13,7 +13,7 @@ import {
   getMyRefunds,
   getAllRefunds
 } from '../services/refund.service.js';
-import { uploadImage } from '../services/upload.service.js';
+import { uploadImage, uploadMultipleImages } from '../services/upload.service.js';
 
 /**
  * Create refund request for a booking (Customer)
@@ -40,12 +40,22 @@ export const createRefundRequestController = asyncHandler(async (req, res) => {
     throw new ValidationError('Tên chủ tài khoản (accountName) là bắt buộc');
   }
 
+  // Handle proof images upload (optional, max 3)
+  let proofImageUrls = [];
+  if (req.files && req.files.length > 0) {
+    const uploadResults = await uploadMultipleImages(req.files, {
+      folder: 'studio-rental/refund-proofs'
+    });
+    proofImageUrls = uploadResults.map(r => r.url);
+  }
+
   const refund = await createRefundRequest(bookingId, {
     bankName: bankName.trim(),
     accountNumber: accountNumber.trim(),
     accountName: accountName.trim(),
     reason: reason ? reason.trim() : null,
-    userId
+    userId,
+    proofImageUrls
   });
 
   res.status(201).json({

@@ -4,6 +4,7 @@ import { Booking, Studio } from '../models/index.js';
 import Review from '../models/Review/review.model.js';
 import Comment from '../models/Comment/comment.model.js';
 import { REPORT_TARGET_TYPES, REPORT_ISSUE_TYPE, REPORT_STATUS, USER_ROLES } from '../utils/constants.js';
+import { validateStatusTransition, REPORT_TRANSITIONS } from '../utils/validators.js';
 import logger from '../utils/logger.js';
 
 export const createReport = async (data) => {
@@ -123,8 +124,8 @@ export const getReports = async (filter = {}, options = {}) => {
 
     return await Report.find(filter, null, options)
       .populate('bookingId') // Keep for legacy
-      .populate('reporterId', 'name email')
-      .populate('resolvedBy', 'name email')
+      .populate('reporterId', 'fullName email')
+      .populate('resolvedBy', 'fullName email')
       .exec();
   } catch (error) {
     if (error instanceof ValidationError) {
@@ -141,8 +142,8 @@ export const getMyReports = async (userId, filter = {}, options = {}) => {
     
     return await Report.find(query, null, options)
       .populate('bookingId')
-      .populate('reporterId', 'name email')
-      .populate('resolvedBy', 'name email')
+      .populate('reporterId', 'fullName email')
+      .populate('resolvedBy', 'fullName email')
       .sort({ createdAt: -1 })
       .exec();
   } catch (error) {
@@ -159,8 +160,8 @@ export const getReportById = async (id, user) => {
 
     const report = await Report.findById(id)
       .populate('bookingId')
-      .populate('reporterId', 'name email')
-      .populate('resolvedBy', 'name email')
+      .populate('reporterId', 'fullName email')
+      .populate('resolvedBy', 'fullName email')
       .exec();
 
     if (!report) {
@@ -223,15 +224,30 @@ export const updateReport = async (id, update) => {
       throw new ValidationError('Mô tả không được để trống');
     }
 
-    const report = await Report.findByIdAndUpdate(id, update, { new: true, runValidators: true })
-      .populate('bookingId')
-      .populate('reporterId', 'name email')
-      .populate('resolvedBy', 'name email')
-      .exec();
-
+    // Find report first to check current status
+    const report = await Report.findById(id);
     if (!report) {
       throw new NotFoundError('Báo cáo không tồn tại');
     }
+
+    // Validate Status Transition
+    if (update.status) {
+      validateStatusTransition(report.status, update.status, REPORT_TRANSITIONS, 'Report');
+    }
+
+    // Apply updates
+    Object.keys(update).forEach((key) => {
+      report[key] = update[key];
+    });
+
+    await report.save();
+    
+    // Populate for return
+    await report.populate([
+      { path: 'bookingId' },
+      { path: 'reporterId', select: 'fullName email' },
+      { path: 'resolvedBy', select: 'fullName email' }
+    ]);
 
     return report;
   } catch (error) {

@@ -237,3 +237,20 @@ export const toggleReplyLikeService = async (commentId, replyId, userId) => {
   await comment.save();
   return comment;
 };
+
+/**
+ * Get comment by ID
+ * @param {string} commentId - Comment ID
+ * @returns {Promise<Object>} Comment object
+ */
+export const getCommentByIdService = async (commentId) => {
+  const comment = await Comment.findById(commentId)
+    .populate("userId", "fullName avatar")
+    .populate("replies.userId", "fullName avatar role");
+
+  if (!comment) {
+    throw new NotFoundError("Comment not found");
+  }
+
+  return comment;
+};
