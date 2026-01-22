@@ -2,6 +2,7 @@ import asyncHandler from 'express-async-handler';
 import {
   createReport,
   getReports,
+  getMyReports,
   getReportById,
   updateReport,
   deleteReport
@@ -18,6 +19,11 @@ export const createReportController = asyncHandler(async (req, res) => {
 
 export const getReportsController = asyncHandler(async (req, res) => {
   const reports = await getReports(req.query);
+  res.status(200).json({ success: true, data: reports });
+});
+
+export const getMyReportsController = asyncHandler(async (req, res) => {
+  const reports = await getMyReports(req.user._id, req.query);
   res.status(200).json({ success: true, data: reports });
 });
 

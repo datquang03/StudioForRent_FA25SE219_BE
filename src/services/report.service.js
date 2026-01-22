@@ -135,6 +135,22 @@ export const getReports = async (filter = {}, options = {}) => {
   }
 };
 
+export const getMyReports = async (userId, filter = {}, options = {}) => {
+  try {
+    const query = { ...filter, reporterId: userId };
+    
+    return await Report.find(query, null, options)
+      .populate('bookingId')
+      .populate('reporterId', 'name email')
+      .populate('resolvedBy', 'name email')
+      .sort({ createdAt: -1 })
+      .exec();
+  } catch (error) {
+    logger.error(`Error fetching reports for user ${userId}:`, error);
+    throw new Error('Lỗi khi lấy danh sách báo cáo của bạn');
+  }
+};
+
 export const getReportById = async (id, user) => {
   try {
     if (!id) {
