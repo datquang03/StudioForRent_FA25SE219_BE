@@ -19,7 +19,7 @@ import {
   getStudiosBookedSchedulesController,
   getStudioAvailabilityController,
 } from '../controllers/studio.controller.js';
-import { protect, authorize } from '../middlewares/auth.js';
+import { protect, authorize, optionalProtect } from '../middlewares/auth.js';
 import { USER_ROLES } from '../utils/constants.js';
 import { validateStudioCreation, validateStudioUpdate, validateObjectId, sanitizeInput } from '../middlewares/validate.js';
 import { generalLimiter, searchLimiter } from '../middlewares/rateLimiter.js';
@@ -47,7 +47,8 @@ router.get('/:id/booked-history', validateObjectId(), protect, authorize(USER_RO
 
 // Search routes with stricter rate limiting
 router.get('/active', searchLimiter, getActiveStudiosController);
-router.get('/:id', validateObjectId(), getStudio);
+router.get('/active', searchLimiter, getActiveStudiosController);
+router.get('/:id', validateObjectId(), optionalProtect, getStudio);
 
 router.use(protect);
 router.use(authorize(USER_ROLES.STAFF));

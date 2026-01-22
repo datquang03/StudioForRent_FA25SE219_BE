@@ -61,7 +61,10 @@ export const getActiveStudiosController = asyncHandler(async (req, res) => {
 });
 
 export const getStudio = asyncHandler(async (req, res) => {
-  const studio = await getStudioById(req.params.id);
+  // Check if user is staff/admin (req.user populated by optionalProtect)
+  const isStaffOrAdmin = req.user && ['staff', 'admin'].includes(req.user.role);
+  
+  const studio = await getStudioById(req.params.id, { publicOnly: !isStaffOrAdmin });
 
   res.status(200).json({
     success: true,
