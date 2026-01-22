@@ -77,6 +77,7 @@ export const REPORT_TRANSITIONS = {
 // Refund transitions (hardcoded strings in model currently, matching here)
 export const REFUND_TRANSITIONS = {
   'PENDING_APPROVAL': ['APPROVED', 'REJECTED'],
+  // Allow rollback to PENDING_APPROVAL for correction (Human-in-the-loop flexibility)
   'APPROVED': ['COMPLETED', 'PENDING_APPROVAL'],
   'REJECTED': ['PENDING_APPROVAL'],
   'COMPLETED': [] // Final state
@@ -95,9 +96,12 @@ export const validateStatusTransition = (currentStatus, newStatus, allowedTransi
 
   const allowed = allowedTransitions[currentStatus] || [];
   if (!allowed.includes(newStatus)) {
+    const detailMessage = allowed.length === 0
+      ? 'Trạng thái hiện tại là trạng thái cuối cùng và không thể thay đổi thêm.'
+      : `Các trạng thái hợp lệ tiếp theo: ${allowed.join(', ')}`;
+      
     throw new ValidationError(
-      `Không thể chuyển trạng thái ${entityName} từ '${currentStatus}' sang '${newStatus}'. ` +
-      `Các trạng thái hợp lệ tiếp theo: ${allowed.join(', ')}`
+      `Không thể chuyển trạng thái ${entityName} từ '${currentStatus}' sang '${newStatus}'. ${detailMessage}`
     );
   }
 };

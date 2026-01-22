@@ -30,6 +30,10 @@ const refundSchema = new mongoose.Schema({
     type: String  // Cloudinary URLs
   }],
 
+  // Refund status workflow
+  // Source of truth for allowed transitions: validators.js (REFUND_TRANSITIONS)
+  // PENDING_APPROVAL → APPROVED → COMPLETED
+  //                └────────────→ REJECTED
   status: {
     type: String,
     enum: ['PENDING_APPROVAL', 'APPROVED', 'COMPLETED', 'REJECTED'],

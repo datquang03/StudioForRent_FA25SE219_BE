@@ -124,8 +124,8 @@ export const getReports = async (filter = {}, options = {}) => {
 
     return await Report.find(filter, null, options)
       .populate('bookingId') // Keep for legacy
-      .populate('reporterId', 'name email')
-      .populate('resolvedBy', 'name email')
+      .populate('reporterId', 'fullName email')
+      .populate('resolvedBy', 'fullName email')
       .exec();
   } catch (error) {
     if (error instanceof ValidationError) {
@@ -142,8 +142,8 @@ export const getMyReports = async (userId, filter = {}, options = {}) => {
     
     return await Report.find(query, null, options)
       .populate('bookingId')
-      .populate('reporterId', 'name email')
-      .populate('resolvedBy', 'name email')
+      .populate('reporterId', 'fullName email')
+      .populate('resolvedBy', 'fullName email')
       .sort({ createdAt: -1 })
       .exec();
   } catch (error) {
@@ -160,8 +160,8 @@ export const getReportById = async (id, user) => {
 
     const report = await Report.findById(id)
       .populate('bookingId')
-      .populate('reporterId', 'name email')
-      .populate('resolvedBy', 'name email')
+      .populate('reporterId', 'fullName email')
+      .populate('resolvedBy', 'fullName email')
       .exec();
 
     if (!report) {
@@ -245,8 +245,8 @@ export const updateReport = async (id, update) => {
     // Populate for return
     await report.populate([
       { path: 'bookingId' },
-      { path: 'reporterId', select: 'name email' },
-      { path: 'resolvedBy', select: 'name email' }
+      { path: 'reporterId', select: 'fullName email' },
+      { path: 'resolvedBy', select: 'fullName email' }
     ]);
 
     return report;
