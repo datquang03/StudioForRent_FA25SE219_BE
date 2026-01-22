@@ -7,13 +7,17 @@ import {
   updateComment, 
   deleteComment,
   likeComment,
-  likeReply
+  likeReply,
+  getCommentById
 } from "../controllers/comment.controller.js";
 
 const router = express.Router();
 
 // Public: Get comments (Q&A) (Optional Auth for Staff/Admin visibility)
 router.get("/", optionalProtect, getComments);
+
+// Public: Get comment by ID
+router.get("/:id", optionalProtect, getCommentById);
 
 // Protected: Create comment (Authenticated Users)
 router.post("/", protect, createComment);
