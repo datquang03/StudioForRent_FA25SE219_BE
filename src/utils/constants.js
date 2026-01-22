@@ -213,6 +213,7 @@ export const REPORT_TARGET_TYPES = {
   BOOKING: "Booking",
   REVIEW: "Review",
   COMMENT: "Comment",
+  STUDIO: "Studio",
 };
 
 // Notifications

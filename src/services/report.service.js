@@ -1,6 +1,6 @@
 import Report from '../models/Report/report.model.js';
 import { ValidationError, NotFoundError, ForbiddenError } from '../utils/errors.js';
-import { Booking } from '../models/index.js';
+import { Booking, Studio } from '../models/index.js';
 import Review from '../models/Review/review.model.js';
 import Comment from '../models/Comment/comment.model.js';
 import { REPORT_TARGET_TYPES, REPORT_ISSUE_TYPE, REPORT_STATUS, USER_ROLES } from '../utils/constants.js';
@@ -75,6 +75,9 @@ export const createReport = async (data) => {
     } else if (data.targetType === REPORT_TARGET_TYPES.COMMENT) {
       const comment = await Comment.findById(data.targetId);
       if (comment) targetExists = true;
+    } else if (data.targetType === REPORT_TARGET_TYPES.STUDIO) {
+      const studio = await Studio.findById(data.targetId);
+      if (studio) targetExists = true;
     }
 
     if (!targetExists) {
