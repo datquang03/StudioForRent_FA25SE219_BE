@@ -4,6 +4,7 @@ import { createAndSendNotification } from '../services/notification.service.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
 import { EQUIPMENT_STATUS, NOTIFICATION_TYPE } from '../utils/constants.js';
 import { escapeRegex } from '../utils/helpers.js';
+import logger from '../utils/logger.js';
 // #endregion
 
 // #region Helper Functions
@@ -185,7 +186,7 @@ export const createEquipment = async (equipmentData) => {
           null
         );
       } catch (error) {
-        console.error(`Failed to notify staff ${user._id}:`, error);
+        logger.warn(`Failed to notify staff ${user._id}:`, error);
       }
     });
 
@@ -265,7 +266,7 @@ export const updateEquipment = async (equipmentId, updateData) => {
           null
         );
       } catch (error) {
-        console.error(`Failed to notify staff ${user._id}:`, error);
+        logger.warn(`Failed to notify staff ${user._id}:`, error);
       }
     });
 

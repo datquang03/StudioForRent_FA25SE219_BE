@@ -5,6 +5,7 @@ import { createAndSendNotification } from "../services/notification.service.js";
 import { NotFoundError, ValidationError } from "../utils/errors.js";
 import { escapeRegex } from "../utils/helpers.js";
 import { PROMOTION_APPLICABLE_FOR, NOTIFICATION_TYPE } from "../utils/constants.js";
+import logger from "../utils/logger.js";
 //#endregion
 
 //#region Get All Promotions (Admin)
@@ -204,7 +205,7 @@ export const createPromotion = async (promotionData) => {
           );
         } catch (error) {
           // Log but don't fail
-          console.error(`Failed to notify customer ${customer._id}:`, error);
+          logger.warn(`Failed to notify customer ${customer._id}:`, error);
         }
       });
     }

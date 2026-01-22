@@ -13,6 +13,7 @@ import RoomPolicyService from './roomPolicy.service.js';
 import { createPaymentOptions } from './payment.service.js';
 import { acquireLock, releaseLock } from '../utils/redisLock.js';
 import { sendNoShowEmail } from './email.service.js';
+import logger from '../utils/logger.js';
 // #endregion
 
 // #region Core CRUD Operations
@@ -125,7 +126,7 @@ export const createBooking = async (data) => {
           await freeScheduleService(schedule._id);
         } catch (freeErr) {
           // eslint-disable-next-line no-console
-          console.error('Failed to free schedule after studio not found', freeErr);
+          logger.error('Failed to free schedule after studio not found', freeErr);
         }
         throw new NotFoundError('Studio không tồn tại cho lịch này');
       }
@@ -150,7 +151,7 @@ export const createBooking = async (data) => {
           await freeScheduleService(schedule._id);
         } catch (freeErr) {
           // eslint-disable-next-line no-console
-          console.error('Failed to free schedule during policy validation', freeErr);
+          logger.error('Failed to free schedule during policy validation', freeErr);
         }
         throw new ValidationError('Chính sách mặc định chưa được cấu hình. Vui lòng chạy seedPolicies.js trước.');
       }
@@ -226,7 +227,7 @@ export const createBooking = async (data) => {
         );
       } catch (notifyErr) {
         // eslint-disable-next-line no-console
-        console.error('Failed to send booking confirmation notification:', notifyErr);
+        logger.error('Failed to send booking confirmation notification:', notifyErr);
       }
 
       // Create payment options
@@ -235,7 +236,7 @@ export const createBooking = async (data) => {
         paymentOptions = await createPaymentOptions(booking._id);
       } catch (paymentErr) {
         // Log error but don't fail booking creation
-        console.error('Failed to create payment options:', paymentErr);
+        logger.error('Failed to create payment options:', paymentErr);
       }
 
       return { booking, paymentOptions };
@@ -479,7 +480,7 @@ export const updateBooking = async (bookingId, updateData, actorId, actorRole) =
                 await oldPromo.save({ session });
               }
             } catch (err) {
-              console.error('Failed to decrement old promo usage', err);
+              logger.error('Failed to decrement old promo usage', err);
             }
           }
 
@@ -501,7 +502,7 @@ export const updateBooking = async (bookingId, updateData, actorId, actorRole) =
                 await oldPromo.save({ session });
               }
             } catch (err) {
-              console.error('Failed to decrement old promo usage', err);
+              logger.error('Failed to decrement old promo usage', err);
             }
           }
           booking.promoId = null;
@@ -590,7 +591,7 @@ export const updateBooking = async (bookingId, updateData, actorId, actorRole) =
       } catch (err) {
         // log and continue
         // eslint-disable-next-line no-console
-        console.error('Failed to decrement old promo usage', err);
+        logger.error('Failed to decrement old promo usage', err);
       }
     }
 
@@ -615,7 +616,7 @@ export const updateBooking = async (bookingId, updateData, actorId, actorRole) =
         }
       } catch (err) {
         // eslint-disable-next-line no-console
-        console.error('Failed to decrement old promo usage', err);
+        logger.error('Failed to decrement old promo usage', err);
       }
     }
     booking.promoId = null;
@@ -692,7 +693,7 @@ export const cancelBooking = async (bookingId) => {
 
         } catch (policyError) {
           // Log policy calculation error but don't block cancellation
-          console.error('Failed to calculate refund:', policyError);
+          logger.error('Failed to calculate refund:', policyError);
         }
       }
 
@@ -711,7 +712,7 @@ export const cancelBooking = async (bookingId) => {
           const payosModule = await import('../config/payos.js');
           payosClient = payosModule.default;
         } catch (importErr) {
-          console.warn('Failed to import PayOS module', { error: importErr.message });
+          logger.warn('Failed to import PayOS module', { error: importErr.message });
         }
 
         for (const payment of pendingPayments) {
@@ -728,7 +729,7 @@ export const cancelBooking = async (bookingId) => {
             try {
               await payosClient.cancelPaymentLink(Number(payment.transactionId), 'Booking cancelled');
             } catch (payosErr) {
-              console.warn('Failed to cancel PayOS payment link', {
+              logger.warn('Failed to cancel PayOS payment link', {
                 paymentId: payment._id,
                 transactionId: payment.transactionId,
                 error: payosErr.message
@@ -738,11 +739,11 @@ export const cancelBooking = async (bookingId) => {
         }
 
         if (pendingPayments.length > 0) {
-          console.log(`Cancelled ${pendingPayments.length} pending payment(s) for booking ${bookingId}`);
+          logger.info(`Cancelled ${pendingPayments.length} pending payment(s) for booking ${bookingId}`);
         }
       } catch (paymentCancelErr) {
         // Log but don't block booking cancellation
-        console.error('Failed to cancel pending payments', {
+        logger.error('Failed to cancel pending payments', {
           bookingId,
           error: paymentCancelErr.message
         });
@@ -756,7 +757,7 @@ export const cancelBooking = async (bookingId) => {
           await freeScheduleService(booking.scheduleId, session);
         } catch (freeErr) {
           // eslint-disable-next-line no-console
-          console.error('Failed to free schedule on cancellation', freeErr);
+          logger.error('Failed to free schedule on cancellation', freeErr);
           throw freeErr;
         }
 
@@ -769,12 +770,12 @@ export const cancelBooking = async (bookingId) => {
             } catch (releaseErr) {
               // Log and continue; do not block cancellation if release fails
               // eslint-disable-next-line no-console
-              console.error('Failed to release equipment on cancellation', releaseErr);
+              logger.error('Failed to release equipment on cancellation', releaseErr);
             }
           }
         } catch (err) {
           // eslint-disable-next-line no-console
-          console.error('Failed to query booking details for release', err);
+          logger.error('Failed to query booking details for release', err);
         }
       }
 
@@ -808,7 +809,7 @@ export const confirmBooking = async (bookingId) => {
     );
   } catch (notifyErr) {
     // eslint-disable-next-line no-console
-    console.error('Failed to send confirmation notification:', notifyErr);
+    logger.error('Failed to send confirmation notification:', notifyErr);
   }
 
   return booking;
@@ -878,7 +879,7 @@ export const checkInBooking = async (bookingId, actorId = null) => {
       } catch (notifyErr) {
         // log + continue
         // eslint-disable-next-line no-console
-        console.error('Failed to send check-in notification', notifyErr);
+        logger.error('Failed to send check-in notification', notifyErr);
       }
 
       return booking;
@@ -936,11 +937,11 @@ export const checkOutBooking = async (bookingId, actorId = null) => {
             .filter(item => item !== null);
 
           if (failedReleases.length > 0) {
-            console.error(`Failed to release equipment for booking ${booking._id}. Failures:`, failedReleases);
+            logger.error(`Failed to release equipment for booking ${booking._id}. Failures:`, failedReleases);
           }
         }
       } catch (e) {
-        console.error('Error during equipment release preparation (import or DB query)', e);
+        logger.error('Error during equipment release preparation (import or DB query)', e);
       }
 
       // Optionally free schedule (delegate)
@@ -974,7 +975,7 @@ export const checkOutBooking = async (bookingId, actorId = null) => {
       );
     } catch (notifyErr) {
       // eslint-disable-next-line no-console
-      console.error('Failed to send check-out notification', notifyErr);
+      logger.error('Failed to send check-out notification', notifyErr);
     }
   }
 
@@ -1030,7 +1031,7 @@ export const markAsNoShow = async (bookingId, checkInTime = null, io = null) => 
 
     } catch (policyError) {
       // Log policy calculation error but don't block no-show marking
-      console.error('Failed to calculate no-show charge:', policyError);
+      logger.error('Failed to calculate no-show charge:', policyError);
     }
   }
 
@@ -1067,10 +1068,10 @@ export const markAsNoShow = async (bookingId, checkInTime = null, io = null) => 
     } catch (emailErr) {
       // log and continue
       // eslint-disable-next-line no-console
-      console.error('Failed to send dedicated no-show email:', emailErr);
+      logger.error('Failed to send dedicated no-show email:', emailErr);
     }
   } catch (notifyErr) {
-    console.error('Failed to send no-show notification:', notifyErr);
+    logger.error('Failed to send no-show notification:', notifyErr);
   }
 
   return booking;
@@ -1499,7 +1500,7 @@ export const extendBooking = async (bookingId, newEndTime, actorId = null, actor
           booking._id
         );
       } catch (notifyErr) {
-        console.error('Failed to send extension notification:', notifyErr);
+        logger.error('Failed to send extension notification:', notifyErr);
       }
 
       return {

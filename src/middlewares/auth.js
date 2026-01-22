@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import asyncHandler from "express-async-handler";
 import { User } from "../models/index.js";
 import { AUTH_MESSAGES } from "../utils/constants.js";
+import logger from "../utils/logger.js";
 // #endregion
 
 // #region Authentication Middleware
@@ -62,7 +63,7 @@ export const optionalProtect = asyncHandler(async (req, res, next) => {
       req.user = await User.findById(decoded.id).select("-passwordHash -verificationCode -verificationCodeExpiry");
     } catch (error) {
       // Token invalid or expired, treat as guest
-      console.error("Optional auth error:", error.message);
+      logger.warn("Optional auth error:", error.message);
     }
   }
   next();

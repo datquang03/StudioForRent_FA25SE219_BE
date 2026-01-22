@@ -6,6 +6,7 @@ import { STUDIO_STATUS, NOTIFICATION_TYPE, SCHEDULE_STATUS } from '../utils/cons
 import { NotFoundError, ValidationError } from '../utils/errors.js';
 import { escapeRegex } from '../utils/helpers.js';
 import { cacheGet, cacheSet } from '../utils/cache.js';
+import logger from '../utils/logger.js';
 // #endregion
 
 // #region Get Studios
@@ -239,7 +240,7 @@ export const changeStudioStatus = async (studioId, newStatus) => {
           null
         );
       } catch (error) {
-        console.error(`Failed to notify staff ${user._id}:`, error);
+        logger.warn(`Failed to notify staff ${user._id}:`, error);
       }
     });
 
