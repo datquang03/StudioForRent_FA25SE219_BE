@@ -18,6 +18,8 @@ import { protect, authorize } from '../middlewares/auth.js';
 import { sanitizeInput, validateObjectId } from '../middlewares/validate.js';
 import { generalLimiter, userLimiter, bookingLimiter } from '../middlewares/rateLimiter.js';
 import { USER_ROLES } from '../utils/constants.js';
+import { upload } from '../middlewares/upload.js';
+import { ALLOWED_FILE_TYPES, FILE_SIZE_LIMITS } from '../config/upload.config.js';
 
 const router = express.Router();
 
@@ -33,8 +35,14 @@ router.post('/', authorize(USER_ROLES.CUSTOMER), bookingLimiter, createBooking);
 router.get('/', authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF), getBookings);
 router.post('/:id/details', validateObjectId(), authorize(USER_ROLES.CUSTOMER), createBookingDetailsController);
 router.post('/:id/cancel', validateObjectId(), authorize(USER_ROLES.CUSTOMER), cancelBooking);
-// Refund request - Customer creates after cancellation
-router.post('/:id/refund-request', validateObjectId(), authorize(USER_ROLES.CUSTOMER), createRefundRequestController);
+// Refund request - Customer creates after cancellation (with optional proof images)
+router.post(
+  '/:id/refund-request',
+  validateObjectId(),
+  authorize(USER_ROLES.CUSTOMER),
+  upload.array('proofImages', 3, ALLOWED_FILE_TYPES.IMAGES, FILE_SIZE_LIMITS.REVIEW_IMAGE),
+  createRefundRequestController
+);
 router.get('/:id/refunds', validateObjectId(), authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN), getRefundsForBookingController);
 
 // Staff/Admin routes

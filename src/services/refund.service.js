@@ -71,7 +71,7 @@ export const calculateRefundAmount = async (bookingId) => {
  * @returns {object} Refund information
  */
 export const createRefundRequest = async (bookingId, opts = {}) => {
-  const { bankName, accountNumber, accountName, reason, userId } = opts;
+  const { bankName, accountNumber, accountName, reason, userId, proofImageUrls = [] } = opts;
 
   // Validate bank info
   if (!bankName || !accountNumber || !accountName) {
@@ -119,6 +119,7 @@ export const createRefundRequest = async (bookingId, opts = {}) => {
       bookingId,
       amount: refundAmount,
       reason: refundReason,
+      proofImages: proofImageUrls,
       requestedBy: userId,
       status: 'PENDING_APPROVAL',
       destinationBank: {
