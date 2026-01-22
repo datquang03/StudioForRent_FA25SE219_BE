@@ -204,7 +204,8 @@ export const paymentWebhookController = asyncHandler(async (req, res) => {
     // Return 200 even on error to prevent PayOS from retrying invalid signatures
     // Check if error message indicates signature invalidity (exact or specific detail)
     if (error.message && (error.message === 'Invalid webhook signature' || error.message.startsWith('Invalid webhook signature:'))) {
-      return res.status(200).json({ success: false, message: error.message });
+      const safeMessage = 'Invalid webhook signature';
+      return res.status(200).json({ success: false, message: safeMessage });
     }
     
     // In production, hide specific internal errors, but for now allow viewing error if needed for debug
