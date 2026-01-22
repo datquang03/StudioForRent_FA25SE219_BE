@@ -476,8 +476,18 @@ export const getAllRefunds = async (filters = {}) => {
   // If filtering by userId, get their bookings first
   if (userId) {
     const userBookings = await Booking.find({ userId }).select('_id').lean();
-    const bookingIds = userBookings.map(b => b._id);
-    query.bookingId = { $in: bookingIds };
+    const userBookingIds = userBookings.map(b => b._id.toString());
+    
+    if (bookingId) {
+      // Ensure the requested booking belongs to this user
+      if (!userBookingIds.includes(bookingId.toString())) {
+        throw new ValidationError('Booking không thuộc về user này');
+      }
+      // bookingId filter is already set above; keep it as-is
+    } else {
+      // No specific bookingId requested: filter by all bookings of the user
+      query.bookingId = { $in: userBookings.map(b => b._id) };
+    }
   }
 
   const skip = (page - 1) * limit;

@@ -125,7 +125,6 @@ export const createBooking = async (data) => {
         try {
           await freeScheduleService(schedule._id);
         } catch (freeErr) {
-          // eslint-disable-next-line no-console
           logger.error('Failed to free schedule after studio not found', freeErr);
         }
         throw new NotFoundError('Studio không tồn tại cho lịch này');
@@ -150,7 +149,6 @@ export const createBooking = async (data) => {
         try {
           await freeScheduleService(schedule._id);
         } catch (freeErr) {
-          // eslint-disable-next-line no-console
           logger.error('Failed to free schedule during policy validation', freeErr);
         }
         throw new ValidationError('Chính sách mặc định chưa được cấu hình. Vui lòng chạy seedPolicies.js trước.');
@@ -226,7 +224,6 @@ export const createBooking = async (data) => {
           booking._id
         );
       } catch (notifyErr) {
-        // eslint-disable-next-line no-console
         logger.error('Failed to send booking confirmation notification:', notifyErr);
       }
 
@@ -590,7 +587,6 @@ export const updateBooking = async (bookingId, updateData, actorId, actorRole) =
         }
       } catch (err) {
         // log and continue
-        // eslint-disable-next-line no-console
         logger.error('Failed to decrement old promo usage', err);
       }
     }
@@ -615,7 +611,6 @@ export const updateBooking = async (bookingId, updateData, actorId, actorRole) =
           await oldPromo.save();
         }
       } catch (err) {
-        // eslint-disable-next-line no-console
         logger.error('Failed to decrement old promo usage', err);
       }
     }
@@ -756,7 +751,6 @@ export const cancelBooking = async (bookingId) => {
         try {
           await freeScheduleService(booking.scheduleId, session);
         } catch (freeErr) {
-          // eslint-disable-next-line no-console
           logger.error('Failed to free schedule on cancellation', freeErr);
           throw freeErr;
         }
@@ -769,12 +763,10 @@ export const cancelBooking = async (bookingId) => {
               await releaseEquipment(d.equipmentId, d.quantity, session);
             } catch (releaseErr) {
               // Log and continue; do not block cancellation if release fails
-              // eslint-disable-next-line no-console
-              logger.error('Failed to release equipment on cancellation', releaseErr);
+                  logger.error('Failed to release equipment on cancellation', releaseErr);
             }
           }
         } catch (err) {
-          // eslint-disable-next-line no-console
           logger.error('Failed to query booking details for release', err);
         }
       }
@@ -808,7 +800,6 @@ export const confirmBooking = async (bookingId) => {
       booking._id
     );
   } catch (notifyErr) {
-    // eslint-disable-next-line no-console
     logger.error('Failed to send confirmation notification:', notifyErr);
   }
 
@@ -878,7 +869,6 @@ export const checkInBooking = async (bookingId, actorId = null) => {
         );
       } catch (notifyErr) {
         // log + continue
-        // eslint-disable-next-line no-console
         logger.error('Failed to send check-in notification', notifyErr);
       }
 
@@ -974,7 +964,6 @@ export const checkOutBooking = async (bookingId, actorId = null) => {
         updatedBooking._id
       );
     } catch (notifyErr) {
-      // eslint-disable-next-line no-console
       logger.error('Failed to send check-out notification', notifyErr);
     }
   }
@@ -1067,7 +1056,6 @@ export const markAsNoShow = async (bookingId, checkInTime = null, io = null) => 
       }
     } catch (emailErr) {
       // log and continue
-      // eslint-disable-next-line no-console
       logger.error('Failed to send dedicated no-show email:', emailErr);
     }
   } catch (notifyErr) {
