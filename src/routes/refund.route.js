@@ -10,10 +10,24 @@ import {
   getApprovedRefundsController,
   confirmManualRefundController,
   getRefundDetailController,
-  getMyRefundsController
+  getMyRefundsController,
+  getAllRefundsController
 } from '../controllers/refund.controller.js';
 
 const router = express.Router();
+
+/**
+ * @route   GET /api/refunds
+ * @desc    Get all refunds with filters (Staff/Admin only)
+ * @access  Staff, Admin
+ * @query   status, bookingId, userId, startDate, endDate, minAmount, maxAmount, page, limit
+ */
+router.get(
+  '/',
+  protect,
+  authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN),
+  getAllRefundsController
+);
 
 /**
  * @route   GET /api/refunds/my-requests

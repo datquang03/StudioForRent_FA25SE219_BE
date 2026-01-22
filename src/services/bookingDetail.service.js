@@ -3,6 +3,7 @@ import BookingDetail from '../models/Booking/bookingDetail.model.js';
 import { Equipment, Service } from '../models/index.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
 import { reserveEquipment, releaseEquipment } from './equipment.service.js';
+import logger from '../utils/logger.js';
 // #endregion
 
 /**
@@ -135,13 +136,11 @@ export const createBookingDetails = async (bookingId, detailsArray, session = nu
           await releaseEquipment(r.equipmentId, r.quantity);
         } catch (releaseErr) {
           // log & continue
-          // eslint-disable-next-line no-console
-          console.error('Failed to release equipment during rollback', releaseErr);
+          logger.error('Failed to release equipment during rollback', releaseErr);
         }
       }
     } catch (rollbackErr) {
-      // eslint-disable-next-line no-console
-        console.error('Rollback failed', rollbackErr);
+        logger.error('Rollback failed', rollbackErr);
       }
 
       throw err;
@@ -150,7 +149,7 @@ export const createBookingDetails = async (bookingId, detailsArray, session = nu
     if (error instanceof ValidationError || error instanceof NotFoundError) {
       throw error;
     }
-    console.error('Error in createBookingDetails:', error);
+    logger.error('Error in createBookingDetails:', error);
     throw new Error('Lỗi khi tạo chi tiết booking');
   }
 };
@@ -180,8 +179,7 @@ export const removeBookingDetails = async (bookingId, detailIds, session = null)
         await releaseEquipment(d.equipmentId, d.quantity, session);
       } catch (err) {
         // log and continue
-        // eslint-disable-next-line no-console
-        console.error('Failed to release equipment during removeBookingDetails', err);
+        logger.error('Failed to release equipment during removeBookingDetails', err);
       }
     }
     removedTotal += d.subtotal || 0;
@@ -199,7 +197,7 @@ export const removeBookingDetails = async (bookingId, detailIds, session = null)
     if (error instanceof ValidationError) {
       throw error;
     }
-    console.error('Error in removeBookingDetails:', error);
+    logger.error('Error in removeBookingDetails:', error);
     throw new Error('Lỗi khi xóa chi tiết booking');
   }
 };

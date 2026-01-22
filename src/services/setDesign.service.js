@@ -1,6 +1,5 @@
 // #region Imports
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import OpenAI from 'openai';
 import mongoose from 'mongoose';
 import SetDesign from '../models/SetDesign/setDesign.model.js';
 import SetDesignOrder from '../models/SetDesignOrder/setDesignOrder.model.js';
@@ -654,68 +653,15 @@ Provide your response in this exact JSON format:
 
 /**
  * Generate actual image using DALL-E 3 from OpenAI
+ * @deprecated DALL-E integration has been removed. Use generateImageWithGetty or Gemini instead.
  * @param {string} prompt - Image generation prompt
  * @param {Object} options - Generation options
  * @returns {Object} Generated image data
  */
 export const generateImageWithDALLE = async (prompt, options = {}) => {
-  try {
-    if (!openai) {
-      throw new Error('OpenAI API key not configured. Please add OPENAI_API_KEY to .env file');
-    }
-
-    logger.info('Generating image with DALL-E 3');
-
-    const {
-      size = '1024x1024', // Options: 1024x1024, 1024x1792, 1792x1024
-      quality = 'hd', // Options: standard, hd
-      style = 'vivid' // Options: vivid, natural
-    } = options;
-
-    // Enhance prompt for studio photography
-    const enhancedPrompt = `Professional studio photography set design: ${prompt}. 
-High-quality, photorealistic, well-lit professional photography setup. 
-No people in the frame, focus on the set design, props, and equipment. 
-Studio lighting visible, clean composition, magazine-quality image.`;
-
-    const response = await openai.images.generate({
-      model: 'dall-e-3',
-      prompt: enhancedPrompt.substring(0, 4000), // DALL-E 3 limit
-      n: 1,
-      size,
-      quality,
-      style,
-      response_format: 'url'
-    });
-
-    const imageUrl = response.data[0].url;
-    const revisedPrompt = response.data[0].revised_prompt;
-
-    logger.info('Image generated successfully with DALL-E 3');
-
-    // Download image and upload to Cloudinary for permanent storage
-    const cloudinaryUrl = await downloadAndUploadToCloudinary(imageUrl, 'ai-generated-design');
-
-    return {
-      success: true,
-      imageUrl: cloudinaryUrl,
-      originalUrl: imageUrl,
-      revisedPrompt,
-      metadata: {
-        model: 'dall-e-3',
-        size,
-        quality,
-        style,
-        generatedAt: new Date().toISOString()
-      }
-    };
-  } catch (error) {
-    logger.error('Error generating image with DALL-E:', error);
-    if (error.message.includes('API key')) {
-      throw error;
-    }
-    throw new Error('Failed to generate image with DALL-E 3');
-  }
+  // DALL-E/OpenAI integration has been removed
+  // Use generateImageWithGetty or Gemini Imagen instead
+  throw new Error('DALL-E integration has been deprecated. Please use generateImageWithGetty or Gemini Imagen instead.');
 };
 
 /**

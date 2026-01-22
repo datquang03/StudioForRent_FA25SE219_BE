@@ -2,6 +2,7 @@ import express from 'express';
 import {
   createReportController,
   getReportsController,
+  getMyReportsController,
   getReportByIdController,
   updateReportController,
   deleteReportController
@@ -22,6 +23,9 @@ router.post('/', createReportController);
 
 // List all reports (Staff/Admin only)
 router.get('/', authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), getReportsController);
+
+// List my reports (Authenticated User)
+router.get('/my-reports', getMyReportsController);
 
 // Get single report (Staff/Admin or Owner)
 router.get('/:id', validateObjectId(), getReportByIdController);

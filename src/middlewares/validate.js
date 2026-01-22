@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { isValidEmail, isValidPassword, isNotEmpty } from "../utils/validators.js";
 import { VALIDATION_MESSAGES, REGEX_PATTERNS, SERVICE_STATUS } from "../utils/constants.js";
 import { createResponse } from "../utils/helpers.js";
+import logger from "../utils/logger.js";
 //#endregion
 
 //#region Authentication Validators
@@ -419,7 +420,7 @@ export const sanitizeInput = (req, res, next) => {
       });
     }
   } catch (error) {
-    console.error('Sanitize Input Error:', error);
+    logger.error('Sanitize Input Error:', error);
     return next(error);
   }
 

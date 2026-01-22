@@ -1,9 +1,10 @@
 import Report from '../models/Report/report.model.js';
 import { ValidationError, NotFoundError, ForbiddenError } from '../utils/errors.js';
-import { Booking } from '../models/index.js';
+import { Booking, Studio } from '../models/index.js';
 import Review from '../models/Review/review.model.js';
 import Comment from '../models/Comment/comment.model.js';
 import { REPORT_TARGET_TYPES, REPORT_ISSUE_TYPE, REPORT_STATUS, USER_ROLES } from '../utils/constants.js';
+import logger from '../utils/logger.js';
 
 export const createReport = async (data) => {
   try {
@@ -74,6 +75,9 @@ export const createReport = async (data) => {
     } else if (data.targetType === REPORT_TARGET_TYPES.COMMENT) {
       const comment = await Comment.findById(data.targetId);
       if (comment) targetExists = true;
+    } else if (data.targetType === REPORT_TARGET_TYPES.STUDIO) {
+      const studio = await Studio.findById(data.targetId);
+      if (studio) targetExists = true;
     }
 
     if (!targetExists) {
@@ -86,7 +90,7 @@ export const createReport = async (data) => {
     if (error instanceof ValidationError || error instanceof NotFoundError) {
       throw error;
     }
-    console.error('Error creating report:', error);
+    logger.error('Error creating report:', error);
     throw new Error('Lỗi khi tạo báo cáo');
   }
 };
@@ -126,8 +130,24 @@ export const getReports = async (filter = {}, options = {}) => {
     if (error instanceof ValidationError) {
       throw error;
     }
-    console.error('Error fetching reports:', error);
+    logger.error('Error fetching reports:', error);
     throw new Error('Lỗi khi lấy danh sách báo cáo');
+  }
+};
+
+export const getMyReports = async (userId, filter = {}, options = {}) => {
+  try {
+    const query = { ...filter, reporterId: userId };
+    
+    return await Report.find(query, null, options)
+      .populate('bookingId')
+      .populate('reporterId', 'name email')
+      .populate('resolvedBy', 'name email')
+      .sort({ createdAt: -1 })
+      .exec();
+  } catch (error) {
+    logger.error(`Error fetching reports for user ${userId}:`, error);
+    throw new Error('Lỗi khi lấy danh sách báo cáo của bạn');
   }
 };
 
@@ -162,7 +182,7 @@ export const getReportById = async (id, user) => {
     if (error instanceof ValidationError || error instanceof NotFoundError || error instanceof ForbiddenError) {
       throw error;
     }
-    console.error(`Error fetching report with id ${id}:`, error);
+    logger.error(`Error fetching report with id ${id}:`, error);
     throw new Error('Lỗi khi lấy thông tin báo cáo');
   }
 };
@@ -218,7 +238,7 @@ export const updateReport = async (id, update) => {
     if (error instanceof ValidationError || error instanceof NotFoundError) {
       throw error;
     }
-    console.error(`Error updating report with id ${id}:`, error);
+    logger.error(`Error updating report with id ${id}:`, error);
     throw new Error('Lỗi khi cập nhật báo cáo');
   }
 };
@@ -240,7 +260,7 @@ export const deleteReport = async (id) => {
     if (error instanceof ValidationError || error instanceof NotFoundError) {
       throw error;
     }
-    console.error(`Error deleting report with id ${id}:`, error);
+    logger.error(`Error deleting report with id ${id}:`, error);
     throw new Error('Lỗi khi xóa báo cáo');
   }
 };
