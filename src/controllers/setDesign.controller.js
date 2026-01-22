@@ -85,8 +85,12 @@ export const getAllConvertedSetDesignsController = asyncHandler(async (req, res)
  */
 export const getSetDesignByIdController = asyncHandler(async (req, res) => {
   const { id } = req.params;
+  
+  // Determine if user is staff/admin to show inactive designs
+  const isStaffOrAdmin = req.user && (req.user.role === 'staff' || req.user.role === 'admin');
+  const publicOnly = !isStaffOrAdmin;
 
-  const design = await getSetDesignById(id);
+  const design = await getSetDesignById(id, { publicOnly });
 
   res.status(200).json({
     success: true,

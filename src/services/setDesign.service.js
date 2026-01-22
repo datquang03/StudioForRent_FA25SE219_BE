@@ -124,9 +124,11 @@ export const getSetDesigns = async (options = {}) => {
 /**
  * Get a single set design by ID
  * @param {string} id - Set design ID
+ * @param {Object} options - Options for retrieval
+ * @param {boolean} options.publicOnly - If true, only return active designs
  * @returns {Object} Set design
  */
-export const getSetDesignById = async (id) => {
+export const getSetDesignById = async (id, options = {}) => {
   try {
     validateObjectId(id, 'ID set design');
 
@@ -134,6 +136,11 @@ export const getSetDesignById = async (id) => {
 
     if (!design) {
       throw new NotFoundError('Set design không tồn tại');
+    }
+
+    // If publicOnly is true, check if design is active
+    if (options.publicOnly && !design.isActive) {
+      throw new NotFoundError('Set design không tồn tại hoặc đã bị ẩn');
     }
 
     return design;

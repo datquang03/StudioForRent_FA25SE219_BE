@@ -67,7 +67,7 @@ router.get('/converted-custom-designs', getConvertedCustomDesignsController);
 router.get('/converted-custom-designs/:id', validateObjectId(), getConvertedCustomDesignByIdController);
 
 // Get Set Design by ID
-router.get('/:id', validateObjectId(), getSetDesignByIdController);
+router.get('/:id', optionalProtect, validateObjectId(), getSetDesignByIdController);
 
 // Custom design request - Protected route (authentication required - Customer only)
 router.post('/custom-request', 
