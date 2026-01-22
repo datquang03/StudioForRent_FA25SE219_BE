@@ -431,6 +431,104 @@ export const getMyRefunds = async (userId, page = 1, limit = 20) => {
   };
 };
 
+/**
+ * Get all refunds with filters (Staff/Admin)
+ */
+export const getAllRefunds = async (filters = {}) => {
+  const {
+    status,
+    bookingId,
+    userId,
+    startDate,
+    endDate,
+    minAmount,
+    maxAmount,
+    page = 1,
+    limit = 20
+  } = filters;
+
+  // Validate status if provided
+  const validStatuses = ['PENDING_APPROVAL', 'APPROVED', 'COMPLETED', 'REJECTED'];
+  if (status && !validStatuses.includes(status)) {
+    throw new ValidationError(`Trạng thái không hợp lệ. Chọn từ: ${validStatuses.join(', ')}`);
+  }
+
+  // Build query
+  const query = {};
+
+  if (status) query.status = status;
+  if (bookingId) query.bookingId = bookingId;
+
+  // Date filter on requestedAt
+  if (startDate || endDate) {
+    query.requestedAt = {};
+    if (startDate) query.requestedAt.$gte = new Date(startDate);
+    if (endDate) query.requestedAt.$lte = new Date(endDate);
+  }
+
+  // Amount filter
+  if (minAmount !== undefined || maxAmount !== undefined) {
+    query.amount = {};
+    if (minAmount !== undefined && !isNaN(minAmount)) query.amount.$gte = Number(minAmount);
+    if (maxAmount !== undefined && !isNaN(maxAmount)) query.amount.$lte = Number(maxAmount);
+  }
+
+  // If filtering by userId, get their bookings first
+  if (userId) {
+    const userBookings = await Booking.find({ userId }).select('_id').lean();
+    const bookingIds = userBookings.map(b => b._id);
+    query.bookingId = { $in: bookingIds };
+  }
+
+  const skip = (page - 1) * limit;
+  
+  const [refunds, total] = await Promise.all([
+    Refund.find(query)
+      .populate({
+        path: 'bookingId',
+        select: 'finalAmount scheduleId userId status',
+        populate: [
+          { path: 'userId', select: 'fullName email phone username' },
+          { path: 'scheduleId', select: 'startTime endTime studioId' }
+        ]
+      })
+      .populate('requestedBy', 'fullName username email')
+      .populate('approvedBy', 'fullName username')
+      .populate('processedBy', 'fullName username')
+      .sort({ requestedAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    Refund.countDocuments(query)
+  ]);
+
+  return {
+    refunds,
+    pagination: {
+      page,
+      limit,
+      total,
+      pages: Math.ceil(total / limit)
+    },
+    summary: {
+      totalRefunds: total,
+      filters: {
+        status: status || null,
+        bookingId: bookingId || null,
+        userId: userId || null,
+        dateRange: startDate || endDate ? {
+          startDate: startDate || null,
+          endDate: endDate || null
+        } : null,
+        amountRange: minAmount !== undefined || maxAmount !== undefined ? {
+          minAmount: minAmount !== undefined ? minAmount : null,
+          maxAmount: maxAmount !== undefined ? maxAmount : null
+        } : null
+      }
+    }
+  };
+};
+
 // #endregion
 
 // #region Notifications

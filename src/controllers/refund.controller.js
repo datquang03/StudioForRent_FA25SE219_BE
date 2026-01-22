@@ -10,7 +10,8 @@ import {
   confirmManualRefund,
   getRefundById,
   getRefundsForBooking,
-  getMyRefunds
+  getMyRefunds,
+  getAllRefunds
 } from '../services/refund.service.js';
 import { uploadImage } from '../services/upload.service.js';
 
@@ -179,6 +180,52 @@ export const getMyRefundsController = asyncHandler(async (req, res) => {
   const limit = parseInt(req.query.limit) || 20;
 
   const result = await getMyRefunds(userId, page, limit);
+
+  res.status(200).json({
+    success: true,
+    data: result
+  });
+});
+
+/**
+ * Get all refunds with filters (Staff/Admin)
+ * GET /api/refunds
+ * Query params: status, bookingId, userId, startDate, endDate, minAmount, maxAmount, page, limit
+ */
+export const getAllRefundsController = asyncHandler(async (req, res) => {
+  const {
+    status,
+    bookingId,
+    userId,
+    startDate,
+    endDate,
+    minAmount,
+    maxAmount,
+    page,
+    limit
+  } = req.query;
+
+  // Validate bookingId if provided
+  if (bookingId && !isValidObjectId(bookingId)) {
+    throw new ValidationError('Booking ID không hợp lệ');
+  }
+
+  // Validate userId if provided
+  if (userId && !isValidObjectId(userId)) {
+    throw new ValidationError('User ID không hợp lệ');
+  }
+
+  const result = await getAllRefunds({
+    status,
+    bookingId,
+    userId,
+    startDate,
+    endDate,
+    minAmount: minAmount ? parseFloat(minAmount) : undefined,
+    maxAmount: maxAmount ? parseFloat(maxAmount) : undefined,
+    page: page ? parseInt(page) : 1,
+    limit: limit ? parseInt(limit) : 20
+  });
 
   res.status(200).json({
     success: true,
