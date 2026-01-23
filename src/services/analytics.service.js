@@ -375,7 +375,12 @@ export const getDashboardStats = async () => {
       promotionStats,
       notificationStats,
       bookingStats,
-      revenueStats
+      revenueStats,
+      revenueChart,
+      bookingChart,
+      reportStats,
+      topStudios,
+      operationalMetrics
     ] = await Promise.all([
       getUserStats(),
       getStudioStats(),
@@ -383,7 +388,12 @@ export const getDashboardStats = async () => {
       getPromotionStats(),
       getNotificationStats(),
       getBookingStats(),
-      getRevenueStats()
+      getRevenueStats(),
+      getRevenueChart(),
+      getBookingChart(),
+      getReportStats(),
+      getTopStudios(),
+      getOperationalMetrics()
     ]);
 
     return {
@@ -394,6 +404,15 @@ export const getDashboardStats = async () => {
       notifications: notificationStats,
       bookings: bookingStats,
       revenue: revenueStats,
+      charts: {
+        revenue: revenueChart,
+        bookings: bookingChart
+      },
+      reports: reportStats,
+      rankings: {
+        topStudios
+      },
+      operations: operationalMetrics,
       generatedAt: new Date()
     };
   } catch (error) {
@@ -402,6 +421,261 @@ export const getDashboardStats = async () => {
   }
 };
 
+
+/**
+ * Lấy dữ liệu biểu đồ doanh thu (30 ngày gần nhất)
+ * @returns {Array} Revenue chart data
+ */
+export const getRevenueChart = async () => {
+  try {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    thirtyDaysAgo.setHours(0, 0, 0, 0);
+
+    const revenueData = await Payment.aggregate([
+      {
+        $match: {
+          status: PAYMENT_STATUS.PAID,
+          paidAt: { $gte: thirtyDaysAgo }
+        }
+      },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$paidAt" } },
+          value: { $sum: "$amount" }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+
+    // Fill missing dates
+    const chartData = [];
+    const currentDate = new Date(thirtyDaysAgo);
+    const now = new Date();
+
+    while (currentDate <= now) {
+      const dateStr = currentDate.toISOString().split('T')[0];
+      const found = revenueData.find(item => item._id === dateStr);
+      chartData.push({
+        date: dateStr,
+        value: found ? found.value : 0
+      });
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    return chartData;
+  } catch (error) {
+    logger.error('Error getting revenue chart:', error);
+    return [];
+  }
+};
+
+/**
+ * Lấy dữ liệu biểu đồ booking (30 ngày gần nhất)
+ * @returns {Array} Booking chart data
+ */
+export const getBookingChart = async () => {
+  try {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    thirtyDaysAgo.setHours(0, 0, 0, 0);
+
+    const bookingData = await Booking.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: thirtyDaysAgo }
+        }
+      },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+
+    // Fill missing dates
+    const chartData = [];
+    const currentDate = new Date(thirtyDaysAgo);
+    const now = new Date();
+
+    while (currentDate <= now) {
+      const dateStr = currentDate.toISOString().split('T')[0];
+      const found = bookingData.find(item => item._id === dateStr);
+      chartData.push({
+        date: dateStr,
+        count: found ? found.count : 0
+      });
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    return chartData;
+  } catch (error) {
+    logger.error('Error getting booking chart:', error);
+    return [];
+  }
+};
+
+/**
+ * Lấy thống kê Report
+ * @returns {Object} Report statistics
+ */
+export const getReportStats = async () => {
+    try {
+      const { default: Report } = await import('../models/Report/report.model.js');
+      const [
+        totalReports,
+        pendingReports,
+        resolvedReports,
+        reportsWithType
+      ] = await Promise.all([
+        Report.countDocuments(),
+        Report.countDocuments({ status: 'pending' }),
+        Report.countDocuments({ status: 'resolved' }),
+        Report.aggregate([
+          {
+            $group: {
+              _id: '$issueType',
+              count: { $sum: 1 }
+            }
+          }
+        ])
+      ]);
+  
+      const byType = {};
+      reportsWithType.forEach(item => {
+        byType[item._id] = item.count;
+      });
+  
+      return {
+        total: totalReports,
+        pending: pendingReports,
+        resolved: resolvedReports,
+        resolutionRate: totalReports > 0 ? ((resolvedReports / totalReports) * 100).toFixed(2) : 0,
+        byType
+      };
+    } catch (error) {
+      logger.error('Error getting report stats:', error);
+      // Return default internal structure if error happens (e.g. model not found yet)
+      return { total: 0, pending: 0, resolved: 0, resolutionRate: 0, byType: {} };
+    }
+  };
+
+/**
+ * Lấy Top Studios (Ranking)
+ * @returns {Array} Top 5 studios
+ */
+export const getTopStudios = async () => {
+  try {
+    const { default: Schedule } = await import('../models/Schedule/schedule.model.js');
+    
+    // Find top studios by finding completed schedules/bookings
+    // This is an estimation based on bookings
+    const topStudios = await Booking.aggregate([
+        { $match: { status: BOOKING_STATUS.COMPLETED } },
+        {
+            $lookup: {
+                from: 'schedules',
+                localField: 'scheduleId',
+                foreignField: '_id',
+                as: 'schedule'
+            }
+        },
+        { $unwind: '$schedule' },
+        {
+            $group: {
+                _id: '$schedule.studioId',
+                revenue: { $sum: '$finalAmount' },
+                bookingsCount: { $sum: 1 }
+            }
+        },
+        { $sort: { revenue: -1 } },
+        { $limit: 5 },
+        {
+            $lookup: {
+                from: 'studios',
+                localField: '_id',
+                foreignField: '_id',
+                as: 'studioInfo'
+            }
+        },
+        { $unwind: '$studioInfo' },
+        {
+            $project: {
+                name: '$studioInfo.name',
+                revenue: 1,
+                bookingsCount: 1
+            }
+        }
+    ]);
+
+    return topStudios;
+  } catch (error) {
+    logger.error('Error getting top studios:', error);
+    return [];
+  }
+};
+
+/**
+ * Lấy chỉ số vận hành (Operational Metrics)
+ * @returns {Object} Metric data
+ */
+export const getOperationalMetrics = async () => {
+    try {
+        const { default: Schedule } = await import('../models/Schedule/schedule.model.js');
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        
+        // 1. Cancellation Rate
+        const [totalBookings, cancelledBookings] = await Promise.all([
+            Booking.countDocuments({ createdAt: { $gte: startOfMonth } }),
+            Booking.countDocuments({ 
+                createdAt: { $gte: startOfMonth },
+                status: BOOKING_STATUS.CANCELLED
+            })
+        ]);
+        
+        const cancellationRate = totalBookings > 0 
+            ? ((cancelledBookings / totalBookings) * 100).toFixed(2) 
+            : 0;
+
+        // 2. Occupancy Rate (Month)
+        // Formula: (Total Hours Booked) / (Total Hours Available) * 100
+        // Assumption: Open 24/7 (24h * DaysInMonth * TotalActiveStudios)
+        
+        const totalActiveStudios = await Studio.countDocuments({ status: 'active' });
+        const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+        const totalCapacityHours = totalActiveStudios * daysInMonth * 24; // 24/7
+
+        // Calculate booked hours
+        const bookedSchedules = await Schedule.find({
+            status: { $in: ['booked', 'ongoing', 'completed'] },
+            startTime: { $gte: startOfMonth }
+        }).select('startTime endTime');
+
+        let totalBookedHours = 0;
+        bookedSchedules.forEach(s => {
+            const diff = (new Date(s.endTime) - new Date(s.startTime)) / (1000 * 60 * 60);
+            totalBookedHours += diff;
+        });
+
+        const occupancyRate = totalCapacityHours > 0 
+            ? ((totalBookedHours / totalCapacityHours) * 100).toFixed(2)
+            : 0;
+
+        return {
+            cancellationRate: parseFloat(cancellationRate),
+            occupancyRate: parseFloat(occupancyRate),
+            totalBookedHours: Math.round(totalBookedHours),
+            totalCapacityHours
+        };
+
+    } catch (error) {
+        logger.error('Error getting operational metrics:', error);
+        return { cancellationRate: 0, occupancyRate: 0 };
+    }
+}
 
 /**
  * Cleanup orphaned notifications (notifications của users đã bị xóa)
@@ -414,7 +688,7 @@ export const cleanupOrphanedNotifications = async () => {
 
     // Find notifications with non-existing userIds
     const orphanedNotifications = await Notification.find({
-      userId: { $nin: existingUserIds }
+        userId: { $nin: existingUserIds }
     });
 
     const count = orphanedNotifications.length;
@@ -435,5 +709,6 @@ export const cleanupOrphanedNotifications = async () => {
     throw error;
   }
 };
+
 
 // #endregion
