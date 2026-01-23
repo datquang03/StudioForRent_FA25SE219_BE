@@ -240,6 +240,7 @@ export const TIME_CONSTANTS = {
   JWT_EXPIRY: "1d", // Access token: 15 minutes // Updated to 1 day to test
   REFRESH_TOKEN_EXPIRY: "7d", // Refresh token: 7 days
   REFRESH_TOKEN_EXPIRY_DAYS: 7,
+  DEFAULT_TIMEZONE_OFFSET: 7, // GMT+7 (Vietnam)
 };
 
 // #endregion

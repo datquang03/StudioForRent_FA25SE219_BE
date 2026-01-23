@@ -705,7 +705,7 @@ export const getStudiosScheduleByDate = async (date, page = 1, limit = 10) => {
  * @returns {Promise<Object>} Availability summary with time slots grouped by date for each studio
  */
 export const getStudiosAvailability = async (options = {}) => {
-  const { startDate, endDate, page = 1, limit = 10 } = options;
+  const { startDate, endDate, page = 1, limit = 10, mode } = options;
 
   // Get active studios
   const studiosResult = await getActiveStudios({
@@ -715,52 +715,168 @@ export const getStudiosAvailability = async (options = {}) => {
     sortOrder: 'asc'
   });
 
+  // Helper to generate date range
+  const getDatesInRange = (startStr, endStr) => {
+    const dates = [];
+    const start = startStr ? new Date(startStr) : new Date();
+    const end = endStr ? new Date(endStr) : new Date(new Date().setDate(new Date().getDate() + 7)); // Default 7 days
+    
+    // Normalize to start of day
+    start.setHours(0,0,0,0);
+    end.setHours(23,59,59,999);
+
+    const current = new Date(start);
+    while (current <= end) {
+      dates.push(new Date(current));
+      current.setDate(current.getDate() + 1);
+    }
+    return dates;
+  };
+
+  const targetDates = getDatesInRange(startDate, endDate);
+  const startQuery = targetDates[0];
+  const endQuery = new Date(targetDates[targetDates.length - 1]);
+  endQuery.setHours(23,59,59,999);
+
   // For each studio, get available slots grouped by date
   const studiosWithAvailability = await Promise.all(
     studiosResult.studios.map(async (studio) => {
-      const query = {
-        studioId: studio._id,
-        status: SCHEDULE_STATUS.AVAILABLE
-      };
+      let availabilityByDate = {};
+      let totalSlotsCount = 0;
 
-      // Add date range filter if provided
-      if (startDate || endDate) {
-        query.startTime = {};
-        if (startDate) {
-          query.startTime.$gte = new Date(startDate);
-        }
-        if (endDate) {
-          query.startTime.$lte = new Date(endDate);
-        }
-      }
-
-      // Get all available slots for this studio
-      const availableSlots = await Schedule.find(query)
-        .sort({ startTime: 1 })
-        .lean();
-
-      // Group slots by date
-      const availabilityByDate = {};
-      
-      availableSlots.forEach(slot => {
-        const date = slot.startTime.toISOString().split('T')[0]; // YYYY-MM-DD format
+      if (mode === 'flexible') {
+        // --- FLEXIBLE MODE: Calculate Free Ranges by subtracting Booked Slots ---
         
-        if (!availabilityByDate[date]) {
-          availabilityByDate[date] = [];
-        }
-        
-        availabilityByDate[date].push({
-          _id: slot._id,
-          startTime: slot.startTime,
-          endTime: slot.endTime,
-          duration: Math.round((slot.endTime - slot.startTime) / (1000 * 60 * 60) * 10) / 10, // hours with 1 decimal
-          timeRange: `${slot.startTime.toTimeString().slice(0, 5)} - ${slot.endTime.toTimeString().slice(0, 5)}`,
-          pricePerHour: studio.basePricePerHour,
-          estimatedPrice: Math.round(
-            (slot.endTime - slot.startTime) / (1000 * 60 * 60) * studio.basePricePerHour
-          )
+        // 1. Get ALL booked/ongoing schedules in range
+        const busySchedules = await Schedule.find({
+          studioId: studio._id,
+          status: { $in: [SCHEDULE_STATUS.BOOKED, SCHEDULE_STATUS.ONGOING] },
+          startTime: { $lte: endQuery },
+          endTime: { $gte: startQuery }
+        }).sort({ startTime: 1 }).lean();
+
+        // 2. Iterate each date and calculate gaps
+        targetDates.forEach(dateObj => {
+          const dateStr = dateObj.toISOString().split('T')[0];
+          
+          // Define Day Range (00:00 - 24:00)
+          const dayStart = new Date(dateObj);
+          dayStart.setHours(0, 0, 0, 0);
+          
+          const dayEnd = new Date(dateObj);
+          dayEnd.setHours(23, 59, 59, 999);
+
+          // Filter bookings for this day
+          const dayBookings = busySchedules.filter(s => {
+             // Check intersection
+             return s.endTime > dayStart && s.startTime < dayEnd;
+          });
+
+          // Sort by start time just in case
+          dayBookings.sort((a, b) => a.startTime - b.startTime);
+
+          // Calculate Gaps
+          const freeSlots = [];
+          let currentTime = dayStart;
+
+          dayBookings.forEach(booking => {
+            // Adjust booking start/end to be within day bounds
+            const bookingStart = booking.startTime < dayStart ? dayStart : booking.startTime;
+            const bookingEnd = booking.endTime > dayEnd ? dayEnd : booking.endTime;
+
+            // If there is a gap between currentTime and bookingStart
+            if (bookingStart > currentTime) {
+              const diffMs = bookingStart - currentTime;
+              const diffHours = Math.round((diffMs / (1000 * 60 * 60)) * 10) / 10;
+              
+              if (diffMs > 0) {
+                 freeSlots.push({
+                   startTime: currentTime,
+                   endTime: bookingStart,
+                   duration: diffHours,
+                   timeRange: `${currentTime.toTimeString().slice(0, 5)} - ${bookingStart.toTimeString().slice(0, 5)}`,
+                   pricePerHour: studio.basePricePerHour,
+                   estimatedPrice: Math.round(diffHours * studio.basePricePerHour),
+                   type: 'flexible'
+                 });
+              }
+            }
+            // Move currentTime to end of this booking
+            if (bookingEnd > currentTime) {
+              currentTime = bookingEnd;
+            }
+          });
+
+          // Check gap after last booking until Day End
+          if (currentTime < dayEnd) {
+             const diffMs = dayEnd - currentTime;
+             const diffHours = Math.round((diffMs / (1000 * 60 * 60)) * 10) / 10;
+             
+             if (diffMs > 0) {
+                freeSlots.push({
+                   startTime: currentTime,
+                   endTime: dayEnd,
+                   duration: diffHours,
+                   timeRange: `${currentTime.toTimeString().slice(0, 5)} - ${dayEnd.toTimeString().slice(0, 5)}`,
+                   pricePerHour: studio.basePricePerHour,
+                   estimatedPrice: Math.round(diffHours * studio.basePricePerHour),
+                   type: 'flexible'
+                });
+             }
+          }
+
+          if (freeSlots.length > 0) {
+            availabilityByDate[dateStr] = freeSlots;
+            totalSlotsCount += freeSlots.length;
+          }
         });
-      });
+
+      } else {
+        // --- DEFAULT MODE: Search for pre-made Available Schedules ---
+        const query = {
+          studioId: studio._id,
+          status: SCHEDULE_STATUS.AVAILABLE
+        };
+
+        // Add date range filter if provided
+        if (startDate || endDate) {
+          query.startTime = {};
+          if (startDate) {
+            query.startTime.$gte = new Date(startDate);
+          }
+          if (endDate) {
+            query.startTime.$lte = new Date(endDate);
+          }
+        }
+
+        // Get all available slots for this studio
+        const availableSlots = await Schedule.find(query)
+          .sort({ startTime: 1 })
+          .lean();
+
+        // Group slots by date
+        availableSlots.forEach(slot => {
+          const date = slot.startTime.toISOString().split('T')[0]; // YYYY-MM-DD format
+          
+          if (!availabilityByDate[date]) {
+            availabilityByDate[date] = [];
+          }
+          
+          availabilityByDate[date].push({
+            _id: slot._id,
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+            duration: Math.round((slot.endTime - slot.startTime) / (1000 * 60 * 60) * 10) / 10, // hours with 1 decimal
+            timeRange: `${slot.startTime.toTimeString().slice(0, 5)} - ${slot.endTime.toTimeString().slice(0, 5)}`,
+            pricePerHour: studio.basePricePerHour,
+            estimatedPrice: Math.round(
+              (slot.endTime - slot.startTime) / (1000 * 60 * 60) * studio.basePricePerHour
+            )
+          });
+        });
+        
+        totalSlotsCount = availableSlots.length;
+      }
 
       return {
         _id: studio._id,
@@ -770,8 +886,8 @@ export const getStudiosAvailability = async (options = {}) => {
         capacity: studio.capacity,
         basePricePerHour: studio.basePricePerHour,
         availabilityByDate,
-        totalSlots: availableSlots.length,
-        isAvailable: availableSlots.length > 0
+        totalSlots: totalSlotsCount,
+        isAvailable: totalSlotsCount > 0
       };
     })
   );

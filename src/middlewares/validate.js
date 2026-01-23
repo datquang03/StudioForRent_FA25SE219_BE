@@ -1,7 +1,7 @@
 //#region Imports
 import mongoose from 'mongoose';
 import { isValidEmail, isValidPassword, isNotEmpty } from "../utils/validators.js";
-import { VALIDATION_MESSAGES, REGEX_PATTERNS, SERVICE_STATUS } from "../utils/constants.js";
+import { VALIDATION_MESSAGES, REGEX_PATTERNS, SERVICE_STATUS, TIME_CONSTANTS } from "../utils/constants.js";
 import { createResponse } from "../utils/helpers.js";
 import logger from "../utils/logger.js";
 //#endregion
@@ -398,26 +398,74 @@ export const sanitizeInput = (req, res, next) => {
     return clean.trim();
   };
 
+  // Helper date normalizer
+  const normalizeDateString = (value) => {
+    if (typeof value !== 'string') return value;
+    
+    // Regex detect ISO-like string without timezone (e.g., 2024-01-23T14:30:00 or 2024-01-23t14:30:00.123456)
+    // Supports both T/t separator and 1-6 fractional digits
+    const zonelessDatePattern = /^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(\.\d{1,6})?$/;
+    
+    if (zonelessDatePattern.test(value)) {
+      // Append default timezone (Vietnam Time)
+      // This forces the backend to treat the local time as Vietnam time, not UTC
+      const offset = TIME_CONSTANTS.DEFAULT_TIMEZONE_OFFSET || 7;
+      
+      // Format offset to +HH:mm string (e.g., 7 -> +07:00)
+      const sign = offset >= 0 ? '+' : '-';
+      const absOffset = Math.abs(offset);
+      const hours = String(Math.floor(absOffset)).padStart(2, '0');
+      const minutes = String(Math.round((absOffset % 1) * 60)).padStart(2, '0');
+      const timezoneString = `${sign}${hours}:${minutes}`;
+
+      const normalized = `${value}${timezoneString}`;
+      
+      // Use debug level to avoid log spam in production
+      logger.debug(`[Auto-Timezone] Normalized ${value} to ${normalized}`);
+      return normalized;
+    }
+    
+    return value;
+  };
+
+  // Processing function to handle recursion
+  const processValue = (value) => {
+    if (typeof value === 'string') {
+      // Normalize date FIRST to capture patterns before sanitize might alter them (though uncommon for dates)
+      // Then sanitize the result
+      return sanitizeString(normalizeDateString(value));
+    } else if (Array.isArray(value)) {
+      return value.map(item => processValue(item));
+    } else if (value !== null && typeof value === 'object') {
+      Object.keys(value).forEach(key => {
+        value[key] = processValue(value[key]);
+      });
+      return value;
+    }
+    return value;
+  };
+
   try {
     // Sanitize body (POST/PUT/PATCH data)
     if (req.body && typeof req.body === 'object') {
-      Object.keys(req.body).forEach(key => {
-        req.body[key] = sanitizeString(req.body[key]);
-      });
+      req.body = processValue(req.body);
     }
 
     // Sanitize query params (GET ?search=...)
+    // Req.query is a getter/setter in some frameworks or versions, but safe to mutate properties
     if (req.query && typeof req.query === 'object') {
-      Object.keys(req.query).forEach(key => {
-        req.query[key] = sanitizeString(req.query[key]);
+      const processedQuery = processValue(req.query);
+      Object.keys(processedQuery).forEach(key => {
+        req.query[key] = processedQuery[key];
       });
     }
 
     // Sanitize URL params (/:id)
     if (req.params && typeof req.params === 'object') {
-      Object.keys(req.params).forEach(key => {
-        req.params[key] = sanitizeString(req.params[key]);
-      });
+       const processedParams = processValue(req.params);
+       Object.keys(processedParams).forEach(key => {
+         req.params[key] = processedParams[key];
+       });
     }
   } catch (error) {
     logger.error('Sanitize Input Error:', error);

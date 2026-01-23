@@ -381,13 +381,14 @@ export const getStudiosScheduleByDateController = asyncHandler(async (req, res) 
  * GET /api/studios/availability
  */
 export const getStudiosAvailabilityController = asyncHandler(async (req, res) => {
-  const { startDate, endDate, page, limit } = req.query;
+  const { startDate, endDate, page, limit, mode } = req.query;
 
   const result = await getStudiosAvailability({
     startDate,
     endDate,
     page: parseInt(page) || 1,
-    limit: parseInt(limit) || 10
+    limit: parseInt(limit) || 10,
+    mode
   });
 
   res.status(200).json({
