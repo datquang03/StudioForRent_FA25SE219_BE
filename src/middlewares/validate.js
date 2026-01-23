@@ -398,25 +398,44 @@ export const sanitizeInput = (req, res, next) => {
     return clean.trim();
   };
 
+  // Helper date normalizer
+  const normalizeDateString = (value) => {
+    if (typeof value !== 'string') return value;
+    
+    // Regex detect ISO-like string without timezone (e.g., 2024-01-23T14:30:00 or 2024-01-23T14:30:00.000)
+    // Exclude strings that already have Z or +HH:mm/-HH:mm
+    const zonelessDatePattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?$/;
+    
+    if (zonelessDatePattern.test(value)) {
+      // Append +07:00 (Vietnam Time)
+      // This forces the backend to treat the local time as Vietnam time, not UTC
+      const normalized = `${value}+07:00`;
+      logger.info(`[Auto-Timezone] Normalized ${value} to ${normalized}`);
+      return normalized;
+    }
+    
+    return value;
+  };
+
   try {
     // Sanitize body (POST/PUT/PATCH data)
     if (req.body && typeof req.body === 'object') {
       Object.keys(req.body).forEach(key => {
-        req.body[key] = sanitizeString(req.body[key]);
+        req.body[key] = normalizeDateString(sanitizeString(req.body[key]));
       });
     }
 
     // Sanitize query params (GET ?search=...)
     if (req.query && typeof req.query === 'object') {
       Object.keys(req.query).forEach(key => {
-        req.query[key] = sanitizeString(req.query[key]);
+        req.query[key] = normalizeDateString(sanitizeString(req.query[key]));
       });
     }
 
     // Sanitize URL params (/:id)
     if (req.params && typeof req.params === 'object') {
       Object.keys(req.params).forEach(key => {
-        req.params[key] = sanitizeString(req.params[key]);
+        req.params[key] = normalizeDateString(sanitizeString(req.params[key]));
       });
     }
   } catch (error) {
