@@ -401,11 +401,12 @@ export const cancelEquipmentOrder = async (orderId, user, reason) => {
       throw new ValidationError('Chỉ có thể hủy đơn hàng đang chờ hoặc đã xác nhận (chưa sử dụng)');
     }
 
-    // Check if order has paid payments (requires refund request)
-    const hasPaidPayments = order.status === EQUIPMENT_ORDER_STATUS.CONFIRMED && order.totalAmount > 0;
+    // Check if order has actually been paid (requires refund request)
+    // Use paymentStatus instead of just checking CONFIRMED status
+    const hasPaidPayments = order.paymentStatus === PAYMENT_STATUS.PAID;
 
-    // Check if equipment was actually being used (for IN_USE orders)
-    const wasInUse = order.status === EQUIPMENT_ORDER_STATUS.IN_USE;
+    // Store original status before changing (for equipment restore logic)
+    const originalStatus = order.status;
 
     order.status = EQUIPMENT_ORDER_STATUS.CANCELLED;
     order.cancelledAt = new Date();
@@ -413,10 +414,14 @@ export const cancelEquipmentOrder = async (orderId, user, reason) => {
 
     await order.save({ session });
 
-    // Only restore equipment quantity if order was IN_USE (equipment was actually being used)
-    // For PENDING or CONFIRMED orders, equipment wasn't reserved yet
+    // Restore equipment quantity for orders that were reserved
+    // Equipment is reserved in createEquipmentOrder() for all orders (PENDING onwards)
+    // So we need to restore for any cancelled order that had equipment reserved
     const equipment = order.equipmentId;
-    if (equipment && wasInUse) {
+    const wasReserved = [EQUIPMENT_ORDER_STATUS.PENDING, EQUIPMENT_ORDER_STATUS.CONFIRMED, EQUIPMENT_ORDER_STATUS.IN_USE].includes(originalStatus);
+    // Only restore if equipment was actually reserved (inUseQty >= order.quantity)
+    // This handles edge cases where order was created without proper reservation
+    if (equipment && wasReserved && equipment.inUseQty >= order.quantity) {
       equipment.inUseQty -= order.quantity;
       equipment.availableQty += order.quantity;
       await equipment.save({ session });

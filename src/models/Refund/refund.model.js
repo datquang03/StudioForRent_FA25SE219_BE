@@ -43,10 +43,6 @@ const refundSchema = new mongoose.Schema({
     type: String  // Cloudinary URLs
   }],
 
-  // Refund status workflow
-  // Source of truth for allowed transitions: validators.js (REFUND_TRANSITIONS)
-  // PENDING_APPROVAL → APPROVED → COMPLETED
-  //                └────────────→ REJECTED
   status: {
     type: String,
     enum: ['PENDING_APPROVAL', 'APPROVED', 'COMPLETED', 'REJECTED'],
@@ -112,13 +108,13 @@ refundSchema.index({ requestedAt: 1 });
 
 // Pre-save middleware to sync bookingId with targetId for Booking type
 refundSchema.pre('save', function(next) {
-  if (this.targetModel === 'Booking' && this.targetId && !this.bookingId) {
+  if (this.targetModel === TARGET_MODEL.BOOKING && this.targetId && !this.bookingId) {
     this.bookingId = this.targetId;
   }
   // If bookingId is set but targetId is not, sync them (backward compatibility)
   if (this.bookingId && !this.targetId) {
     this.targetId = this.bookingId;
-    this.targetModel = 'Booking';
+    this.targetModel = TARGET_MODEL.BOOKING;
   }
   next();
 });
