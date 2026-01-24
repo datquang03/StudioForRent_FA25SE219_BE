@@ -31,12 +31,35 @@ export const isExpired = (expiryTime) => {
 };
 
 /**
- * Format date thành ISO string
- * @param {Date|number} date - Date object hoặc timestamp
- * @returns {string} - ISO string
+ * Format date thành chuỗi ngày (VD: 25/01/2026) theo múi giờ VN
  */
 export const formatDate = (date) => {
-  return new Date(date).toISOString();
+  return new Date(date).toLocaleDateString(TIME_CONSTANTS.DEFAULT_LOCALE, {
+    timeZone: TIME_CONSTANTS.DEFAULT_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+};
+
+/**
+ * Format date thành chuỗi giờ (VD: 14:30) theo múi giờ VN
+ */
+export const formatTime = (date) => {
+  return new Date(date).toLocaleTimeString(TIME_CONSTANTS.DEFAULT_LOCALE, {
+    timeZone: TIME_CONSTANTS.DEFAULT_TIMEZONE,
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};
+
+/**
+ * Format date thành chuỗi đầy đủ (VD: 14:30 25/01/2026) theo múi giờ VN
+ */
+export const formatDateTime = (date) => {
+  return new Date(date).toLocaleString(TIME_CONSTANTS.DEFAULT_LOCALE, {
+    timeZone: TIME_CONSTANTS.DEFAULT_TIMEZONE
+  });
 };
 
 /**

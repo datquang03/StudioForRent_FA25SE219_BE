@@ -13,6 +13,8 @@ import RoomPolicyService from './roomPolicy.service.js';
 import { createPaymentOptions } from './payment.service.js';
 import { acquireLock, releaseLock } from '../utils/redisLock.js';
 import { sendNoShowEmail } from './email.service.js';
+import { PagingQuery } from '../utils/helpers.js';
+import { formatDate, formatTime } from '../utils/helpers.js';
 import logger from '../utils/logger.js';
 // #endregion
 
@@ -311,8 +313,8 @@ export const getBookingById = async (id, userId = null, userRole = null) => {
       startTime: booking.scheduleId.startTime,
       endTime: booking.scheduleId.endTime,
       duration: Math.round((new Date(booking.scheduleId.endTime) - new Date(booking.scheduleId.startTime)) / (1000 * 60 * 60) * 10) / 10,
-      date: booking.scheduleId.startTime.toISOString().split('T')[0],
-      timeRange: `${new Date(booking.scheduleId.startTime).toTimeString().slice(0, 5)} - ${new Date(booking.scheduleId.endTime).toTimeString().slice(0, 5)}`
+      date: formatDate(booking.scheduleId.startTime).split('/').reverse().join('-'),
+      timeRange: `${formatTime(booking.scheduleId.startTime)} - ${formatTime(booking.scheduleId.endTime)}`
     } : null,
     totalBeforeDiscount: booking.totalBeforeDiscount,
     discountAmount: booking.discountAmount,
@@ -1056,8 +1058,8 @@ export const markAsNoShow = async (bookingId, checkInTime = null, io = null) => 
       if (user && user.email) {
         await sendNoShowEmail(user.email, {
           bookingId: booking._id,
-          date: booking.scheduleId?.startTime ? new Date(booking.scheduleId.startTime).toLocaleDateString('vi-VN') : undefined,
-          time: booking.scheduleId?.startTime ? new Date(booking.scheduleId.startTime).toLocaleTimeString('vi-VN') : undefined,
+          date: booking.scheduleId?.startTime ? formatDate(booking.scheduleId.startTime) : undefined,
+          time: booking.scheduleId?.startTime ? formatTime(booking.scheduleId.startTime) : undefined,
           chargeAmount: chargeResult?.chargeAmount || 0
         });
       }
@@ -1230,7 +1232,7 @@ const calculateScheduleDetails = (schedule) => {
     endTime: schedule.endTime,
     duration: durationInHours,
     date: startTime.toISOString().split('T')[0],
-    timeRange: `${startTime.toTimeString().slice(0, 5)} - ${endTime.toTimeString().slice(0, 5)}`
+    timeRange: `${formatTime(startTime)} - ${formatTime(endTime)}`
   };
 };
 
@@ -1433,7 +1435,7 @@ export const extendBooking = async (bookingId, newEndTime, actorId = null, actor
       }
 
       if (requestedEndTime > extensionCheck.maxEndTime) {
-        throw new ConflictError(`Chỉ có thể gia hạn tối đa đến ${extensionCheck.maxEndTime.toLocaleTimeString('vi-VN')}`);
+        throw new ConflictError(`Chỉ có thể gia hạn tối đa đến ${formatTime(extensionCheck.maxEndTime)}`);
       }
 
       // 5. Tính toán số tiền cần thanh toán thêm

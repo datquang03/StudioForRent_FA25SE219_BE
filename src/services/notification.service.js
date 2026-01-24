@@ -8,6 +8,7 @@ import Booking from '../models/Booking/booking.model.js';
 import Payment from '../models/Payment/payment.model.js';
 import cron from 'node-cron';
 import { BOOKING_STATUS, PAYMENT_STATUS, NOTIFICATION_TYPE } from '../utils/constants.js';
+import { formatDateTime } from '../utils/helpers.js';
 
 // Rate limiting cache (in-memory, should use Redis in production)
 const emailRateLimit = new Map();
@@ -299,7 +300,7 @@ export const scheduleReminders = (io = null) => {
           // Create in-app notification (don't send email here via that helper)
           const userId = booking.userId;
           const title = 'Nhắc thanh toán phần còn lại';
-          const message = `Bạn còn ${remaining} VND cần thanh toán cho booking #${booking._id.toString().slice(-8)} trước khi sử dụng dịch vụ vào ${new Date(sched.startTime).toLocaleString('vi-VN')}. Vui lòng thanh toán để tránh ảnh hưởng.`;
+          const message = `Bạn còn ${remaining} VND cần thanh toán cho booking #${booking._id.toString().slice(-8)} trước khi sử dụng dịch vụ vào ${formatDateTime(sched.startTime)}. Vui lòng thanh toán để tránh ảnh hưởng.`;
 
           await createAndSendNotification(userId, NOTIFICATION_TYPE.REMINDER, title, message, false, io, booking._id);
 
