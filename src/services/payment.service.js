@@ -327,15 +327,6 @@ export const createPaymentOptions = async (bookingId) => {
   }
 };
 
-const getCategoryFromModel = (model) => {
-    switch (model) {
-        case TARGET_MODEL.SET_DESIGN_ORDER: return PAYMENT_CATEGORY.SET_DESIGN;
-        case TARGET_MODEL.EQUIPMENT_ORDER: return PAYMENT_CATEGORY.EQUIPMENT;
-        case TARGET_MODEL.BOOKING: 
-        default: return PAYMENT_CATEGORY.BOOKING;
-    }
-};
-
 /**
  * Handle PayOS webhook/callback
  * @param {Object} webhookBody - Webhook data from PayOS
@@ -545,20 +536,67 @@ export const handlePaymentWebhook = async (webhookPayload) => {
 
       } else if (payment.targetModel === 'EquipmentOrder') {
           // --- EQUIPMENT LOGIC ---
+          const { EQUIPMENT_ORDER_STATUS } = await import('../models/EquipmentOrder/equipmentOrder.model.js');
           const order = await EquipmentOrder.findById(payment.targetId).session(session);
           if (order) {
-              // Assuming generic 'paidAmount' field or strict full payment
-              // Equipment usually might be full payment only?
-              // For safety, assume full payment marks confirmed
-               order.paymentStatus = PAYMENT_STATUS.PAID; 
-               if (order.status === 'pending') { // Check constants
-                   order.status = 'confirmed'; // Check constants
-               }
-               await order.save({ session });
+              order.paymentStatus = PAYMENT_STATUS.PAID;
+              if (order.status === EQUIPMENT_ORDER_STATUS.PENDING) {
+                  order.status = EQUIPMENT_ORDER_STATUS.CONFIRMED;
+                  order.confirmedAt = new Date();
+              }
+              await order.save({ session });
           }
       }
 
       await session.commitTransaction();
+
+      // Send notifications after commit
+      try {
+          if (payment.targetModel === 'Booking' || (!payment.targetModel && payment.bookingId)) {
+              const bookingId = payment.targetId || payment.bookingId;
+              const booking = await Booking.findById(bookingId).populate('customerId', 'username');
+              if (booking) {
+                  await createAndSendNotification(
+                      booking.customerId._id || booking.customerId,
+                      NOTIFICATION_TYPE.SUCCESS,
+                      'Thanh toán thành công',
+                      `Thanh toán ${payment.amount.toLocaleString()} VND cho đặt phòng ${booking.bookingCode} đã thành công`,
+                      false,
+                      null,
+                      booking._id
+                  );
+              }
+          } else if (payment.targetModel === 'SetDesignOrder') {
+              const order = await SetDesignOrder.findById(payment.targetId);
+              if (order) {
+                  await createAndSendNotification(
+                      order.customerId,
+                      NOTIFICATION_TYPE.SUCCESS,
+                      'Thanh toán thành công',
+                      `Thanh toán ${payment.amount.toLocaleString()} VND cho đơn hàng ${order.orderCode} đã thành công`,
+                      false,
+                      null,
+                      order._id
+                  );
+              }
+          } else if (payment.targetModel === 'EquipmentOrder') {
+              const order = await EquipmentOrder.findById(payment.targetId);
+              if (order) {
+                  await createAndSendNotification(
+                      order.customerId,
+                      NOTIFICATION_TYPE.SUCCESS,
+                      'Thanh toán thành công',
+                      `Thanh toán ${payment.amount.toLocaleString()} VND cho đơn thuê thiết bị ${order.orderCode} đã thành công`,
+                      false,
+                      null,
+                      order._id
+                  );
+              }
+          }
+      } catch (notifyErr) {
+          logger.error('Failed to send payment notification:', notifyErr);
+      }
+
       return { success: true, message: 'Payment processed successfully' };
 
     } else {

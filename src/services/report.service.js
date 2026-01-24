@@ -329,11 +329,27 @@ export const createFinePayment = async (reportId, user) => {
         });
 
         if (existingPayment) {
-             return {
-                payment: existingPayment,
-                checkoutUrl: existingPayment.qrCodeUrl,
-                message: 'Link thanh toán phạt cũ vẫn còn hiệu lực'
-             };
+            const now = new Date();
+            const isExpired = existingPayment.expiresAt && new Date(existingPayment.expiresAt) < now;
+            
+            if (isExpired) {
+                // Mark expired payment as cancelled
+                existingPayment.status = PAYMENT_STATUS.CANCELLED;
+                existingPayment.gatewayResponse = {
+                    ...existingPayment.gatewayResponse,
+                    cancelledAt: new Date(),
+                    cancelReason: 'Payment link expired'
+                };
+                await existingPayment.save();
+                // Continue to create new payment below
+            } else {
+                // Still valid, return existing
+                return {
+                    payment: existingPayment,
+                    checkoutUrl: existingPayment.qrCodeUrl,
+                    message: 'Link thanh toán phạt cũ vẫn còn hiệu lực'
+                };
+            }
         }
 
         // Generate codes

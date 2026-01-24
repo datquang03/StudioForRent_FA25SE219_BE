@@ -456,20 +456,42 @@ export const refundEquipmentDeposit = async (orderId, user) => {
              throw new ValidationError('Đơn hàng này không có tiền cọc để hoàn');
         }
 
-        // Find PAID payments
+        // Find PAID payments and validate
         const paidPayments = await Payment.find({
             targetId: orderId,
             targetModel: 'EquipmentOrder',
             status: PAYMENT_STATUS.PAID
         }).session(session);
 
-        // Create a placeholder Payment record with status REFUNDED to track it.
+        // Validate: must have paid payments
+        if (!paidPayments || paidPayments.length === 0) {
+            throw new ValidationError('Không có thanh toán nào cho đơn hàng này');
+        }
+
+        // Validate: total paid >= deposit
+        const totalPaid = paidPayments.reduce((sum, p) => sum + p.amount, 0);
+        if (totalPaid < deposit) {
+            throw new ValidationError('Số tiền đã thu nhỏ hơn tiền cọc');
+        }
+
+        // Check existing refund to prevent duplicate (Issue #4)
+        const existingRefund = await Payment.findOne({
+            targetId: orderId,
+            targetModel: TARGET_MODEL.EQUIPMENT_ORDER,
+            status: PAYMENT_STATUS.REFUNDED
+        }).session(session);
+
+        if (existingRefund) {
+            throw new ValidationError('Tiền cọc cho đơn hàng này đã được hoàn trước đó');
+        }
+
+        // Create refund record with unique paymentCode (Issue #4: add timestamp)
         const refundTransId = `REF-${Date.now()}`;
         const refundPayment = await Payment.create([{
             targetId: orderId,
             targetModel: TARGET_MODEL.EQUIPMENT_ORDER,
             category: PAYMENT_CATEGORY.EQUIPMENT,
-            paymentCode: `REF-${order.orderCode}`,
+            paymentCode: `REF-${order.orderCode}-${Date.now()}`,
             amount: deposit, // Positive amount, but context is refund
             payType: PAY_TYPE.FULL, // Reusing enum
             status: PAYMENT_STATUS.REFUNDED,
@@ -505,13 +527,184 @@ export const refundEquipmentDeposit = async (orderId, user) => {
  * @returns {Object} Payment with checkout URL
  */
 export const createEquipmentPayment = async (orderId, user) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
-    if (!orderId) throw new ValidationError('Invalid Order ID');    
-    const { createPaymentForOption } = await import('./payment.service.js');
-    return await createPaymentForOption(orderId, { payType: PAY_TYPE.FULL }, 'EquipmentOrder');
+    if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
+      throw new ValidationError('ID đơn hàng không hợp lệ');
+    }
+
+    const order = await EquipmentOrder.findById(orderId)
+      .populate('equipmentId', 'name')
+      .populate('customerId', 'username email')
+      .session(session);
+
+    if (!order) {
+      throw new NotFoundError('Đơn hàng không tồn tại');
+    }
+
+    // Check ownership for customers
+    const isStaffOrAdmin = user?.role === 'staff' || user?.role === 'admin';
+    if (!isStaffOrAdmin && order.customerId._id.toString() !== user._id.toString()) {
+      throw new ValidationError('Bạn không có quyền thanh toán đơn hàng này');
+    }
+
+    // Check order status
+    if (order.status === EQUIPMENT_ORDER_STATUS.CANCELLED) {
+      throw new ValidationError('Không thể thanh toán đơn hàng đã hủy');
+    }
+
+    if (order.paymentStatus === PAYMENT_STATUS.PAID) {
+      throw new ValidationError('Đơn hàng đã được thanh toán');
+    }
+
+    // Check for existing pending payment
+    const existingPayment = await Payment.findOne({
+      targetId: orderId,
+      targetModel: TARGET_MODEL.EQUIPMENT_ORDER,
+      status: PAYMENT_STATUS.PENDING,
+    }).session(session);
+
+    if (existingPayment) {
+      const now = new Date();
+      const isExpired = existingPayment.expiresAt && new Date(existingPayment.expiresAt) < now;
+      
+      if (!isExpired) {
+        await session.commitTransaction();
+        return {
+          payment: existingPayment,
+          checkoutUrl: existingPayment.qrCodeUrl,
+          message: 'Đã có link thanh toán cho đơn hàng này',
+        };
+      } else {
+        // Cancel expired payment
+        existingPayment.status = PAYMENT_STATUS.CANCELLED;
+        existingPayment.gatewayResponse = {
+          ...existingPayment.gatewayResponse,
+          cancelledAt: new Date(),
+          cancelReason: 'Payment link expired'
+        };
+        await existingPayment.save({ session });
+      }
+    }
+
+    const paymentAmount = order.totalAmount;
+
+    if (paymentAmount < 1000) {
+      throw new ValidationError('Số tiền thanh toán tối thiểu là 1,000 VNĐ');
+    }
+
+    // Generate codes
+    const payosOrderCode = generateOrderCode();
+    const paymentCode = generatePaymentCode(orderId);
+
+    // Create PayOS payment link
+    let checkoutUrl = null;
+    let qrCodeUrl = null;
+    let gatewayResponse = {
+      orderCode: payosOrderCode,
+      createdAt: new Date(),
+    };
+
+    try {
+      const { default: payos } = await import('../config/payos.js');
+      const fullDescription = `Equipment: ${order.equipmentId?.name || 'Rental'} - ${order.orderCode}`;
+      const safeDescription = truncate(fullDescription, PAYOS_DESCRIPTION_MAX);
+
+      const paymentRequestData = {
+        orderCode: payosOrderCode,
+        amount: paymentAmount,
+        description: safeDescription,
+        items: [
+          {
+            name: truncate(order.equipmentId?.name || 'Equipment', 50),
+            quantity: order.quantity,
+            price: Math.floor(paymentAmount / order.quantity),
+          },
+        ],
+        returnUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/equipment/payment/success?orderId=${orderId}`,
+        cancelUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/equipment/payment/cancel?orderId=${orderId}`,
+        buyerName: order.customerId?.username || 'Customer',
+        buyerEmail: order.customerId?.email || undefined,
+      };
+
+      logger.info('Creating PayOS payment link for equipment order', {
+        orderCode: payosOrderCode,
+        amount: paymentAmount,
+      });
+
+      let paymentLinkResponse;
+      if (payos && typeof payos.createPaymentLink === 'function') {
+        paymentLinkResponse = await payos.createPaymentLink(paymentRequestData);
+      } else if (payos && typeof payos.paymentRequests?.create === 'function') {
+        paymentLinkResponse = await payos.paymentRequests.create(paymentRequestData);
+      } else {
+        throw new Error('PayOS client not configured');
+      }
+
+      if (!paymentLinkResponse || !paymentLinkResponse.checkoutUrl) {
+        throw new Error('PayOS did not return a valid payment link response');
+      }
+
+      checkoutUrl = paymentLinkResponse.checkoutUrl;
+      qrCodeUrl = paymentLinkResponse?.qrCode || paymentLinkResponse?.data?.qrCode || null;
+      gatewayResponse = {
+        ...gatewayResponse,
+        paymentLinkId: paymentLinkResponse?.paymentLinkId || paymentLinkResponse?.data?.id || null,
+        qrCode: qrCodeUrl,
+      };
+
+    } catch (payosError) {
+      logger.error('PayOS API Error for equipment:', {
+        message: payosError.message,
+        orderCode: payosOrderCode,
+      });
+      throw new Error(`Payment gateway error: ${payosError.message}`);
+    }
+
+    // Create payment record with expiration
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+    const payment = new Payment({
+      targetId: orderId,
+      targetModel: TARGET_MODEL.EQUIPMENT_ORDER,
+      category: PAYMENT_CATEGORY.EQUIPMENT,
+      paymentCode,
+      amount: paymentAmount,
+      payType: PAY_TYPE.FULL,
+      status: PAYMENT_STATUS.PENDING,
+      transactionId: payosOrderCode.toString(),
+      qrCodeUrl: checkoutUrl,
+      gatewayResponse,
+      expiresAt,
+    });
+
+    await payment.save({ session });
+
+    await session.commitTransaction();
+
+    logger.info('Equipment payment created', {
+      paymentId: payment._id,
+      orderId,
+      amount: paymentAmount,
+    });
+
+    return {
+      payment,
+      checkoutUrl,
+      qrCode: qrCodeUrl,
+      amount: paymentAmount,
+      orderCode: payosOrderCode,
+    };
   } catch (error) {
+    await session.abortTransaction();
     logger.error('Create equipment payment error:', error);
-    throw error;
+    if (error instanceof ValidationError || error instanceof NotFoundError) {
+      throw error;
+    }
+    throw new Error('Lỗi khi tạo thanh toán');
+  } finally {
+    session.endSession();
   }
 };
 
@@ -536,10 +729,13 @@ export const getEquipmentPaymentStatus = async (paymentId) => {
  */
 export const getEquipmentOrderPayments = async (orderId) => {
     try {
-        if (!orderId) throw new ValidationError('Invalid Order ID');
-        const { default: Payment } = await import('../models/Payment/payment.model.js');
+        if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
+            throw new ValidationError('ID đơn hàng không hợp lệ');
+        }
         return await Payment.find({ targetId: orderId, targetModel: 'EquipmentOrder' }).sort({ createdAt: -1 });
     } catch (e) {
+        if (e instanceof ValidationError) throw e;
+        logger.error('Get equipment order payments error:', e);
         throw new Error('Lỗi lấy danh sách thanh toán');
     }
 };

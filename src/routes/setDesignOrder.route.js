@@ -27,10 +27,7 @@ router.use(generalLimiter);
 //#endregion
 
 //#region Webhook (No Auth - Must be before protect middleware)
-/**
- * POST /api/set-design-orders/payment/webhook
- * PayOS webhook handler for set design payments (no auth for webhooks)
- */
+/** @deprecated Use /api/payments/webhook instead */
 router.post('/payment/webhook', paymentWebhookController);
 //#endregion
 

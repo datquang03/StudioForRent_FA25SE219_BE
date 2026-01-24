@@ -17,12 +17,12 @@ const paymentSchema = new mongoose.Schema(
     // Mới - Polymorphic Reference
     targetId: {
       type: mongoose.Schema.Types.ObjectId,
-      required: true,
+      required: function() { return !this.bookingId; }, // Required only when bookingId is absent
       refPath: 'targetModel'
     },
     targetModel: {
       type: String,
-      required: true,
+      required: function() { return !this.bookingId; }, // Required only when bookingId is absent
       enum: Object.values(TARGET_MODEL)
     },
     

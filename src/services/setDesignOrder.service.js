@@ -702,7 +702,6 @@ export const createRemainingSetDesignPayment = async (orderId, user) => {
   session.startTransaction();
 
   try {
-    const Payment = mongoose.model('Payment');
     if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
       throw new ValidationError('ID đơn hàng không hợp lệ');
     }
@@ -840,12 +839,12 @@ export const createRemainingSetDesignPayment = async (orderId, user) => {
 };
 
 /**
- * Handle PayOS webhook for set design payment
- * Uses same pattern as payment.service.js for consistency
- * @param {Object} webhookPayload - Webhook payload from PayOS
- * @returns {Object} Webhook processing result
+ * @deprecated Use unified webhook at /api/payments/webhook instead.
+ * @param {Object} webhookPayload
  */
 export const handleSetDesignPaymentWebhook = async (webhookPayload) => {
+  logger.warn('DEPRECATED: handleSetDesignPaymentWebhook called');
+  
   const session = await mongoose.startSession();
   session.startTransaction();
 
