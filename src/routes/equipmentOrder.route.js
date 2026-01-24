@@ -10,6 +10,7 @@ import {
   handlePaymentWebhook,
   getPaymentStatus,
   getOrderPayments,
+  refundDeposit,
 } from '../controllers/equipmentOrder.controller.js';
 import { protect, authorize } from '../middlewares/auth.js';
 
@@ -66,6 +67,13 @@ router.post('/:id/cancel', protect, authorize(['customer']), cancelOrder);
  * @access  Staff, Admin
  */
 router.patch('/:id/status', protect, authorize(['staff', 'admin']), updateOrderStatus);
+
+/**
+ * @route   POST /api/equipment-orders/:id/refund-deposit
+ * @desc    Refund equipment deposit
+ * @access  Staff, Admin
+ */
+router.post('/:id/refund-deposit', protect, authorize(['staff', 'admin']), refundDeposit);
 
 /**
  * @route   GET /api/equipment-orders/:id/payments

@@ -9,6 +9,7 @@ import {
   handleEquipmentPaymentWebhook,
   getEquipmentPaymentStatus,
   getEquipmentOrderPayments,
+  refundEquipmentDeposit,
 } from '../services/equipmentOrder.service.js';
 import logger from '../utils/logger.js';
 
@@ -185,6 +186,23 @@ export const getOrderPayments = async (req, res, next) => {
   }
 };
 
+/**
+ * Refund deposit
+ * POST /api/equipment-orders/:id/refund-deposit
+ */
+export const refundDeposit = async (req, res, next) => {
+  try {
+    const result = await refundEquipmentDeposit(req.params.id, req.user);
+    res.json({
+      success: true,
+      message: 'Hoàn tiền cọc thành công',
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export default {
   createOrder,
   getMyOrders,
@@ -196,4 +214,5 @@ export default {
   handlePaymentWebhook,
   getPaymentStatus,
   getOrderPayments,
+  refundDeposit,
 };

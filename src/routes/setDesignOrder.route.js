@@ -8,6 +8,7 @@ import {
   updateOrderStatusController,
   cancelOrderController,
   createPaymentController,
+  createRemainingPaymentController,
   paymentWebhookController,
   getPaymentStatusController,
   getOrderPaymentsController,
@@ -26,10 +27,7 @@ router.use(generalLimiter);
 //#endregion
 
 //#region Webhook (No Auth - Must be before protect middleware)
-/**
- * POST /api/set-design-orders/payment/webhook
- * PayOS webhook handler for set design payments (no auth for webhooks)
- */
+/** @deprecated Use /api/payments/webhook instead */
 router.post('/payment/webhook', paymentWebhookController);
 //#endregion
 
@@ -128,6 +126,17 @@ router.post(
   validateObjectId(),
   authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN),
   createPaymentController
+);
+
+/**
+ * POST /api/set-design-orders/:id/payment/remaining
+ * Create payment for remaining amount
+ */
+router.post(
+  '/:id/payment/remaining',
+  validateObjectId(),
+  authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN),
+  createRemainingPaymentController
 );
 
 /**

@@ -8,6 +8,7 @@ import {
   updateSetDesignOrderStatus,
   cancelSetDesignOrder,
   createSetDesignPayment,
+  createRemainingSetDesignPayment,
   handleSetDesignPaymentWebhook,
   getSetDesignPaymentStatus,
   getSetDesignOrderPayments,
@@ -170,6 +171,27 @@ export const createPaymentController = asyncHandler(async (req, res) => {
 });
 
 /**
+ * Create remaining payment for order
+ * POST /api/set-design-orders/:id/payment/remaining
+ */
+export const createRemainingPaymentController = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  if (!id || !isValidObjectId(id)) {
+    res.status(400);
+    throw new Error('ID đơn hàng không hợp lệ');
+  }
+
+  const result = await createRemainingSetDesignPayment(id, req.user);
+
+  res.status(200).json({
+    success: true,
+    message: 'Tạo thanh toán còn lại thành công',
+    data: result,
+  });
+});
+
+/**
  * Handle payment webhook
  * POST /api/set-design-orders/payment/webhook
  */
@@ -268,6 +290,7 @@ export default {
   updateOrderStatusController,
   cancelOrderController,
   createPaymentController,
+  createRemainingPaymentController,
   paymentWebhookController,
   getPaymentStatusController,
   getOrderPaymentsController,
