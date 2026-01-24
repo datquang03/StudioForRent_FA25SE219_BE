@@ -3,9 +3,21 @@ import { ValidationError, NotFoundError, ForbiddenError } from '../utils/errors.
 import { Booking, Studio } from '../models/index.js';
 import Review from '../models/Review/review.model.js';
 import Comment from '../models/Comment/comment.model.js';
-import { REPORT_TARGET_TYPES, REPORT_ISSUE_TYPE, REPORT_STATUS, USER_ROLES } from '../utils/constants.js';
 import { validateStatusTransition, REPORT_TRANSITIONS } from '../utils/validators.js';
 import logger from '../utils/logger.js';
+import Payment from '../models/Payment/payment.model.js';
+import payos from '../config/payos.js';
+import crypto from 'crypto';
+import { 
+    REPORT_TARGET_TYPES, 
+    REPORT_ISSUE_TYPE, 
+    REPORT_STATUS, 
+    USER_ROLES,
+    TARGET_MODEL,
+    PAYMENT_CATEGORY,
+    PAYMENT_STATUS,
+    PAY_TYPE
+} from '../utils/constants.js';
 
 export const createReport = async (data) => {
   try {
@@ -287,4 +299,113 @@ export const deleteReport = async (id) => {
     logger.error(`Error deleting report with id ${id}:`, error);
     throw new Error('Lỗi khi xóa báo cáo');
   }
+};
+
+/**
+ * Create payment for fine/compensation
+ * @param {string} reportId 
+ * @param {Object} user 
+ */
+export const createFinePayment = async (reportId, user) => {
+    try {
+        const report = await Report.findById(reportId).populate('reporterId');
+        if (!report) throw new NotFoundError('Báo cáo không tồn tại');
+
+        // Check compensation
+        const amount = report.compensationAmount || 0;
+        if (amount <= 0) {
+            throw new ValidationError('Báo cáo không có yêu cầu bồi thường (số tiền = 0)');
+        }
+        
+        if (amount < 1000) {
+             throw new ValidationError('Số tiền bồi thường quá nhỏ để thanh toán online (< 1000đ)');
+        }
+
+        // Check existing payment
+        const existingPayment = await Payment.findOne({
+            targetId: reportId,
+            targetModel: TARGET_MODEL.REPORT,
+            status: PAYMENT_STATUS.PENDING
+        });
+
+        if (existingPayment) {
+             return {
+                payment: existingPayment,
+                checkoutUrl: existingPayment.qrCodeUrl,
+                message: 'Link thanh toán phạt cũ vẫn còn hiệu lực'
+             };
+        }
+
+        // Generate codes
+        const timestamp = Date.now();
+        const random = crypto.randomBytes(2).readUInt16BE(0) % 1000;
+        const payosOrderCode = Number(`${timestamp}${random.toString().padStart(3, '0')}`);
+        const paymentCode = `FINE-${timestamp}`;
+
+        // Create PayOS Link
+        let checkoutUrl = null;
+        let qrCodeUrl = null;
+        let gatewayResponse = { orderCode: payosOrderCode, createdAt: new Date() };
+
+        try {
+            const description = `Fine Report ${report._id.toString().slice(-6)}`;
+            const paymentData = {
+                orderCode: payosOrderCode,
+                amount: amount,
+                description: description.slice(0, 25), // PayOS limit
+                items: [{ name: `Fine/Compensation - Report ${report._id}`, quantity: 1, price: amount }],
+                returnUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/report/payment/success?reportId=${reportId}`,
+                cancelUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/report/payment/cancel?reportId=${reportId}`
+            };
+
+            let paymentLinkResponse;
+            if (payos && typeof payos.createPaymentLink === 'function') {
+                paymentLinkResponse = await payos.createPaymentLink(paymentData);
+            } else if (payos && typeof payos.paymentRequests?.create === 'function') {
+                paymentLinkResponse = await payos.paymentRequests.create(paymentData);
+            } else {
+                logger.warn('PayOS not configured, using mock data');
+                paymentLinkResponse = {
+                    checkoutUrl: 'http://localhost:3000/mock-fine-payment',
+                    qrCode: 'mock-qr-code',
+                    paymentLinkId: `mock-link-${Date.now()}`
+                };
+            }
+
+            if (paymentLinkResponse) {
+                checkoutUrl = paymentLinkResponse.checkoutUrl || paymentLinkResponse.data?.checkoutUrl;
+                qrCodeUrl = paymentLinkResponse.qrCode || paymentLinkResponse.data?.qrCode;
+            }
+        } catch (err) {
+            logger.error('PayOS Create Fine Error', err);
+            throw new Error('Lỗi tạo link thanh toán phạt: ' + err.message);
+        }
+
+        const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+        const payment = new Payment({
+            targetId: reportId,
+            targetModel: TARGET_MODEL.REPORT,
+            category: PAYMENT_CATEGORY.FINE,
+            paymentCode,
+            amount,
+            payType: PAY_TYPE.FULL,
+            status: PAYMENT_STATUS.PENDING,
+            transactionId: payosOrderCode.toString(),
+            qrCodeUrl: checkoutUrl,
+            gatewayResponse,
+            expiresAt
+        });
+        
+        await payment.save();
+
+        return {
+            payment,
+            checkoutUrl,
+            qrCode: qrCodeUrl
+        };
+
+    } catch (error) {
+        logger.error('Create fine payment error:', error);
+        throw error;
+    }
 };

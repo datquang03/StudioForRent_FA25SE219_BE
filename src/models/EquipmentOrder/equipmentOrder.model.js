@@ -58,6 +58,11 @@ const equipmentOrderSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
+    depositAmount: {
+        type: Number,
+        default: 0,
+        min: 0
+    },
     totalAmount: {
       type: Number,
       required: true,

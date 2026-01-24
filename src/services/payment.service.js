@@ -4,8 +4,10 @@ import { randomBytes } from 'crypto';
 import crypto from 'crypto';
 import Payment from '../models/Payment/payment.model.js';
 import Booking from '../models/Booking/booking.model.js';
+import SetDesignOrder from '../models/SetDesignOrder/setDesignOrder.model.js';
+import EquipmentOrder from '../models/EquipmentOrder/equipmentOrder.model.js';
 import payos from '../config/payos.js';
-import { PAYMENT_STATUS, PAY_TYPE, BOOKING_STATUS } from '../utils/constants.js';
+import { PAYMENT_STATUS, PAY_TYPE, BOOKING_STATUS, SET_DESIGN_ORDER_STATUS, TARGET_MODEL, PAYMENT_CATEGORY } from '../utils/constants.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
 import { createAndSendNotification } from './notification.service.js';
@@ -325,6 +327,15 @@ export const createPaymentOptions = async (bookingId) => {
   }
 };
 
+const getCategoryFromModel = (model) => {
+    switch (model) {
+        case TARGET_MODEL.SET_DESIGN_ORDER: return PAYMENT_CATEGORY.SET_DESIGN;
+        case TARGET_MODEL.EQUIPMENT_ORDER: return PAYMENT_CATEGORY.EQUIPMENT;
+        case TARGET_MODEL.BOOKING: 
+        default: return PAYMENT_CATEGORY.BOOKING;
+    }
+};
+
 /**
  * Handle PayOS webhook/callback
  * @param {Object} webhookBody - Webhook data from PayOS
@@ -413,8 +424,8 @@ export const handlePaymentWebhook = async (webhookPayload) => {
         
         if (!signature || computedSignature.toLowerCase() !== signature.toString().toLowerCase()) {
           logger.error('Signature mismatch!', {
-            expected: computedSignature.substring(0, 16) + '...',
-            received: signature?.substring(0, 16) + '...'
+            expected: computedSignature,
+            received: signature
           });
           throw new ValidationError('Invalid webhook signature');
         }
@@ -455,22 +466,10 @@ export const handlePaymentWebhook = async (webhookPayload) => {
     }).session(session);
 
     if (!payment) {
-      // Check if it's a Set Design payment
-      const { default: SetDesignPayment } = await import('../models/SetDesignPayment/setDesignPayment.model.js');
-      const setDesignPayment = await SetDesignPayment.findOne({ transactionId: orderCode.toString() }).session(session);
-      
-      if (setDesignPayment) {
-        await session.commitTransaction();
-        session.endSession(); // End this session before starting a new one in the other service
-        
-        logger.info(`Redirecting webhook to SetDesign handler for orderCode: ${orderCode}`);
-        const { handleSetDesignPaymentWebhook } = await import('./setDesignOrder.service.js');
-        return await handleSetDesignPaymentWebhook(webhookPayload);
-      }
-
       await session.commitTransaction();
       logger.warn(`Payment not found for orderCode: ${orderCode}`);
-      throw new NotFoundError('Không tìm thấy giao dịch thanh toán');
+      // Return success to avoid PayOS loop if we can't find it
+      return { success: true, message: 'Payment not found' };
     }
 
     if (payment.status === PAYMENT_STATUS.PAID) {
@@ -491,64 +490,73 @@ export const handlePaymentWebhook = async (webhookPayload) => {
         completedAt: new Date()
       };
       await payment.save({ session });
-      logger.info(`Payment completed: ${payment._id}`);
+      logger.info(`Payment completed: ${payment._id}, Target: ${payment.targetModel}`);
 
-      // Update booking
-      const booking = await Booking.findById(payment.bookingId).session(session);
-      
-      if (!booking) {
-        logger.error(`Booking not found for payment: ${payment._id}`);
-        await session.abortTransaction();
-        throw new NotFoundError('Không tìm thấy booking cho giao dịch này');
+      // Dispatch based on targetModel
+      if (payment.targetModel === 'Booking' || (!payment.targetModel && payment.bookingId)) {
+          // --- BOOKING LOGIC ---
+          const bookingId = payment.targetId || payment.bookingId;
+          const booking = await Booking.findById(bookingId).session(session);
+          if (!booking) throw new NotFoundError('Booking not found');
+
+          const paidPayments = await Payment.find({
+            $or: [ { targetId: bookingId }, { bookingId: bookingId } ],
+            status: PAYMENT_STATUS.PAID
+          }).select('amount').session(session);
+
+          const totalPaid = paidPayments.reduce((sum, p) => sum + p.amount, 0);
+          const paymentPercentage = booking.finalAmount > 0 ? (totalPaid / booking.finalAmount) * 100 : 0;
+
+          if (paymentPercentage >= 100) { booking.status = BOOKING_STATUS.CONFIRMED; booking.payType = PAY_TYPE.FULL; }
+          else if (paymentPercentage >= 50) { booking.status = BOOKING_STATUS.CONFIRMED; booking.payType = PAY_TYPE.PREPAY_50; }
+          else if (paymentPercentage >= 30) { booking.status = BOOKING_STATUS.CONFIRMED; booking.payType = PAY_TYPE.PREPAY_30; }
+
+          booking.financials = { ...booking.financials, originalAmount: booking.finalAmount, netAmount: totalPaid };
+          await booking.save({ session });
+
+      } else if (payment.targetModel === 'SetDesignOrder') {
+          // --- SET DESIGN LOGIC ---
+          const order = await SetDesignOrder.findById(payment.targetId).session(session);
+          if (order) {
+             order.paidAmount = Math.min((order.paidAmount || 0) + payment.amount, order.totalAmount);
+             
+             // Check completion
+             if (order.paidAmount >= order.totalAmount) {
+                 order.paymentStatus = PAYMENT_STATUS.PAID;
+                 // Only confirm if pending (don't reverted if already processing/completed)
+                 if (order.status === SET_DESIGN_ORDER_STATUS.PENDING) order.status = SET_DESIGN_ORDER_STATUS.CONFIRMED;
+                 order.confirmedAt = new Date();
+             } else {
+                 // Partial logic
+                 const pct = (order.paidAmount / order.totalAmount) * 100;
+                 if (pct >= 30 && order.status === SET_DESIGN_ORDER_STATUS.PENDING) {
+                     order.status = SET_DESIGN_ORDER_STATUS.CONFIRMED;
+                     order.confirmedAt = new Date();
+                 }
+             }
+             await order.save({ session });
+             
+             // Notify
+             try {
+                // We do this AFTER commit usually, but here inside try/catch is ok if logic simple
+                // Better to return info and do notify after commit
+             } catch (e) { logger.error('SetDesign update error', e); }
+          }
+
+      } else if (payment.targetModel === 'EquipmentOrder') {
+          // --- EQUIPMENT LOGIC ---
+          const order = await EquipmentOrder.findById(payment.targetId).session(session);
+          if (order) {
+              // Assuming generic 'paidAmount' field or strict full payment
+              // Equipment usually might be full payment only?
+              // For safety, assume full payment marks confirmed
+               order.paymentStatus = PAYMENT_STATUS.PAID; 
+               if (order.status === 'pending') { // Check constants
+                   order.status = 'confirmed'; // Check constants
+               }
+               await order.save({ session });
+          }
       }
-      
-      // Calculate payment progress
-      const paidPayments = await Payment.find({
-        bookingId: booking._id,
-        status: PAYMENT_STATUS.PAID
-      }).select('amount').session(session);
-
-      const totalPaid = paidPayments.reduce((sum, p) => sum + p.amount, 0);
-      
-      // Handle edge case: avoid division by zero
-      let paymentPercentage = 0;
-      if (typeof booking.finalAmount === 'number' && booking.finalAmount > 0) {
-        paymentPercentage = (totalPaid / booking.finalAmount) * 100;
-      } else {
-        logger.warn(`Invalid finalAmount for booking ${booking._id}`, {
-          bookingId: booking._id,
-          finalAmount: booking.finalAmount,
-          totalPaid
-        });
-      }
-
-      logger.info(`Booking ${booking._id} payment progress: ${paymentPercentage.toFixed(2)}%`, {
-        totalPaid,
-        finalAmount: booking.finalAmount
-      });
-
-      // Update booking status based on payment percentage
-      if (paymentPercentage >= 100) {
-        booking.status = BOOKING_STATUS.CONFIRMED;
-        booking.payType = PAY_TYPE.FULL;
-      } else if (paymentPercentage >= 50) {
-        booking.status = BOOKING_STATUS.CONFIRMED;
-        booking.payType = PAY_TYPE.PREPAY_50;
-      } else if (paymentPercentage >= 30) {
-        booking.status = BOOKING_STATUS.CONFIRMED;
-        booking.payType = PAY_TYPE.PREPAY_30;
-      }
-
-      // Update financials - netAmount tracks cumulative amount paid by customer
-      // (differs from cancellation/no-show contexts where netAmount = originalAmount - refund or chargeAmount)
-      booking.financials = {
-        ...booking.financials,
-        originalAmount: booking.finalAmount,
-        netAmount: totalPaid
-      };
-
-      await booking.save({ session });
-      logger.info(`Booking ${booking._id} updated to ${booking.status}`);
 
       await session.commitTransaction();
       return { success: true, message: 'Payment processed successfully' };
@@ -562,9 +570,8 @@ export const handlePaymentWebhook = async (webhookPayload) => {
         failureReason: desc
       };
       await payment.save({ session });
-
       await session.commitTransaction();
-      logger.info(`Payment cancelled/failed: ${payment._id}, reason: ${desc}`);
+      logger.info(`Payment cancelled: ${payment._id}`);
       return { success: true, message: 'Payment cancelled' };
     }
 

@@ -180,6 +180,15 @@ export const SET_DESIGN_ORDER_STATUS = {
 };
 
 // Review & Report
+export const REPORT_TARGET_TYPES = {
+  BOOKING: "Booking",
+  REVIEW: "Review",
+  COMMENT: "Comment",
+  STUDIO: "Studio",
+  EQUIPMENT: "Equipment",
+  STAFF: "Staff"
+};
+
 export const REVIEW_TARGET_TYPES = {
   STUDIO: "Studio",
   SET_DESIGN: "SetDesign",
@@ -209,12 +218,20 @@ export const REPORT_ISSUE_TYPE = {
   INAPPROPRIATE_CONTENT: "inappropriate_content", // For reporting reviews/comments
 };
 
-export const REPORT_TARGET_TYPES = {
-  BOOKING: "Booking",
-  REVIEW: "Review",
-  COMMENT: "Comment",
-  STUDIO: "Studio",
+export const TARGET_MODEL = {
+    BOOKING: 'Booking',
+    SET_DESIGN_ORDER: 'SetDesignOrder',
+    EQUIPMENT_ORDER: 'EquipmentOrder',
+    REPORT: 'Report',
 };
+
+export const PAYMENT_CATEGORY = {
+    BOOKING: 'BOOKING',
+    SET_DESIGN: 'SET_DESIGN',
+    EQUIPMENT: 'EQUIPMENT',
+    FINE: 'FINE'
+};
+
 
 // Notifications
 export const NOTIFICATION_TYPE = {

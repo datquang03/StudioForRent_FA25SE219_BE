@@ -1,12 +1,11 @@
 //#region Imports
 import mongoose from 'mongoose';
-import { randomBytes } from 'crypto';
 import crypto from 'crypto';
 import SetDesign from '../models/SetDesign/setDesign.model.js';
 import SetDesignOrder, { SET_DESIGN_ORDER_STATUS } from '../models/SetDesignOrder/setDesignOrder.model.js';
-import SetDesignPayment from '../models/SetDesignPayment/setDesignPayment.model.js';
+import Payment from '../models/Payment/payment.model.js';
 import payos from '../config/payos.js';
-import { PAYMENT_STATUS, PAY_TYPE } from '../utils/constants.js';
+import { PAYMENT_STATUS, PAY_TYPE, TARGET_MODEL, PAYMENT_CATEGORY } from '../utils/constants.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
 import { NOTIFICATION_TYPE } from '../utils/constants.js';
@@ -38,7 +37,7 @@ const generateOrderCode = () => {
  */
 const generatePaymentCode = (orderId, percentage) => {
   const timestamp = Date.now();
-  const random = randomBytes(4).toString('hex').toUpperCase();
+  const random = crypto.randomBytes(4).toString('hex').toUpperCase();
   return `SDP-${timestamp}-${percentage}-${random}`;
 };
 
@@ -235,7 +234,7 @@ export const getSetDesignOrderById = async (orderId, user) => {
     }
 
     // Get payments for this order
-    const payments = await SetDesignPayment.find({ orderId }).sort({ createdAt: -1 });
+    const payments = await Payment.find({ targetId: orderId, targetModel: TARGET_MODEL.SET_DESIGN_ORDER }).sort({ createdAt: -1 });
 
     return { order, payments };
   } catch (error) {
@@ -318,19 +317,22 @@ export const updateSetDesignOrderStatus = async (orderId, updateData, user) => {
 };
 
 /**
- * Cancel order (Customer - only pending orders)
+ * Cancel order (Customer - only pending/confirmed orders)
  * @param {string} orderId - Order ID
  * @param {Object} user - Current user
  * @param {string} reason - Cancel reason
  * @returns {Object} Cancelled order
  */
 export const cancelSetDesignOrder = async (orderId, user, reason) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
     if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
       throw new ValidationError('ID đơn hàng không hợp lệ');
     }
 
-    const order = await SetDesignOrder.findById(orderId);
+    const order = await SetDesignOrder.findById(orderId).session(session);
     if (!order) {
       throw new NotFoundError('Đơn hàng không tồn tại');
     }
@@ -340,26 +342,57 @@ export const cancelSetDesignOrder = async (orderId, user, reason) => {
       throw new ValidationError('Bạn không có quyền hủy đơn hàng này');
     }
 
-    // Only pending orders can be cancelled by customer
-    if (order.status !== SET_DESIGN_ORDER_STATUS.PENDING) {
-      throw new ValidationError('Chỉ có thể hủy đơn hàng đang chờ thanh toán');
+    // Allow pending or confirmed (paid but not processing)
+    const allowedStatuses = [SET_DESIGN_ORDER_STATUS.PENDING, SET_DESIGN_ORDER_STATUS.CONFIRMED];
+    if (!allowedStatuses.includes(order.status)) {
+      throw new ValidationError('Chỉ có thể hủy đơn hàng khi đang chờ hoặc vừa xác nhận (chưa xử lý)');
+    }
+
+    // If confirmed (paid), process "refund" (update status)
+    if (order.status === SET_DESIGN_ORDER_STATUS.CONFIRMED) {
+        // Find paid payments
+        const paidPayments = await Payment.find({
+            targetId: order._id,
+            targetModel: TARGET_MODEL.SET_DESIGN_ORDER,
+            status: PAYMENT_STATUS.PAID
+        }).session(session);
+
+        if (paidPayments.length > 0) {
+            for (const p of paidPayments) {
+                p.status = PAYMENT_STATUS.REFUNDED;
+                p.gatewayResponse = {
+                    ...p.gatewayResponse,
+                    refundedAt: new Date(),
+                    refundReason: reason || 'Customer cancelled'
+                };
+                await p.save({ session });
+            }
+            order.paymentStatus = PAYMENT_STATUS.REFUNDED;
+            order.paidAmount = 0; // Reset paid amount as it is refunded
+            logger.info(`Refunded ${paidPayments.length} payments for order ${orderId}`);
+        }
     }
 
     order.status = SET_DESIGN_ORDER_STATUS.CANCELLED;
     order.cancelledAt = new Date();
     order.cancelReason = reason || 'Cancelled by customer';
 
-    await order.save();
+    await order.save({ session });
+
+    await session.commitTransaction();
 
     logger.info(`Set design order ${orderId} cancelled by customer ${user._id}`);
 
     return order;
   } catch (error) {
+    await session.abortTransaction();
     logger.error('Cancel set design order error:', error);
     if (error instanceof ValidationError || error instanceof NotFoundError) {
       throw error;
     }
     throw new Error('Lỗi khi hủy đơn hàng');
+  } finally {
+    session.endSession();
   }
 };
 
@@ -416,8 +449,9 @@ export const createSetDesignPayment = async (orderId, paymentData, user) => {
     }
 
     // Check for existing pending payment
-    const existingPayment = await SetDesignPayment.findOne({
-      orderId,
+    const existingPayment = await Payment.findOne({
+      targetId: orderId,
+      targetModel: TARGET_MODEL.SET_DESIGN_ORDER,
       status: PAYMENT_STATUS.PENDING,
     }).session(session);
 
@@ -617,8 +651,10 @@ export const createSetDesignPayment = async (orderId, paymentData, user) => {
     // Create payment record with expiration time (15 minutes - same as payment.service.js)
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
 
-    const payment = new SetDesignPayment({
-      orderId,
+    const payment = await Payment.create([{
+      targetId: orderId,
+      targetModel: TARGET_MODEL.SET_DESIGN_ORDER,
+      category: PAYMENT_CATEGORY.SET_DESIGN,
       paymentCode,
       amount: paymentAmount,
       payType,
@@ -627,20 +663,18 @@ export const createSetDesignPayment = async (orderId, paymentData, user) => {
       qrCodeUrl: checkoutUrl,
       gatewayResponse,
       expiresAt,
-    });
-
-    await payment.save({ session });
+    }], { session });
 
     await session.commitTransaction();
 
     logger.info('Set design payment created', {
-      paymentId: payment._id,
+      paymentId: payment[0]._id,
       orderId,
       amount: paymentAmount,
     });
 
     return {
-      payment,
+      payment: payment[0],
       checkoutUrl,
       qrCode: qrCodeUrl,
       amount: paymentAmount,
@@ -659,6 +693,153 @@ export const createSetDesignPayment = async (orderId, paymentData, user) => {
 };
 
 /**
+ * Create payment for remaining amount (Set Design)
+ * @param {string} orderId
+ * @param {Object} user
+ */
+export const createRemainingSetDesignPayment = async (orderId, user) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const Payment = mongoose.model('Payment');
+    if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
+      throw new ValidationError('ID đơn hàng không hợp lệ');
+    }
+
+    const order = await SetDesignOrder.findById(orderId)
+      .populate('setDesignId', 'name')
+      .populate('customerId', 'username email')
+      .session(session);
+
+    if (!order) {
+      throw new NotFoundError('Đơn hàng không tồn tại');
+    }
+
+    // Check ownership
+    const isStaffOrAdmin = user?.role === 'staff' || user?.role === 'admin';
+    if (!isStaffOrAdmin && order.customerId._id.toString() !== user._id.toString()) {
+      throw new ValidationError('Bạn không có quyền thanh toán đơn hàng này');
+    }
+
+    if (order.status === SET_DESIGN_ORDER_STATUS.CANCELLED) {
+      throw new ValidationError('Đơn hàng đã hủy');
+    }
+
+    const remainingAmount = order.totalAmount - (order.paidAmount || 0);
+    if (remainingAmount <= 0) {
+      throw new ValidationError('Đơn hàng đã được thanh toán đầy đủ');
+    }
+    
+    if (remainingAmount < 1000) {
+         throw new ValidationError('Số tiền còn lại quá nhỏ để thanh toán online (< 1000đ)');
+    }
+
+    // Check existing pending 'FULL' or remaining payment
+    // We treat remaining payment as PAY_TYPE.FULL for simplicity in tracking? 
+    // Or we can use a specific type if needed. Let's use FULL as it completes the order.
+    const existingPayment = await Payment.findOne({
+      targetId: orderId,
+      targetModel: TARGET_MODEL.SET_DESIGN_ORDER,
+      status: PAYMENT_STATUS.PENDING,
+      amount: remainingAmount // Check if same amount
+    }).session(session);
+
+    if (existingPayment) {
+        // Reuse existing logic for checking expiry...
+        const now = new Date();
+        const isExpired = existingPayment.expiresAt && new Date(existingPayment.expiresAt) < now;
+        if (!isExpired) {
+             await session.commitTransaction();
+             return {
+                payment: existingPayment,
+                checkoutUrl: existingPayment.qrCodeUrl,
+                message: 'Link thanh toán cũ vẫn còn hiệu lực'
+             };
+        } else {
+             existingPayment.status = PAYMENT_STATUS.CANCELLED;
+             await existingPayment.save({ session });
+        }
+    }
+
+    // Create new payment
+    const payosOrderCode = generateOrderCode();
+    const paymentCode = generatePaymentCode(orderId, 100); // Treat as 100% completion
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+    
+    // PayOS Link Creation
+    let checkoutUrl = null;
+    let qrCodeUrl = null;
+    let gatewayResponse = { orderCode: payosOrderCode, createdAt: new Date() };
+
+    try {
+        const description = truncate(`Remaining - ${order.orderCode}`, 25);
+        const paymentData = {
+            orderCode: payosOrderCode,
+            amount: remainingAmount,
+            description,
+            items: [{ name: `Remaining Payment - ${order.orderCode}`, quantity: 1, price: remainingAmount }],
+            returnUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/set-design/payment/success?orderId=${orderId}`,
+            cancelUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/set-design/payment/cancel?orderId=${orderId}`
+        };
+
+        let paymentLinkResponse;
+        if (payos && typeof payos.createPaymentLink === 'function') {
+            paymentLinkResponse = await payos.createPaymentLink(paymentData);
+        } else if (payos && typeof payos.paymentRequests?.create === 'function') {
+            paymentLinkResponse = await payos.paymentRequests.create(paymentData);
+        } else {
+            // Mock for development
+            logger.warn('PayOS not configured, using mock data');
+            paymentLinkResponse = {
+                checkoutUrl: 'http://localhost:3000/mock-payment',
+                qrCode: 'mock-qr-code',
+                paymentLinkId: `mock-link-${Date.now()}`
+            };
+        }
+
+        checkoutUrl = paymentLinkResponse.checkoutUrl || paymentLinkResponse.data?.checkoutUrl;
+        qrCodeUrl = paymentLinkResponse.qrCode || paymentLinkResponse.data?.qrCode;
+        gatewayResponse.paymentLinkId = paymentLinkResponse.paymentLinkId || paymentLinkResponse.data?.id;
+    } catch (err) {
+        logger.error('PayOS Create Remaining Error', err);
+        throw new Error('Lỗi tạo link thanh toán PayOS');
+    }
+
+    const payment = new Payment({
+        targetId: order._id,
+        targetModel: TARGET_MODEL.SET_DESIGN_ORDER,
+        category: PAYMENT_CATEGORY.SET_DESIGN,
+        paymentCode,
+        amount: remainingAmount,
+        payType: PAY_TYPE.FULL, // Mark as full to indicate completion intent
+        status: PAYMENT_STATUS.PENDING,
+        transactionId: payosOrderCode.toString(),
+        qrCodeUrl: checkoutUrl,
+        gatewayResponse,
+        expiresAt
+    });
+
+    await payment.save({ session });
+    
+    await session.commitTransaction();
+    return {
+        payment,
+        checkoutUrl,
+        qrCode: qrCodeUrl
+    };
+
+  } catch (error) {
+    await session.abortTransaction();
+    logger.error('Create remaining set design payment error:', error);
+    if (error instanceof ValidationError || error instanceof NotFoundError) throw error;
+    throw new Error('Lỗi khi tạo thanh toán còn lại');
+  } finally {
+    session.endSession();
+  }
+};
+
+/**
  * Handle PayOS webhook for set design payment
  * Uses same pattern as payment.service.js for consistency
  * @param {Object} webhookPayload - Webhook payload from PayOS
@@ -669,6 +850,7 @@ export const handleSetDesignPaymentWebhook = async (webhookPayload) => {
   session.startTransaction();
 
   try {
+    const Payment = mongoose.model('Payment');
     // Accept either raw body or an object { body, headers }
     const incoming = webhookPayload && webhookPayload.body ? webhookPayload : { body: webhookPayload, headers: {} };
     const body = incoming.body || {};
@@ -783,8 +965,9 @@ export const handleSetDesignPaymentWebhook = async (webhookPayload) => {
     logger.info('SetDesign webhook verified', { orderCode, code, desc });
 
     // Find payment by transaction ID
-    const payment = await SetDesignPayment.findOne({
+    const payment = await Payment.findOne({
       transactionId: orderCode.toString(),
+      targetModel: TARGET_MODEL.SET_DESIGN_ORDER
     }).session(session);
 
     if (!payment) {
@@ -825,7 +1008,7 @@ export const handleSetDesignPaymentWebhook = async (webhookPayload) => {
       };
 
       // Update order
-      const order = await SetDesignOrder.findById(payment.orderId).session(session);
+      const order = await SetDesignOrder.findById(payment.targetId).session(session);
       if (order) {
         const previousPaidAmount = order.paidAmount;
         // Prevent paidAmount from exceeding totalAmount (protection against race conditions/duplicate webhooks)
@@ -846,6 +1029,31 @@ export const handleSetDesignPaymentWebhook = async (webhookPayload) => {
           order.status = SET_DESIGN_ORDER_STATUS.CONFIRMED;
           order.confirmedAt = new Date();
           logger.info('SetDesign order confirmed after full payment', { orderId: order._id });
+        } else if (order.paidAmount > 0) {
+          // Partial payment (Deposit) logic
+          // Determine if the amount paid is sufficient (e.g. >= 30%)
+          // For now, simpler check: if we received *any* payment via PayOS for this order options (which are 30/50/100), 
+          // we can assume it's a valid deposit step.
+          
+          const percentagePaid = (order.paidAmount / order.totalAmount) * 100;
+          
+          if (percentagePaid >= 30) {
+             if (order.status === SET_DESIGN_ORDER_STATUS.PENDING) {
+                order.status = SET_DESIGN_ORDER_STATUS.CONFIRMED;
+                order.confirmedAt = new Date();
+             }
+             // NOTE: paymentStatus remains PENDING because it's not fully paid.
+             // This matches user expectation of using existing constants.
+             // We can optionally set a field like order.payType if SetDesignOrder had it, 
+             // but current schema might not.
+          }
+          
+          logger.info('SetDesign order partial payment processed', { 
+            orderId: order._id, 
+            paid: order.paidAmount, 
+            total: order.totalAmount,
+            percentage: percentagePaid.toFixed(2)
+          });
         }
 
         await order.save({ session });
@@ -865,7 +1073,7 @@ export const handleSetDesignPaymentWebhook = async (webhookPayload) => {
         if (order) {
           await createAndSendNotification(
             order.customerId,
-            NOTIFICATION_TYPE.PAYMENT_SUCCESS,
+            NOTIFICATION_TYPE.SUCCESS,
             'Thanh toán thành công',
             `Thanh toán ${payment.amount.toLocaleString()} VND cho đơn hàng ${order.orderCode} đã thành công`,
             false, // sendEmail
@@ -923,10 +1131,13 @@ export const getSetDesignPaymentStatus = async (paymentId) => {
       throw new ValidationError('ID thanh toán không hợp lệ');
     }
 
-    const payment = await SetDesignPayment.findById(paymentId).populate('orderId');
-    if (!payment) {
+    const payment = await Payment.findById(paymentId);
+    if (!payment || payment.targetModel !== TARGET_MODEL.SET_DESIGN_ORDER) {
       throw new NotFoundError('Thanh toán không tồn tại');
     }
+
+    // Populate order info
+    await payment.populate({ path: 'targetId', model: 'SetDesignOrder' });
 
     return payment;
   } catch (error) {
@@ -949,7 +1160,10 @@ export const getSetDesignOrderPayments = async (orderId) => {
       throw new ValidationError('ID đơn hàng không hợp lệ');
     }
 
-    const payments = await SetDesignPayment.find({ orderId }).sort({ createdAt: -1 });
+    const payments = await Payment.find({ 
+      targetId: orderId, 
+      targetModel: TARGET_MODEL.SET_DESIGN_ORDER 
+    }).sort({ createdAt: -1 });
     return payments;
   } catch (error) {
     logger.error('Get set design order payments error:', error);

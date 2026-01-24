@@ -3,13 +3,11 @@ import mongoose from 'mongoose';
 import crypto from 'crypto';
 import Equipment from '../models/Equipment/equipment.model.js';
 import EquipmentOrder, { EQUIPMENT_ORDER_STATUS } from '../models/EquipmentOrder/equipmentOrder.model.js';
-import EquipmentPayment from '../models/EquipmentPayment/equipmentPayment.model.js';
-import { getPayOSCreatePaymentFn } from '../config/payos.js';
-import { PAYMENT_STATUS, PAY_TYPE } from '../utils/constants.js';
+import Payment from '../models/Payment/payment.model.js';
+import { PAYMENT_STATUS, PAY_TYPE, TARGET_MODEL, PAYMENT_CATEGORY, NOTIFICATION_TYPE } from '../utils/constants.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
 import { createAndSendNotification } from './notification.service.js';
-import { NOTIFICATION_TYPE } from '../utils/constants.js';
 //#endregion
 
 // PayOS description maximum length
@@ -267,7 +265,7 @@ export const getEquipmentOrderById = async (orderId, user) => {
     }
 
     // Get payments for this order
-    const payments = await EquipmentPayment.find({ orderId }).sort({ createdAt: -1 });
+    const payments = await Payment.find({ targetId: orderId, targetModel: TARGET_MODEL.EQUIPMENT_ORDER }).sort({ createdAt: -1 });
 
     return { order, payments };
   } catch (error) {
@@ -436,371 +434,114 @@ export const cancelEquipmentOrder = async (orderId, user, reason) => {
 //#region Payment Management
 
 /**
+ * Refund equipment deposit (Auto or Manual)
+ * @param {string} orderId 
+ * @param {Object} user (Staff)
+ */
+export const refundEquipmentDeposit = async (orderId, user) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        const order = await EquipmentOrder.findById(orderId).session(session);
+        if (!order) throw new NotFoundError('Order not found');
+        
+        // Check valid status to refund (COMPLETED means returned)
+        if (order.status !== EQUIPMENT_ORDER_STATUS.COMPLETED) {
+            throw new ValidationError('Chỉ có thể hoàn cọc sau khi đơn hàng đã hoàn thành (đã trả đồ)');
+        }
+
+        const deposit = order.depositAmount || 0;
+        if (deposit <= 0) {
+             throw new ValidationError('Đơn hàng này không có tiền cọc để hoàn');
+        }
+
+        // Find PAID payments
+        const paidPayments = await Payment.find({
+            targetId: orderId,
+            targetModel: 'EquipmentOrder',
+            status: PAYMENT_STATUS.PAID
+        }).session(session);
+
+        // Create a placeholder Payment record with status REFUNDED to track it.
+        const refundTransId = `REF-${Date.now()}`;
+        const refundPayment = await Payment.create([{
+            targetId: orderId,
+            targetModel: TARGET_MODEL.EQUIPMENT_ORDER,
+            category: PAYMENT_CATEGORY.EQUIPMENT,
+            paymentCode: `REF-${order.orderCode}`,
+            amount: deposit, // Positive amount, but context is refund
+            payType: PAY_TYPE.FULL, // Reusing enum
+            status: PAYMENT_STATUS.REFUNDED,
+            transactionId: refundTransId,
+            gatewayResponse: {
+                refundedAt: new Date(),
+                refundedBy: user._id,
+                note: 'Equipment Deposit Refund'
+            }
+        }], { session });
+
+        // Update order to note refund?
+        order.staffNotes = (order.staffNotes || '') + `\n[System] Deposit refunded: ${deposit}`;
+        await order.save({ session });
+
+        await session.commitTransaction();
+        logger.info(`Refunded deposit ${deposit} for equipment order ${orderId}`);
+        return refundPayment[0];
+
+    } catch (error) {
+        await session.abortTransaction();
+        logger.error('Refund deposit error', error);
+        throw error;
+    } finally {
+        session.endSession();
+    }
+};
+
+/**
  * Create payment for equipment order (Full payment only)
  * @param {string} orderId - Order ID
  * @param {Object} user - Current user
  * @returns {Object} Payment with checkout URL
  */
 export const createEquipmentPayment = async (orderId, user) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
   try {
-    if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
-      throw new ValidationError('ID đơn hàng không hợp lệ');
-    }
-
-    const order = await EquipmentOrder.findById(orderId)
-      .populate('equipmentId', 'name')
-      .populate('customerId', 'username email')
-      .session(session);
-
-    if (!order) {
-      throw new NotFoundError('Đơn hàng không tồn tại');
-    }
-
-    // Check ownership for customers
-    const isStaffOrAdmin = user?.role === 'staff' || user?.role === 'admin';
-    if (!isStaffOrAdmin && order.customerId._id.toString() !== user._id.toString()) {
-      throw new ValidationError('Bạn không có quyền thanh toán đơn hàng này');
-    }
-
-    // Check order status
-    if (order.status === EQUIPMENT_ORDER_STATUS.CANCELLED) {
-      throw new ValidationError('Không thể thanh toán đơn hàng đã hủy');
-    }
-
-    // Only allow payment for orders in PENDING or CONFIRMED status
-    const allowedStatusesForPayment = [
-      EQUIPMENT_ORDER_STATUS.PENDING,
-      EQUIPMENT_ORDER_STATUS.CONFIRMED,
-    ];
-    if (!allowedStatusesForPayment.includes(order.status)) {
-      throw new ValidationError('Không thể thanh toán cho đơn hàng ở trạng thái hiện tại');
-    }
-    if (order.paymentStatus === PAYMENT_STATUS.PAID) {
-      throw new ValidationError('Đơn hàng đã được thanh toán');
-    }
-
-    // Check for existing pending payment
-    const existingPayment = await EquipmentPayment.findOne({
-      orderId,
-      status: PAYMENT_STATUS.PENDING,
-    }).session(session);
-
-    if (existingPayment) {
-      await session.commitTransaction();
-      return {
-        payment: existingPayment,
-        checkoutUrl: existingPayment.qrCodeUrl,
-        message: 'Đã có link thanh toán cho đơn hàng này',
-      };
-    }
-
-    const paymentAmount = order.totalAmount;
-
-    if (paymentAmount < 1000) {
-      throw new ValidationError('Số tiền thanh toán tối thiểu là 1,000 VNĐ');
-    }
-
-    // Generate codes
-    const payosOrderCode = generateOrderCode();
-    const paymentCode = generatePaymentCode(orderId);
-
-    // Create PayOS payment link
-    let checkoutUrl = null;
-    let qrCodeUrl = null;
-    let gatewayResponse = {
-      orderCode: payosOrderCode,
-      createdAt: new Date(),
-    };
-
-    try {
-      const fullDescription = `Equipment: ${order.equipmentId?.name || 'Rental'} - ${order.orderCode}`;
-      const safeDescription = truncate(fullDescription, PAYOS_DESCRIPTION_MAX);
-
-      const paymentRequestData = {
-        orderCode: payosOrderCode,
-        amount: paymentAmount,
-        description: safeDescription,
-        items: [
-          {
-            name: truncate(order.equipmentId?.name || 'Equipment', 50),
-            quantity: order.quantity,
-            price: Math.floor(paymentAmount / order.quantity),
-          },
-        ],
-        returnUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/equipment/payment/success?orderId=${orderId}`,
-        cancelUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/equipment/payment/cancel?orderId=${orderId}`,
-        buyerName: order.customerId?.username || 'Customer',
-        buyerEmail: order.customerId?.email || undefined,
-      };
-
-      logger.info('Creating PayOS payment link for equipment order', {
-        orderCode: payosOrderCode,
-        amount: paymentAmount,
-      });
-
-      const createPaymentLinkFn = getPayOSCreatePaymentFn();
-      const paymentLinkResponse = await createPaymentLinkFn(paymentRequestData);
-
-      if (!paymentLinkResponse || !paymentLinkResponse.checkoutUrl) {
-        throw new Error('PayOS did not return a valid payment link response');
-      }
-
-      checkoutUrl = paymentLinkResponse.checkoutUrl;
-      qrCodeUrl = paymentLinkResponse?.qrCode || paymentLinkResponse?.data?.qrCode || null;
-      gatewayResponse = {
-        ...gatewayResponse,
-        paymentLinkId: paymentLinkResponse?.paymentLinkId || paymentLinkResponse?.data?.id || null,
-        qrCode: qrCodeUrl,
-      };
-
-      if (!checkoutUrl) {
-        throw new Error('PayOS did not return a valid checkout URL');
-      }
-    } catch (payosError) {
-      logger.error('PayOS API Error for equipment:', {
-        message: payosError.message,
-        orderCode: payosOrderCode,
-      });
-      throw new Error(`Payment gateway error: ${payosError.message}`);
-    }
-
-    // Create payment record
-    const payment = new EquipmentPayment({
-      orderId,
-      paymentCode,
-      amount: paymentAmount,
-      status: PAYMENT_STATUS.PENDING,
-      transactionId: payosOrderCode.toString(),
-      qrCodeUrl: checkoutUrl,
-      gatewayResponse,
-    });
-
-    await payment.save({ session });
-
-    await session.commitTransaction();
-
-    logger.info('Equipment payment created', {
-      paymentId: payment._id,
-      orderId,
-      amount: paymentAmount,
-    });
-
-    return {
-      payment,
-      checkoutUrl,
-      qrCode: qrCodeUrl,
-      amount: paymentAmount,
-      orderCode: payosOrderCode,
-    };
+    if (!orderId) throw new ValidationError('Invalid Order ID');    
+    const { createPaymentForOption } = await import('./payment.service.js');
+    return await createPaymentForOption(orderId, { payType: PAY_TYPE.FULL }, 'EquipmentOrder');
   } catch (error) {
-    await session.abortTransaction();
     logger.error('Create equipment payment error:', error);
-    if (error instanceof ValidationError || error instanceof NotFoundError) {
-      throw error;
-    }
-    throw new Error('Lỗi khi tạo thanh toán');
-  } finally {
-    session.endSession();
+    throw error;
   }
 };
 
 /**
- * Verify PayOS webhook signature
- * @param {Object} body - Webhook body
- * @returns {boolean} Is signature valid
- */
-const verifyPayOSWebhookSignature = (body) => {
-  try {
-    const signature = body.signature;
-    if (!signature || !process.env.PAYOS_CHECKSUM_KEY || !body.data) {
-      return false;
-    }
-
-    // PayOS signature: sorted key=value from body.data, null/undefined as empty string
-    const dataToSign = Object.keys(body.data)
-      .sort()
-      .map(key => {
-        const value = body.data[key];
-        if (value === null || value === undefined) {
-          return `${key}=`;
-        }
-        const serializedValue = typeof value === 'object' 
-          ? JSON.stringify(value) 
-          : String(value);
-        return `${key}=${serializedValue}`;
-      })
-      .join('&');
-
-    const computedSignature = crypto
-      .createHmac('sha256', process.env.PAYOS_CHECKSUM_KEY)
-      .update(dataToSign)
-      .digest('hex');
-
-    // Use constant-time comparison to prevent timing attacks
-    const computedBuffer = Buffer.from(computedSignature.toLowerCase(), 'utf8');
-    const receivedBuffer = Buffer.from(signature.toString().toLowerCase(), 'utf8');
-    if (computedBuffer.length !== receivedBuffer.length) {
-      return false;
-    }
-    return crypto.timingSafeEqual(computedBuffer, receivedBuffer);
-  } catch (error) {
-    logger.error('Webhook signature verification error:', error);
-    return false;
-  }
-};
-
-/**
- * Handle PayOS webhook for equipment payment
- * @param {Object} webhookPayload - Webhook payload from PayOS
- * @returns {Object} Webhook processing result
+ * Handle Webhook (Delegated - logic moved to Payment Service)
  */
 export const handleEquipmentPaymentWebhook = async (webhookPayload) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
-  try {
-    const body = webhookPayload?.body || webhookPayload || {};
-    const { orderCode, code, desc, data } = body;
-
-    // Verify webhook signature (signature is in body.signature per PayOS format)
-    if (!verifyPayOSWebhookSignature(body)) {
-      logger.warn('Invalid PayOS webhook signature', { orderCode });
-      throw new ValidationError('Invalid webhook signature');
-    }
-
-    logger.info('Processing equipment payment webhook', { orderCode, code });
-
-    // Find payment by transaction ID
-    const transactionId = orderCode?.toString() || data?.orderCode?.toString();
-    if (!transactionId) {
-      throw new ValidationError('Missing orderCode in webhook');
-    }
-
-    const payment = await EquipmentPayment.findOne({ transactionId }).session(session);
-    if (!payment) {
-      // Not an equipment payment, ignore (generic response to prevent info leakage)
-      await session.commitTransaction();
-      return { success: true };
-    }
-
-    // Check if already processed
-    if (payment.status !== PAYMENT_STATUS.PENDING) {
-      await session.commitTransaction();
-      return { success: true };
-    }
-
-    // Update payment status based on webhook
-    const isSuccess = code === '00';
-
-    if (isSuccess) {
-      payment.status = PAYMENT_STATUS.PAID;
-      payment.paidAt = new Date();
-      payment.gatewayResponse = { ...payment.gatewayResponse, webhook: body };
-
-      // Update order
-      const order = await EquipmentOrder.findById(payment.orderId).session(session);
-      if (order) {
-        order.paymentStatus = PAYMENT_STATUS.PAID;
-        order.status = EQUIPMENT_ORDER_STATUS.CONFIRMED;
-        order.confirmedAt = new Date();
-
-        await order.save({ session });
-      }
-
-      await payment.save({ session });
-      await session.commitTransaction();
-
-      logger.info(`Equipment payment ${payment._id} marked as PAID`);
-
-      // Send notification after transaction commit
-      try {
-        if (order) {
-          await createAndSendNotification({
-            userId: order.customerId,
-            type: NOTIFICATION_TYPE.PAYMENT_SUCCESS,
-            data: {
-              orderId: order._id,
-              orderCode: order.orderCode,
-              paymentId: payment._id,
-              amount: payment.amount,
-              message: `Thanh toán ${payment.amount.toLocaleString()} VND cho đơn thuê ${order.orderCode} đã thành công`,
-            },
-          });
-        }
-      } catch (notifyErr) {
-        logger.error('Failed to send payment success notification', {
-          error: notifyErr.message,
-          paymentId: payment._id,
-          orderId: order?._id,
-        });
-      }
-
-      return { success: true };
-    } else {
-      payment.status = PAYMENT_STATUS.FAILED;
-      payment.gatewayResponse = { ...payment.gatewayResponse, webhook: body };
-      await payment.save({ session });
-      await session.commitTransaction();
-
-      logger.info(`Equipment payment ${payment._id} marked as FAILED`);
-
-      return { success: true };
-    }
-  } catch (error) {
-    await session.abortTransaction();
-    logger.error('Handle equipment payment webhook error:', error);
-    throw error;
-  } finally {
-    session.endSession();
-  }
+    const { handlePaymentWebhook } = await import('./payment.service.js');
+    return await handlePaymentWebhook(webhookPayload);
 };
 
 /**
- * Get payment status for equipment order
- * @param {string} paymentId - Payment ID
- * @returns {Object} Payment status
+ * Get payment status
  */
 export const getEquipmentPaymentStatus = async (paymentId) => {
-  try {
-    if (!paymentId || !mongoose.Types.ObjectId.isValid(paymentId)) {
-      throw new ValidationError('ID thanh toán không hợp lệ');
-    }
-
-    const payment = await EquipmentPayment.findById(paymentId).populate('orderId');
-    if (!payment) {
-      throw new NotFoundError('Thanh toán không tồn tại');
-    }
-
-    return payment;
-  } catch (error) {
-    logger.error('Get equipment payment status error:', error);
-    if (error instanceof ValidationError || error instanceof NotFoundError) {
-      throw error;
-    }
-    throw new Error('Lỗi khi lấy trạng thái thanh toán');
-  }
+    const { getPaymentStatus } = await import('./payment.service.js');
+    return await getPaymentStatus(paymentId);
 };
 
 /**
- * Get all payments for an order
- * @param {string} orderId - Order ID
- * @returns {Array} Payments
+ * Get order payments
  */
 export const getEquipmentOrderPayments = async (orderId) => {
-  try {
-    if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
-      throw new ValidationError('ID đơn hàng không hợp lệ');
+    try {
+        if (!orderId) throw new ValidationError('Invalid Order ID');
+        const { default: Payment } = await import('../models/Payment/payment.model.js');
+        return await Payment.find({ targetId: orderId, targetModel: 'EquipmentOrder' }).sort({ createdAt: -1 });
+    } catch (e) {
+        throw new Error('Lỗi lấy danh sách thanh toán');
     }
-
-    const payments = await EquipmentPayment.find({ orderId }).sort({ createdAt: -1 });
-    return payments;
-  } catch (error) {
-    logger.error('Get equipment order payments error:', error);
-    throw new Error('Lỗi khi lấy danh sách thanh toán');
-  }
 };
 
 //#endregion

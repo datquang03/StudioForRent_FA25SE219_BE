@@ -8,6 +8,7 @@ import {
   updateOrderStatusController,
   cancelOrderController,
   createPaymentController,
+  createRemainingPaymentController,
   paymentWebhookController,
   getPaymentStatusController,
   getOrderPaymentsController,
@@ -128,6 +129,17 @@ router.post(
   validateObjectId(),
   authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN),
   createPaymentController
+);
+
+/**
+ * POST /api/set-design-orders/:id/payment/remaining
+ * Create payment for remaining amount
+ */
+router.post(
+  '/:id/payment/remaining',
+  validateObjectId(),
+  authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN),
+  createRemainingPaymentController
 );
 
 /**

@@ -5,7 +5,8 @@ import {
   getMyReportsController,
   getReportByIdController,
   updateReportController,
-  deleteReportController
+  deleteReportController,
+  createFinePaymentController
 } from '../controllers/report.controller.js';
 import { protect, authorize } from '../middlewares/auth.js';
 import { sanitizeInput, validateObjectId } from '../middlewares/validate.js';
@@ -29,6 +30,9 @@ router.get('/my-reports', getMyReportsController);
 
 // Get single report (Staff/Admin or Owner)
 router.get('/:id', validateObjectId(), getReportByIdController);
+
+// Create fine payment link (Staff/Admin only)
+router.post('/:id/payment', authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), validateObjectId(), createFinePaymentController);
 
 // Update report (Staff/Admin only)
 router.patch('/:id', authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN), validateObjectId(), updateReportController);

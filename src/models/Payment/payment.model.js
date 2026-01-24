@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { PAYMENT_STATUS, PAY_TYPE } from "../../utils/constants.js";
+import { PAYMENT_STATUS, PAY_TYPE, TARGET_MODEL, PAYMENT_CATEGORY } from "../../utils/constants.js";
 
 /**
  * PAYMENT MODEL
@@ -7,10 +7,30 @@ import { PAYMENT_STATUS, PAY_TYPE } from "../../utils/constants.js";
  */
 const paymentSchema = new mongoose.Schema(
   {
+    // Cũ - Giữ lại để backward compatibility
     bookingId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Booking",
+      // required: true, // Tạm thời bỏ required để support các loại order khác
+    },
+
+    // Mới - Polymorphic Reference
+    targetId: {
+      type: mongoose.Schema.Types.ObjectId,
       required: true,
+      refPath: 'targetModel'
+    },
+    targetModel: {
+      type: String,
+      required: true,
+      enum: Object.values(TARGET_MODEL)
+    },
+    
+    // Category để filter dễ hơn
+    category: {
+      type: String,
+      enum: Object.values(PAYMENT_CATEGORY),
+      default: PAYMENT_CATEGORY.BOOKING
     },
     
     // Mã giao dịch nội bộ (VD: "SCREW-1001", "PAY-20251031-001")
@@ -67,8 +87,8 @@ const paymentSchema = new mongoose.Schema(
 );
 
 // Indexes
-paymentSchema.index({ bookingId: 1, status: 1 });
-// paymentCode và transactionId đã có unique: true, không cần index riêng
+paymentSchema.index({ targetId: 1, targetModel: 1 });
+paymentSchema.index({ bookingId: 1, status: 1 }); // Giữ index cũ
 paymentSchema.index({ status: 1 });
 
 const Payment = mongoose.model("Payment", paymentSchema);

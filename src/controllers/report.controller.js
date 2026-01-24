@@ -5,7 +5,8 @@ import {
   getMyReports,
   getReportById,
   updateReport,
-  deleteReport
+  deleteReport,
+  createFinePayment
 } from '../services/report.service.js';
 
 export const createReportController = asyncHandler(async (req, res) => {
@@ -52,4 +53,9 @@ export const deleteReportController = asyncHandler(async (req, res) => {
     throw new Error('Báo cáo không tồn tại');
   }
   res.status(200).json({ success: true, message: 'Xóa báo cáo thành công' });
+});
+
+export const createFinePaymentController = asyncHandler(async (req, res) => {
+  const result = await createFinePayment(req.params.id, req.user);
+  res.status(200).json({ success: true, message: 'Tạo link thanh toán phạt thành công', data: result });
 });
