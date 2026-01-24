@@ -21,8 +21,10 @@ router.use(sanitizeInput);
 router.use(generalLimiter);
 router.use(protect);
 
+import { upload } from '../middlewares/upload.js';
+
 // Tạo message mới
-router.post('/', createMessageController);
+router.post('/', upload.array('images', 5), createMessageController);
 
 // Lấy danh sách conversations
 router.get('/conversations', getConversationsController);

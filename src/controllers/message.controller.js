@@ -9,6 +9,7 @@ import {
   markMessageAsRead,
   deleteMessage,
 } from '../services/message.service.js';
+import { uploadMultipleImages } from '../services/upload.service.js';
 import mongoose from 'mongoose';
 // #endregion
 
@@ -23,9 +24,15 @@ export const createMessageController = asyncHandler(async (req, res) => {
   const fromUserId = req.user.id;
 
   // Validation
-  if (!toUserId || !content) {
+  if (!toUserId) {
     res.status(400);
-    throw new Error('toUserId và content là bắt buộc');
+    throw new Error('toUserId là bắt buộc');
+  }
+
+  // Content or files required
+  if ((!content || content.trim().length === 0) && (!req.files || req.files.length === 0)) {
+    res.status(400);
+    throw new Error('Nội dung hoặc hình ảnh là bắt buộc');
   }
 
   // Validate toUserId is valid ObjectId
@@ -59,7 +66,18 @@ export const createMessageController = asyncHandler(async (req, res) => {
     throw new Error('bookingId không hợp lệ');
   }
 
-  const message = await createMessage(fromUserId, toUserId, content, bookingId, req.io);
+
+
+  // Handle image upload
+  let attachments = [];
+  if (req.files && req.files.length > 0) {
+    const uploadResults = await uploadMultipleImages(req.files, {
+      folder: 'studio-rental/messages'
+    });
+    attachments = uploadResults.map(result => result.url);
+  }
+
+  const message = await createMessage(fromUserId, toUserId, content, bookingId, attachments, req.io);
 
   // Populate user info including avatar
   await message.populate('fromUserId', 'username fullName avatar');

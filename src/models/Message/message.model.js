@@ -22,12 +22,16 @@ const messageSchema = new mongoose.Schema(
     },
     content: {
       type: String,
-      required: true,
+      required: false, // Optional if sending images
     },
     isRead: {
       type: Boolean,
       default: false,
     },
+    attachments: [{
+      type: String, // URLs from Cloudinary
+      required: false
+    }],
   },
   {
     timestamps: { createdAt: true, updatedAt: false },

@@ -14,10 +14,11 @@ import mongoose from 'mongoose';
  * @param {string} toUserId - ID người nhận
  * @param {string} content - Nội dung message
  * @param {string} bookingId - ID booking (optional)
+ * @param {Array} attachments - Danh sách URL ảnh đính kèm (optional)
  * @param {Object} io - Socket.io instance (optional)
  * @returns {Object} Message object
  */
-export const createMessage = async (fromUserId, toUserId, content, bookingId = null, io = null) => {
+export const createMessage = async (fromUserId, toUserId, content, bookingId = null, attachments = [], io = null) => {
   try {
     // Validate fromUserId
     if (!fromUserId) {
@@ -36,14 +37,13 @@ export const createMessage = async (fromUserId, toUserId, content, bookingId = n
     }
 
     // Validate content
-    if (!content) {
-      throw new Error('Nội dung tin nhắn là bắt buộc');
+    if ((!content || (typeof content === 'string' && content.trim().length === 0)) && (!attachments || attachments.length === 0)) {
+      throw new Error('Nội dung tin nhắn hoặc hình ảnh là bắt buộc');
     }
-    if (typeof content !== 'string' || content.trim().length === 0) {
-      throw new Error('Nội dung tin nhắn không được để trống');
-    }
+    
+    // If content exists, check length
     const MAX_CONTENT_LENGTH = 5000;
-    if (content.length > MAX_CONTENT_LENGTH) {
+    if (content && content.length > MAX_CONTENT_LENGTH) {
       throw new Error(`Nội dung tin nhắn không được vượt quá ${MAX_CONTENT_LENGTH} ký tự`);
     }
 
@@ -57,6 +57,7 @@ export const createMessage = async (fromUserId, toUserId, content, bookingId = n
       toUserId,
       content,
       bookingId,
+      attachments,
     });
 
     await message.save();
@@ -90,6 +91,7 @@ export const createMessage = async (fromUserId, toUserId, content, bookingId = n
         toUserId: message.toUserId,
         content: message.content,
         bookingId: message.bookingId,
+        attachments: message.attachments,
         createdAt: message.createdAt,
       });
     }
