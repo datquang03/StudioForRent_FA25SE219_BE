@@ -333,10 +333,17 @@ export const cancelSchedule = async (scheduleId, session = null) => {
     }
     
     // Check if valid transition ( BOOKED -> CANCELLED )
-    if (schedule.status !== SCHEDULE_STATUS.BOOKED) {
-      // Allow if it's already cancelled (idempotent)
-      if (schedule.status === SCHEDULE_STATUS.CANCELLED) return schedule;
-      // If AVAILABLE, we can just cancel it too
+    // If already cancelled, just return (idempotent operation)
+    if (schedule.status === SCHEDULE_STATUS.CANCELLED) {
+      return schedule;
+    }
+    
+    // We can cancel BOOKED or AVAILABLE schedules. 
+    // If it's in some other state (e.g. hypothetical COMPLETED), maybe restrict? 
+    // For now, allow cancellation unless strictly forbidden.
+    if (schedule.status !== SCHEDULE_STATUS.BOOKED && schedule.status !== SCHEDULE_STATUS.AVAILABLE) {
+       // Optional: Add logging or strict check if needed. 
+       // For now, allow it to proceed to CANCELLED.
     }
 
     schedule.status = SCHEDULE_STATUS.CANCELLED;

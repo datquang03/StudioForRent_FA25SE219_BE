@@ -3,7 +3,7 @@ import { Booking, Schedule, BookingDetail, RoomPolicy, Payment } from '../models
 import mongoose from 'mongoose';
 import { NotFoundError, ValidationError, ConflictError, UnauthorizedError } from '../utils/errors.js';
 import { BOOKING_STATUS, SCHEDULE_STATUS, USER_ROLES, PAYMENT_STATUS, BOOKING_EVENT_TYPE } from '../utils/constants.js';
-import { createSchedule as createScheduleService, markScheduleBooked as markScheduleBookedService, freeSchedule as freeScheduleService } from './schedule.service.js';
+import { createSchedule as createScheduleService, markScheduleBooked as markScheduleBookedService, freeSchedule as freeScheduleService, cancelSchedule } from './schedule.service.js';
 import { createBookingDetails as createBookingDetailsService } from './bookingDetail.service.js';
 import { Studio, Promotion } from '../models/index.js';
 import { releaseEquipment } from './equipment.service.js';
@@ -13,8 +13,7 @@ import RoomPolicyService from './roomPolicy.service.js';
 import { createPaymentOptions } from './payment.service.js';
 import { acquireLock, releaseLock } from '../utils/redisLock.js';
 import { sendNoShowEmail } from './email.service.js';
-import { PagingQuery } from '../utils/helpers.js';
-import { formatDate, formatTime } from '../utils/helpers.js';
+import { formatDate, formatTime, formatDateISO } from '../utils/helpers.js';
 import logger from '../utils/logger.js';
 // #endregion
 
@@ -313,7 +312,7 @@ export const getBookingById = async (id, userId = null, userRole = null) => {
       startTime: booking.scheduleId.startTime,
       endTime: booking.scheduleId.endTime,
       duration: Math.round((new Date(booking.scheduleId.endTime) - new Date(booking.scheduleId.startTime)) / (1000 * 60 * 60) * 10) / 10,
-      date: formatDate(booking.scheduleId.startTime).split('/').reverse().join('-'),
+      date: formatDateISO(booking.scheduleId.startTime),
       timeRange: `${formatTime(booking.scheduleId.startTime)} - ${formatTime(booking.scheduleId.endTime)}`
     } : null,
     totalBeforeDiscount: booking.totalBeforeDiscount,
@@ -757,7 +756,6 @@ export const cancelBooking = async (bookingId) => {
       // Cancel schedule (mark as CANCELLED but keep bookingId ref)
       if (booking.scheduleId) {
         try {
-          const { cancelSchedule } = await import('./schedule.service.js');
           await cancelSchedule(booking.scheduleId, session);
         } catch (cancelErr) {
           logger.error('Failed to cancel schedule', cancelErr);
