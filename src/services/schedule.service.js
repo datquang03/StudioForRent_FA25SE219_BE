@@ -55,6 +55,7 @@ export const createSchedule = async (data, session = null) => {
       studioId,
       startTime: { $lt: new Date(e.getTime() + MIN_GAP_MS) },
       endTime: { $gt: new Date(s.getTime() - MIN_GAP_MS) },
+      status: { $ne: SCHEDULE_STATUS.CANCELLED } // Ignore cancelled schedules
     });
 
     if (conflict) {
@@ -207,6 +208,7 @@ export const updateSchedule = async (id, updateData, session = null) => {
       studioId: schedule.studioId,
       startTime: { $lt: new Date(schedule.endTime.getTime() + MIN_GAP_MS) },
       endTime: { $gt: new Date(schedule.startTime.getTime() - MIN_GAP_MS) },
+      status: { $ne: SCHEDULE_STATUS.CANCELLED } // Ignore cancelled schedules
     });
     if (session) conflictQuery.session(session);
     const conflict = await conflictQuery;
@@ -316,6 +318,46 @@ export const freeSchedule = async (scheduleId, session = null) => {
   }
 };
 
+export const cancelSchedule = async (scheduleId, session = null) => {
+  try {
+    if (!scheduleId) {
+      throw new ValidationError('ID lịch là bắt buộc');
+    }
+
+    const query = Schedule.findById(scheduleId);
+    if (session) query.session(session);
+    const schedule = await query;
+    
+    if (!schedule) {
+      throw new NotFoundError('Lịch không tồn tại');
+    }
+    
+    // Check if valid transition ( BOOKED -> CANCELLED )
+    // If already cancelled, just return (idempotent operation)
+    if (schedule.status === SCHEDULE_STATUS.CANCELLED) {
+      return schedule;
+    }
+    
+    // We can cancel BOOKED or AVAILABLE schedules. 
+    // If it's in some other state (e.g. hypothetical COMPLETED), maybe restrict? 
+    // For now, allow cancellation unless strictly forbidden.
+    if (schedule.status !== SCHEDULE_STATUS.BOOKED && schedule.status !== SCHEDULE_STATUS.AVAILABLE) {
+       // Optional: Add logging or strict check if needed. 
+       // For now, allow it to proceed to CANCELLED.
+    }
+
+    schedule.status = SCHEDULE_STATUS.CANCELLED;
+    // Keep bookingId for history tracking
+    await schedule.save({ session });
+    return schedule;
+  } catch (error) {
+    if (error instanceof ValidationError || error instanceof NotFoundError) {
+      throw error;
+    }
+    throw new Error('Lỗi khi hủy lịch');
+  }
+};
+
 export default {
   createSchedule,
   getScheduleById,
@@ -324,4 +366,5 @@ export default {
   deleteSchedule,
   markScheduleBooked,
   freeSchedule,
+  cancelSchedule,
 };

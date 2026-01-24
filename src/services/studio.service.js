@@ -4,7 +4,7 @@ import { Schedule } from '../models/index.js';
 import { createAndSendNotification } from '../services/notification.service.js';
 import { STUDIO_STATUS, NOTIFICATION_TYPE, SCHEDULE_STATUS } from '../utils/constants.js';
 import { NotFoundError, ValidationError } from '../utils/errors.js';
-import { escapeRegex } from '../utils/helpers.js';
+import { escapeRegex, formatTime } from '../utils/helpers.js';
 import { cacheGet, cacheSet } from '../utils/cache.js';
 import logger from '../utils/logger.js';
 // #endregion
@@ -371,7 +371,7 @@ export const getStudioSchedule = async (studioId, options = {}) => {
       startTime: slot.startTime,
       endTime: slot.endTime,
       duration: Math.round((slot.endTime - slot.startTime) / (1000 * 60 * 60) * 10) / 10,
-      timeRange: `${slot.startTime.toTimeString().slice(0, 5)} - ${slot.endTime.toTimeString().slice(0, 5)}`,
+      timeRange: `${formatTime(slot.startTime)} - ${formatTime(slot.endTime)}`,
       status: slot.status,
       booking: slot.bookingId ? {
         _id: slot.bookingId._id,
@@ -463,7 +463,7 @@ export const getStudioScheduleByDate = async (studioId, date) => {
     startTime: slot.startTime,
     endTime: slot.endTime,
     duration: Math.round((slot.endTime - slot.startTime) / (1000 * 60 * 60) * 10) / 10,
-    timeRange: `${slot.startTime.toTimeString().slice(0, 5)} - ${slot.endTime.toTimeString().slice(0, 5)}`,
+    timeRange: `${formatTime(slot.startTime)} - ${formatTime(slot.endTime)}`,
     status: slot.status,
     booking: slot.bookingId ? {
       _id: slot.bookingId._id,
@@ -563,7 +563,7 @@ export const getStudiosSchedule = async (options = {}) => {
           startTime: slot.startTime,
           endTime: slot.endTime,
           duration: Math.round((slot.endTime - slot.startTime) / (1000 * 60 * 60) * 10) / 10,
-          timeRange: `${slot.startTime.toTimeString().slice(0, 5)} - ${slot.endTime.toTimeString().slice(0, 5)}`,
+          timeRange: `${formatTime(slot.startTime)} - ${formatTime(slot.endTime)}`,
           status: slot.status,
           booking: slot.bookingId ? {
             _id: slot.bookingId._id,
@@ -657,7 +657,7 @@ export const getStudiosScheduleByDate = async (date, page = 1, limit = 10) => {
         startTime: slot.startTime,
         endTime: slot.endTime,
         duration: Math.round((slot.endTime - slot.startTime) / (1000 * 60 * 60) * 10) / 10,
-        timeRange: `${slot.startTime.toTimeString().slice(0, 5)} - ${slot.endTime.toTimeString().slice(0, 5)}`,
+        timeRange: `${formatTime(slot.startTime)} - ${formatTime(slot.endTime)}`,
         status: slot.status,
         booking: slot.bookingId ? {
           _id: slot.bookingId._id,
@@ -794,7 +794,7 @@ export const getStudiosAvailability = async (options = {}) => {
                    startTime: currentTime,
                    endTime: bookingStart,
                    duration: diffHours,
-                   timeRange: `${currentTime.toTimeString().slice(0, 5)} - ${bookingStart.toTimeString().slice(0, 5)}`,
+                   timeRange: `${formatTime(currentTime)} - ${formatTime(bookingStart)}`,
                    pricePerHour: studio.basePricePerHour,
                    estimatedPrice: Math.round(diffHours * studio.basePricePerHour),
                    type: 'flexible'
@@ -817,7 +817,7 @@ export const getStudiosAvailability = async (options = {}) => {
                    startTime: currentTime,
                    endTime: dayEnd,
                    duration: diffHours,
-                   timeRange: `${currentTime.toTimeString().slice(0, 5)} - ${dayEnd.toTimeString().slice(0, 5)}`,
+                   timeRange: `${formatTime(currentTime)} - ${formatTime(dayEnd)}`,
                    pricePerHour: studio.basePricePerHour,
                    estimatedPrice: Math.round(diffHours * studio.basePricePerHour),
                    type: 'flexible'
@@ -867,7 +867,7 @@ export const getStudiosAvailability = async (options = {}) => {
             startTime: slot.startTime,
             endTime: slot.endTime,
             duration: Math.round((slot.endTime - slot.startTime) / (1000 * 60 * 60) * 10) / 10, // hours with 1 decimal
-            timeRange: `${slot.startTime.toTimeString().slice(0, 5)} - ${slot.endTime.toTimeString().slice(0, 5)}`,
+            timeRange: `${formatTime(slot.startTime)} - ${formatTime(slot.endTime)}`,
             pricePerHour: studio.basePricePerHour,
             estimatedPrice: Math.round(
               (slot.endTime - slot.startTime) / (1000 * 60 * 60) * studio.basePricePerHour
@@ -994,7 +994,7 @@ export const getStudioBookedHistory = async (studioId, options = {}) => {
       endTime: slot.endTime,
       duration: Math.round((slot.endTime - slot.startTime) / (1000 * 60 * 60) * 10) / 10,
       date: slot.startTime.toISOString().split('T')[0],
-      timeRange: `${slot.startTime.toTimeString().slice(0, 5)} - ${slot.endTime.toTimeString().slice(0, 5)}`,
+      timeRange: `${formatTime(slot.startTime)} - ${formatTime(slot.endTime)}`,
       booking: slot.bookingId ? {
         _id: slot.bookingId._id,
         customer: {

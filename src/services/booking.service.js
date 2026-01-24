@@ -3,7 +3,7 @@ import { Booking, Schedule, BookingDetail, RoomPolicy, Payment } from '../models
 import mongoose from 'mongoose';
 import { NotFoundError, ValidationError, ConflictError, UnauthorizedError } from '../utils/errors.js';
 import { BOOKING_STATUS, SCHEDULE_STATUS, USER_ROLES, PAYMENT_STATUS, BOOKING_EVENT_TYPE } from '../utils/constants.js';
-import { createSchedule as createScheduleService, markScheduleBooked as markScheduleBookedService, freeSchedule as freeScheduleService } from './schedule.service.js';
+import { createSchedule as createScheduleService, markScheduleBooked as markScheduleBookedService, freeSchedule as freeScheduleService, cancelSchedule } from './schedule.service.js';
 import { createBookingDetails as createBookingDetailsService } from './bookingDetail.service.js';
 import { Studio, Promotion } from '../models/index.js';
 import { releaseEquipment } from './equipment.service.js';
@@ -13,6 +13,7 @@ import RoomPolicyService from './roomPolicy.service.js';
 import { createPaymentOptions } from './payment.service.js';
 import { acquireLock, releaseLock } from '../utils/redisLock.js';
 import { sendNoShowEmail } from './email.service.js';
+import { formatDate, formatTime, formatDateISO } from '../utils/helpers.js';
 import logger from '../utils/logger.js';
 // #endregion
 
@@ -67,7 +68,12 @@ export const createBooking = async (data) => {
         const MIN_GAP_MS = 30 * 60 * 1000;
 
         // Exact match
-        const exact = await Schedule.findOne({ studioId, startTime: s, endTime: e }).session(session);
+        const exact = await Schedule.findOne({ 
+          studioId, 
+          startTime: s, 
+          endTime: e,
+          status: { $ne: SCHEDULE_STATUS.CANCELLED }
+        }).session(session);
         if (exact) {
           if (exact.status !== SCHEDULE_STATUS.AVAILABLE) {
             throw new ConflictError('Lịch cùng thời gian đã tồn tại và không còn trống');
@@ -79,6 +85,7 @@ export const createBooking = async (data) => {
             studioId,
             startTime: { $lt: new Date(e.getTime() + MIN_GAP_MS) },
             endTime: { $gt: new Date(s.getTime() - MIN_GAP_MS) },
+            status: { $ne: SCHEDULE_STATUS.CANCELLED }
           }).session(session);
 
           if (overlapping) {
@@ -305,8 +312,8 @@ export const getBookingById = async (id, userId = null, userRole = null) => {
       startTime: booking.scheduleId.startTime,
       endTime: booking.scheduleId.endTime,
       duration: Math.round((new Date(booking.scheduleId.endTime) - new Date(booking.scheduleId.startTime)) / (1000 * 60 * 60) * 10) / 10,
-      date: booking.scheduleId.startTime.toISOString().split('T')[0],
-      timeRange: `${new Date(booking.scheduleId.startTime).toTimeString().slice(0, 5)} - ${new Date(booking.scheduleId.endTime).toTimeString().slice(0, 5)}`
+      date: formatDateISO(booking.scheduleId.startTime),
+      timeRange: `${formatTime(booking.scheduleId.startTime)} - ${formatTime(booking.scheduleId.endTime)}`
     } : null,
     totalBeforeDiscount: booking.totalBeforeDiscount,
     discountAmount: booking.discountAmount,
@@ -746,13 +753,13 @@ export const cancelBooking = async (bookingId) => {
 
       await booking.save({ session });
 
-      // free schedule if linked
+      // Cancel schedule (mark as CANCELLED but keep bookingId ref)
       if (booking.scheduleId) {
         try {
-          await freeScheduleService(booking.scheduleId, session);
-        } catch (freeErr) {
-          logger.error('Failed to free schedule on cancellation', freeErr);
-          throw freeErr;
+          await cancelSchedule(booking.scheduleId, session);
+        } catch (cancelErr) {
+          logger.error('Failed to cancel schedule', cancelErr);
+          throw cancelErr;
         }
 
         // Release reserved equipment from booking details (if any)
@@ -1049,8 +1056,8 @@ export const markAsNoShow = async (bookingId, checkInTime = null, io = null) => 
       if (user && user.email) {
         await sendNoShowEmail(user.email, {
           bookingId: booking._id,
-          date: booking.scheduleId?.startTime ? new Date(booking.scheduleId.startTime).toLocaleDateString('vi-VN') : undefined,
-          time: booking.scheduleId?.startTime ? new Date(booking.scheduleId.startTime).toLocaleTimeString('vi-VN') : undefined,
+          date: booking.scheduleId?.startTime ? formatDate(booking.scheduleId.startTime) : undefined,
+          time: booking.scheduleId?.startTime ? formatTime(booking.scheduleId.startTime) : undefined,
           chargeAmount: chargeResult?.chargeAmount || 0
         });
       }
@@ -1223,7 +1230,7 @@ const calculateScheduleDetails = (schedule) => {
     endTime: schedule.endTime,
     duration: durationInHours,
     date: startTime.toISOString().split('T')[0],
-    timeRange: `${startTime.toTimeString().slice(0, 5)} - ${endTime.toTimeString().slice(0, 5)}`
+    timeRange: `${formatTime(startTime)} - ${formatTime(endTime)}`
   };
 };
 
@@ -1426,7 +1433,7 @@ export const extendBooking = async (bookingId, newEndTime, actorId = null, actor
       }
 
       if (requestedEndTime > extensionCheck.maxEndTime) {
-        throw new ConflictError(`Chỉ có thể gia hạn tối đa đến ${extensionCheck.maxEndTime.toLocaleTimeString('vi-VN')}`);
+        throw new ConflictError(`Chỉ có thể gia hạn tối đa đến ${formatTime(extensionCheck.maxEndTime)}`);
       }
 
       // 5. Tính toán số tiền cần thanh toán thêm

@@ -31,12 +31,61 @@ export const isExpired = (expiryTime) => {
 };
 
 /**
- * Format date thành ISO string
- * @param {Date|number} date - Date object hoặc timestamp
- * @returns {string} - ISO string
+ * Format date thành chuỗi ngày (VD: 25/01/2026) theo múi giờ VN
+ * @param {Date|number|string} date - Ngày cần format
+ * @returns {string} - Chuỗi ngày định dạng dd/mm/yyyy
  */
 export const formatDate = (date) => {
-  return new Date(date).toISOString();
+  return new Date(date).toLocaleDateString(TIME_CONSTANTS.DEFAULT_LOCALE, {
+    timeZone: TIME_CONSTANTS.DEFAULT_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+};
+
+/**
+ * Format date thành chuỗi ngày chuẩn ISO YYYY-MM-DD theo múi giờ VN
+ * @param {Date|number|string} date - Ngày cần format
+ * @returns {string} - Chuỗi ngày định dạng YYYY-MM-DD
+ */
+export const formatDateISO = (date) => {
+  // Use generic format and manually rearrange to ensure YYYY-MM-DD regardless of locale quirks,
+  // or use CA locale which is often YYYY-MM-DD, but safer to just use our own helpers
+  // Actually, locale 'sv-SE' is reliably YYYY-MM-DD. 
+  // But let's stick to 'vi-VN' (dd/mm/yyyy) and split/reverse as we did, OR use Intl.DateTimeFormat parts.
+  // The simplest reliable way given our helpers:
+  const parts = new Intl.DateTimeFormat('en-GB', { // en-GB is dd/mm/yyyy
+    timeZone: TIME_CONSTANTS.DEFAULT_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(new Date(date));
+  
+  const part = (type) => parts.find(p => p.type === type).value;
+  return `${part('year')}-${part('month')}-${part('day')}`;
+};
+
+/**
+ * Format date thành chuỗi giờ (VD: 14:30) theo múi giờ VN
+ * @param {Date|number|string} date - Ngày cần format
+ * @returns {string} - Chuỗi giờ định dạng HH:mm
+ */
+export const formatTime = (date) => {
+  return new Date(date).toLocaleTimeString(TIME_CONSTANTS.DEFAULT_LOCALE, {
+    timeZone: TIME_CONSTANTS.DEFAULT_TIMEZONE,
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};
+
+/**
+ * Format date thành chuỗi đầy đủ (VD: 14:30 25/01/2026) theo múi giờ VN
+ * @param {Date|number|string} date - Ngày giờ cần format
+ * @returns {string} - Chuỗi ngày giờ định dạng HH:mm dd/mm/yyyy
+ */
+export const formatDateTime = (date) => {
+  return `${formatTime(date)} ${formatDate(date)}`;
 };
 
 /**

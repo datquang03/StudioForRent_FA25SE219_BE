@@ -241,6 +241,8 @@ export const TIME_CONSTANTS = {
   REFRESH_TOKEN_EXPIRY: "7d", // Refresh token: 7 days
   REFRESH_TOKEN_EXPIRY_DAYS: 7,
   DEFAULT_TIMEZONE_OFFSET: 7, // GMT+7 (Vietnam)
+  DEFAULT_TIMEZONE: "Asia/Ho_Chi_Minh",
+  DEFAULT_LOCALE: "vi-VN",
 };
 
 // #endregion

@@ -75,7 +75,15 @@ export const createReport = async (data) => {
       if (review) targetExists = true;
     } else if (data.targetType === REPORT_TARGET_TYPES.COMMENT) {
       const comment = await Comment.findById(data.targetId);
-      if (comment) targetExists = true;
+      if (comment) {
+        targetExists = true;
+      } else {
+        // Search for reply
+        const commentWithReply = await Comment.findOne({ 'replies._id': data.targetId });
+        if (commentWithReply) {
+          targetExists = true;
+        }
+      }
     } else if (data.targetType === REPORT_TARGET_TYPES.STUDIO) {
       const studio = await Studio.findById(data.targetId);
       if (studio) targetExists = true;
