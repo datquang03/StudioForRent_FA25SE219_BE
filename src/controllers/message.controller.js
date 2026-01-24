@@ -9,6 +9,7 @@ import {
   markMessageAsRead,
   deleteMessage,
 } from '../services/message.service.js';
+import { uploadMultipleImages, deleteMultipleFiles } from '../services/upload.service.js';
 import mongoose from 'mongoose';
 // #endregion
 
@@ -23,9 +24,15 @@ export const createMessageController = asyncHandler(async (req, res) => {
   const fromUserId = req.user.id;
 
   // Validation
-  if (!toUserId || !content) {
+  if (!toUserId) {
     res.status(400);
-    throw new Error('toUserId và content là bắt buộc');
+    throw new Error('toUserId là bắt buộc');
+  }
+
+  // Content or files required
+  if ((!content || content.trim().length === 0) && (!req.files || req.files.length === 0)) {
+    res.status(400);
+    throw new Error('Nội dung hoặc hình ảnh là bắt buộc');
   }
 
   // Validate toUserId is valid ObjectId
@@ -59,17 +66,50 @@ export const createMessageController = asyncHandler(async (req, res) => {
     throw new Error('bookingId không hợp lệ');
   }
 
-  const message = await createMessage(fromUserId, toUserId, content, bookingId, req.io);
 
-  // Populate user info including avatar
-  await message.populate('fromUserId', 'username fullName avatar');
-  await message.populate('toUserId', 'username fullName avatar');
 
-  res.status(201).json({
-    success: true,
-    message: 'Message đã được tạo',
-    data: message,
-  });
+  // Handle image upload
+  let attachments = [];
+  if (req.files && req.files.length > 0) {
+    const uploadResults = await uploadMultipleImages(req.files, {
+      folder: 'studio-rental/messages'
+    });
+    attachments = uploadResults.map(result => result.url);
+  }
+
+  try {
+    const message = await createMessage(fromUserId, toUserId, content, bookingId, attachments, req.io);
+
+    // Populate user info including avatar
+    await message.populate('fromUserId', 'username fullName avatar');
+    await message.populate('toUserId', 'username fullName avatar');
+
+    res.status(201).json({
+      success: true,
+      message: 'Message đã được tạo',
+      data: message,
+    });
+  } catch (error) {
+    // Clean up uploaded images if message creation fails
+    if (attachments.length > 0) {
+      // Extract publicId from URL
+      // Assuming URL format: https://res.cloudinary.com/cloud_name/image/upload/v12345/folder/public_id.jpg
+      const publicIds = attachments.map(url => {
+        const parts = url.split('/');
+        const versionIndex = parts.findIndex(part => part.startsWith('v') && !isNaN(part.substring(1)));
+        if (versionIndex !== -1) {
+          const publicIdWithExt = parts.slice(versionIndex + 1).join('/');
+          return publicIdWithExt.substring(0, publicIdWithExt.lastIndexOf('.'));
+        }
+        return null;
+      }).filter(id => id !== null);
+
+      if (publicIds.length > 0) {
+        await deleteMultipleFiles(publicIds);
+      }
+    }
+    throw error;
+  }
 });
 
 /**

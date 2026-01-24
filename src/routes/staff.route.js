@@ -17,7 +17,7 @@ router.use(sanitizeInput);
 router.use(generalLimiter);
 
 router.use(protect);
-router.use(authorize(USER_ROLES.STAFF));
+router.use(authorize(USER_ROLES.STAFF, USER_ROLES.ADMIN));
 
 router.get('/profile', getProfile);
 router.patch('/profile', updateProfile);

@@ -22,12 +22,23 @@ const messageSchema = new mongoose.Schema(
     },
     content: {
       type: String,
-      required: true,
+      required: false, // Optional if sending images
     },
     isRead: {
       type: Boolean,
       default: false,
     },
+    attachments: [{
+      type: String, // URLs from Cloudinary
+      validate: [
+        {
+          validator: function (val) {
+            return this.attachments.length <= 5;
+          },
+          message: 'Chỉ được phép đính kèm tối đa 5 ảnh'
+        }
+      ]
+    }],
   },
   {
     timestamps: { createdAt: true, updatedAt: false },
