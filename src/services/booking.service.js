@@ -67,7 +67,12 @@ export const createBooking = async (data) => {
         const MIN_GAP_MS = 30 * 60 * 1000;
 
         // Exact match
-        const exact = await Schedule.findOne({ studioId, startTime: s, endTime: e }).session(session);
+        const exact = await Schedule.findOne({ 
+          studioId, 
+          startTime: s, 
+          endTime: e,
+          status: { $ne: SCHEDULE_STATUS.CANCELLED }
+        }).session(session);
         if (exact) {
           if (exact.status !== SCHEDULE_STATUS.AVAILABLE) {
             throw new ConflictError('Lịch cùng thời gian đã tồn tại và không còn trống');
@@ -79,6 +84,7 @@ export const createBooking = async (data) => {
             studioId,
             startTime: { $lt: new Date(e.getTime() + MIN_GAP_MS) },
             endTime: { $gt: new Date(s.getTime() - MIN_GAP_MS) },
+            status: { $ne: SCHEDULE_STATUS.CANCELLED }
           }).session(session);
 
           if (overlapping) {
@@ -746,13 +752,14 @@ export const cancelBooking = async (bookingId) => {
 
       await booking.save({ session });
 
-      // free schedule if linked
+      // Cancel schedule (mark as CANCELLED but keep bookingId ref)
       if (booking.scheduleId) {
         try {
-          await freeScheduleService(booking.scheduleId, session);
-        } catch (freeErr) {
-          logger.error('Failed to free schedule on cancellation', freeErr);
-          throw freeErr;
+          const { cancelSchedule } = await import('./schedule.service.js');
+          await cancelSchedule(booking.scheduleId, session);
+        } catch (cancelErr) {
+          logger.error('Failed to cancel schedule', cancelErr);
+          throw cancelErr;
         }
 
         // Release reserved equipment from booking details (if any)
