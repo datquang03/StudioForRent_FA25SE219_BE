@@ -459,7 +459,7 @@ export const refundEquipmentDeposit = async (orderId, user) => {
         // Find PAID payments and validate
         const paidPayments = await Payment.find({
             targetId: orderId,
-            targetModel: 'EquipmentOrder',
+            targetModel: TARGET_MODEL.EQUIPMENT_ORDER,
             status: PAYMENT_STATUS.PAID
         }).session(session);
 
@@ -732,7 +732,7 @@ export const getEquipmentOrderPayments = async (orderId) => {
         if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
             throw new ValidationError('ID đơn hàng không hợp lệ');
         }
-        return await Payment.find({ targetId: orderId, targetModel: 'EquipmentOrder' }).sort({ createdAt: -1 });
+        return await Payment.find({ targetId: orderId, targetModel: TARGET_MODEL.EQUIPMENT_ORDER }).sort({ createdAt: -1 });
     } catch (e) {
         if (e instanceof ValidationError) throw e;
         logger.error('Get equipment order payments error:', e);

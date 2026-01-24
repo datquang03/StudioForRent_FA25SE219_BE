@@ -290,6 +290,9 @@ export const createPaymentOptions = async (bookingId) => {
       // Save payment record to database within transaction
       const payment = await Payment.create([{
         bookingId,
+        targetId: bookingId,
+        targetModel: TARGET_MODEL.BOOKING,
+        category: PAYMENT_CATEGORY.BOOKING,
         paymentCode,
         amount: option.amount,
         payType: option.payType,
@@ -917,7 +920,7 @@ export const createPaymentForOption = async (bookingId, opts = {}) => {
 
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
 
-    const payment = await Payment.create([{ bookingId, paymentCode, amount, payType, status: PAYMENT_STATUS.PENDING, transactionId: orderCode.toString(), qrCodeUrl: checkoutUrl, gatewayResponse, expiresAt }], { session });
+    const payment = await Payment.create([{ bookingId, targetId: bookingId, targetModel: TARGET_MODEL.BOOKING, category: PAYMENT_CATEGORY.BOOKING, paymentCode, amount, payType, status: PAYMENT_STATUS.PENDING, transactionId: orderCode.toString(), qrCodeUrl: checkoutUrl, gatewayResponse, expiresAt }], { session });
 
     await session.commitTransaction();
     return formatPaymentOption(payment[0], totalAmount);
@@ -1027,7 +1030,7 @@ export const createPaymentForRemaining = async (bookingId, opts = {}) => {
 
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
 
-    const payment = await Payment.create([{ bookingId, paymentCode, amount: remaining, payType: PAY_TYPE.FULL, status: PAYMENT_STATUS.PENDING, transactionId: orderCode.toString(), qrCodeUrl: checkoutUrl, gatewayResponse, expiresAt }], { session });
+    const payment = await Payment.create([{ bookingId, targetId: bookingId, targetModel: TARGET_MODEL.BOOKING, category: PAYMENT_CATEGORY.BOOKING, paymentCode, amount: remaining, payType: PAY_TYPE.FULL, status: PAYMENT_STATUS.PENDING, transactionId: orderCode.toString(), qrCodeUrl: checkoutUrl, gatewayResponse, expiresAt }], { session });
 
     // Audit: push event to booking.events indicating who created the remaining payment
     try {
