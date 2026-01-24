@@ -1678,42 +1678,46 @@ export const convertRequestToSetDesign = async (requestId, designData = {}, user
       throw new ValidationError('Giá phải là số không âm');
     }
 
-    // Collect all images from the request
-    const allImages = [];
+    // Collect all images from the request using Set to prevent duplicates
+    const imageSet = new Set();
+    
+    // Helper function to extract URL and add to set
+    const addImageToSet = (img) => {
+      if (typeof img === 'string' && img.trim()) {
+        imageSet.add(img.trim());
+      } else if (img && typeof img.url === 'string' && img.url.trim()) {
+        imageSet.add(img.url.trim());
+      }
+    };
     
     // Add generated images (array)
     if (request.generatedImages && request.generatedImages.length > 0) {
-    request.generatedImages.forEach((img) => {
-        if (typeof img === 'string') {
-          allImages.push(img);
-        } else if (img && typeof img.url === 'string') {
-          allImages.push(img.url);
-        }
-      });
+      request.generatedImages.forEach(addImageToSet);
     }
     
     // Add reference images (array)
     if (request.referenceImages && request.referenceImages.length > 0) {
-      request.referenceImages.forEach((img) => {
-        if (typeof img === 'string') {
-          allImages.push(img);
-        } else if (img && typeof img.url === 'string') {
-          allImages.push(img.url);
-        }
-      });
+      request.referenceImages.forEach(addImageToSet);
     }
     
     // Add any additional images from designData
-    if (designData.additionalImages && designData.additionalImages.length > 0) {
-      designData.additionalImages.forEach((img) => {
-        if (typeof img === 'string') {
-          allImages.push(img);
-        } else if (img && typeof img.url === 'string') {
-          allImages.push(img.url);
-        }
-      });
+    if (designData.additionalImages) {
+      if (!Array.isArray(designData.additionalImages)) {
+        throw new ValidationError('additionalImages phải là một mảng');
+      }
+      designData.additionalImages.forEach(addImageToSet);
     }
+    
+    // Convert Set to Array
+    const allImages = Array.from(imageSet);
 
+    // Enforce SetDesign.images max length (see SetDesign model validation)
+    const MAX_SET_DESIGN_IMAGES = 10;
+    if (allImages.length > MAX_SET_DESIGN_IMAGES) {
+      throw new ValidationError(
+        `Set design can have at most ${MAX_SET_DESIGN_IMAGES} images, but ${allImages.length} were provided.`
+      );
+    }
     // Create SetDesign from request
     const setDesign = new SetDesign({
       name: designData.name || `Custom Design - ${request.customerName}`,
