@@ -1701,13 +1701,23 @@ export const convertRequestToSetDesign = async (requestId, designData = {}, user
     }
     
     // Add any additional images from designData
-    if (designData.additionalImages && designData.additionalImages.length > 0) {
+    if (designData.additionalImages) {
+      if (!Array.isArray(designData.additionalImages)) {
+        throw new ValidationError('additionalImages phải là một mảng');
+      }
       designData.additionalImages.forEach(addImageToSet);
     }
     
     // Convert Set to Array
     const allImages = Array.from(imageSet);
 
+    // Enforce SetDesign.images max length (see SetDesign model validation)
+    const MAX_SET_DESIGN_IMAGES = 10;
+    if (allImages.length > MAX_SET_DESIGN_IMAGES) {
+      throw new ValidationError(
+        `Set design can have at most ${MAX_SET_DESIGN_IMAGES} images, but ${allImages.length} were provided.`
+      );
+    }
     // Create SetDesign from request
     const setDesign = new SetDesign({
       name: designData.name || `Custom Design - ${request.customerName}`,
