@@ -993,7 +993,7 @@ export const handleSetDesignPaymentWebhook = async (webhookPayload) => {
       paymentStatus: payment.status,
       paymentAmount: payment.amount,
       webhookAmount: amount,
-      orderId: payment.orderId,
+      orderId: payment.targetId,
     });
 
     if (isPaid) {
@@ -1057,7 +1057,7 @@ export const handleSetDesignPaymentWebhook = async (webhookPayload) => {
 
         await order.save({ session });
       } else {
-        logger.warn('SetDesign webhook - order not found', { orderId: payment.orderId });
+        logger.warn('SetDesign webhook - order not found', { orderId: payment.targetId });
       }
 
       await payment.save({ session });
