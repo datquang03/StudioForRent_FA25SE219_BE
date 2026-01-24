@@ -395,10 +395,17 @@ export const cancelEquipmentOrder = async (orderId, user, reason) => {
       throw new ValidationError('Bạn không có quyền hủy đơn hàng này');
     }
 
-    // Only pending orders can be cancelled by customer
-    if (order.status !== EQUIPMENT_ORDER_STATUS.PENDING) {
-      throw new ValidationError('Chỉ có thể hủy đơn hàng đang chờ thanh toán');
+    // Allow cancellation for PENDING or CONFIRMED orders (not IN_USE or COMPLETED)
+    const allowedStatuses = [EQUIPMENT_ORDER_STATUS.PENDING, EQUIPMENT_ORDER_STATUS.CONFIRMED];
+    if (!allowedStatuses.includes(order.status)) {
+      throw new ValidationError('Chỉ có thể hủy đơn hàng đang chờ hoặc đã xác nhận (chưa sử dụng)');
     }
+
+    // Check if order has paid payments (requires refund request)
+    const hasPaidPayments = order.status === EQUIPMENT_ORDER_STATUS.CONFIRMED && order.totalAmount > 0;
+
+    // Check if equipment was actually being used (for IN_USE orders)
+    const wasInUse = order.status === EQUIPMENT_ORDER_STATUS.IN_USE;
 
     order.status = EQUIPMENT_ORDER_STATUS.CANCELLED;
     order.cancelledAt = new Date();
@@ -406,17 +413,27 @@ export const cancelEquipmentOrder = async (orderId, user, reason) => {
 
     await order.save({ session });
 
-    // Return equipment to available
+    // Only restore equipment quantity if order was IN_USE (equipment was actually being used)
+    // For PENDING or CONFIRMED orders, equipment wasn't reserved yet
     const equipment = order.equipmentId;
-    equipment.inUseQty -= order.quantity;
-    equipment.availableQty += order.quantity;
-    await equipment.save({ session });
+    if (equipment && wasInUse) {
+      equipment.inUseQty -= order.quantity;
+      equipment.availableQty += order.quantity;
+      await equipment.save({ session });
+    }
 
     await session.commitTransaction();
 
     logger.info(`Equipment order ${orderId} cancelled by customer ${user._id}`);
 
-    return order;
+    // Return order with flag indicating if refund request is needed
+    return {
+      ...order.toObject(),
+      requiresRefundRequest: hasPaidPayments,
+      message: hasPaidPayments 
+        ? 'Đơn thuê đã hủy. Vui lòng tạo yêu cầu hoàn tiền để nhận lại tiền đã thanh toán.'
+        : 'Đơn thuê đã hủy thành công.'
+    };
   } catch (error) {
     await session.abortTransaction();
     logger.error('Cancel equipment order error:', error);

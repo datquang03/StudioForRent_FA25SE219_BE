@@ -11,6 +11,8 @@ import {
   getEquipmentOrderPayments,
   refundEquipmentDeposit,
 } from '../services/equipmentOrder.service.js';
+import { createRefundRequestForTarget } from '../services/refund.service.js';
+import { TARGET_MODEL } from '../utils/constants.js';
 import logger from '../utils/logger.js';
 
 /**
@@ -203,6 +205,38 @@ export const refundDeposit = async (req, res, next) => {
   }
 };
 
+/**
+ * Create refund request for cancelled equipment order
+ * POST /api/equipment-orders/:id/refund-request
+ */
+export const createRefundRequest = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { bankName, accountNumber, accountName, reason, proofImageUrls } = req.body;
+
+    const refund = await createRefundRequestForTarget(
+      id, 
+      TARGET_MODEL.EQUIPMENT_ORDER,
+      {
+        bankName,
+        accountNumber,
+        accountName,
+        reason,
+        proofImageUrls,
+        userId: req.user._id
+      }
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Yêu cầu hoàn tiền đã được tạo thành công',
+      data: refund,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export default {
   createOrder,
   getMyOrders,
@@ -215,4 +249,5 @@ export default {
   getPaymentStatus,
   getOrderPayments,
   refundDeposit,
+  createRefundRequest,
 };

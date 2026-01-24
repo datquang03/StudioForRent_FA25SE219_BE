@@ -12,6 +12,7 @@ import {
   paymentWebhookController,
   getPaymentStatusController,
   getOrderPaymentsController,
+  createRefundRequestController,
 } from '../controllers/setDesignOrder.controller.js';
 import { protect, authorize } from '../middlewares/auth.js';
 import { sanitizeInput, validateObjectId } from '../middlewares/validate.js';
@@ -148,6 +149,18 @@ router.get(
   validateObjectId(),
   authorize(USER_ROLES.CUSTOMER, USER_ROLES.STAFF, USER_ROLES.ADMIN),
   getOrderPaymentsController
+);
+
+/**
+ * POST /api/set-design-orders/:id/refund-request
+ * Create refund request for cancelled order (Customer)
+ * Requires: bankName, accountNumber, accountName
+ */
+router.post(
+  '/:id/refund-request',
+  validateObjectId(),
+  authorize(USER_ROLES.CUSTOMER),
+  createRefundRequestController
 );
 
 //#endregion

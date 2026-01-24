@@ -2,14 +2,15 @@ import mongoose from 'mongoose';
 import Refund from '../models/Refund/refund.model.js';
 import Payment from '../models/Payment/payment.model.js';
 import Booking from '../models/Booking/booking.model.js';
-import { PAYMENT_STATUS, BOOKING_STATUS } from '../utils/constants.js';
+import { PAYMENT_STATUS, BOOKING_STATUS, TARGET_MODEL, SET_DESIGN_ORDER_STATUS, NOTIFICATION_TYPE } from '../utils/constants.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
 import { createAndSendNotification } from './notification.service.js';
-import { NOTIFICATION_TYPE } from '../utils/constants.js';
 import RoomPolicyService from './roomPolicy.service.js';
 import { validateStatusTransition, REFUND_TRANSITIONS } from '../utils/validators.js';
 import Schedule from '../models/Schedule/schedule.model.js';
+import SetDesignOrder from '../models/SetDesignOrder/setDesignOrder.model.js';
+import EquipmentOrder, { EQUIPMENT_ORDER_STATUS } from '../models/EquipmentOrder/equipmentOrder.model.js';
 
 // #region Helper Functions
 
@@ -54,6 +55,30 @@ export const calculateRefundAmount = async (bookingId) => {
   const refundAmount = Math.round(totalPaid * (refundPercentage / 100));
 
   return { totalPaid, refundPercentage, refundAmount };
+};
+
+/**
+ * Calculate refund amount for generic order (SetDesignOrder, EquipmentOrder)
+ * Returns 100% of paid amount (no policy-based calculation)
+ * @param {string} targetId - Order ID
+ * @param {string} targetModel - Order type (SetDesignOrder, EquipmentOrder)
+ * @returns {object} { totalPaid, refundPercentage, refundAmount }
+ */
+export const calculateRefundAmountForOrder = async (targetId, targetModel) => {
+  // Get all PAID payments for this order
+  const paidPayments = await Payment.find({ 
+    targetId, 
+    targetModel, 
+    status: PAYMENT_STATUS.PAID 
+  });
+  const totalPaid = paidPayments.reduce((sum, p) => sum + p.amount, 0);
+
+  if (totalPaid === 0) {
+    return { totalPaid: 0, refundPercentage: 0, refundAmount: 0 };
+  }
+
+  // For orders (not Booking), refund 100% of paid amount
+  return { totalPaid, refundPercentage: 100, refundAmount: totalPaid };
 };
 
 // #endregion
@@ -147,6 +172,122 @@ export const createRefundRequest = async (bookingId, opts = {}) => {
     await session.abortTransaction();
     if (err?.code === 11000) {
       throw new ValidationError('Yêu cầu hoàn tiền đã tồn tại cho booking này');
+    }
+    throw err;
+  } finally {
+    session.endSession();
+  }
+};
+
+/**
+ * Create refund request for any order type (SetDesignOrder, EquipmentOrder)
+ * @param {string} targetId - Order ID to refund
+ * @param {string} targetModel - Order type (SetDesignOrder, EquipmentOrder)
+ * @param {object} opts - Options object
+ * @param {string} opts.bankName - Bank name - REQUIRED
+ * @param {string} opts.accountNumber - Customer bank account number - REQUIRED
+ * @param {string} opts.accountName - Account holder name - REQUIRED
+ * @param {string} opts.reason - Customer's reason for refund (optional)
+ * @param {string} opts.userId - ID of customer creating request
+ * @returns {object} Refund information
+ */
+export const createRefundRequestForTarget = async (targetId, targetModel, opts = {}) => {
+  const { bankName, accountNumber, accountName, reason, userId, proofImageUrls = [] } = opts;
+
+  // Validate targetModel
+  const validModels = [TARGET_MODEL.SET_DESIGN_ORDER, TARGET_MODEL.EQUIPMENT_ORDER];
+  if (!validModels.includes(targetModel)) {
+    throw new ValidationError(`targetModel không hợp lệ. Chọn từ: ${validModels.join(', ')}`);
+  }
+
+  // Validate bank info
+  if (!bankName || !accountNumber || !accountName) {
+    throw new ValidationError('Thông tin ngân hàng (bankName, accountNumber, accountName) là bắt buộc');
+  }
+
+  // Load order based on targetModel
+  let order;
+  let orderName;
+  let cancelledStatus;
+
+  if (targetModel === TARGET_MODEL.SET_DESIGN_ORDER) {
+    order = await SetDesignOrder.findById(targetId);
+    orderName = 'Đơn hàng Set Design';
+    cancelledStatus = SET_DESIGN_ORDER_STATUS.CANCELLED;
+  } else if (targetModel === TARGET_MODEL.EQUIPMENT_ORDER) {
+    order = await EquipmentOrder.findById(targetId);
+    orderName = 'Đơn thuê thiết bị';
+    cancelledStatus = EQUIPMENT_ORDER_STATUS.CANCELLED;
+  }
+
+  if (!order) {
+    throw new NotFoundError(`${orderName} không tồn tại`);
+  }
+
+  // Order must be CANCELLED
+  if (order.status !== cancelledStatus) {
+    throw new ValidationError(`Chỉ có thể yêu cầu hoàn tiền cho ${orderName.toLowerCase()} đã hủy`);
+  }
+
+  // Check if refund already exists
+  const existingRefund = await Refund.findOne({ 
+    targetId, 
+    targetModel,
+    status: { $in: ['PENDING_APPROVAL', 'APPROVED'] } 
+  });
+  if (existingRefund) {
+    throw new ValidationError(`Yêu cầu hoàn tiền đã tồn tại cho ${orderName.toLowerCase()} này`);
+  }
+
+  // Calculate refund amount (100% for orders)
+  const { totalPaid, refundPercentage, refundAmount } = await calculateRefundAmountForOrder(targetId, targetModel);
+
+  if (refundAmount === 0) {
+    throw new ValidationError('Không có số tiền để hoàn lại (đơn hàng chưa thanh toán)');
+  }
+
+  // Create refund request
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const refundReason = reason 
+      ? reason 
+      : `Hoàn tiền ${orderName.toLowerCase()} - ${refundPercentage}%`;
+
+    const refund = await Refund.create([{
+      targetId,
+      targetModel,
+      amount: refundAmount,
+      reason: refundReason,
+      proofImages: proofImageUrls,
+      requestedBy: userId,
+      status: 'PENDING_APPROVAL',
+      destinationBank: {
+        bankName,
+        accountNumber,
+        accountName
+      }
+    }], { session });
+
+    await session.commitTransaction();
+
+    logger.info('Refund request created for order', { 
+      refundId: refund[0]._id, 
+      targetId,
+      targetModel,
+      amount: refundAmount 
+    });
+
+    return {
+      ...refund[0].toObject(),
+      totalPaid,
+      refundPercentage
+    };
+  } catch (err) {
+    await session.abortTransaction();
+    if (err?.code === 11000) {
+      throw new ValidationError(`Yêu cầu hoàn tiền đã tồn tại cho ${orderName.toLowerCase()} này`);
     }
     throw err;
   } finally {
