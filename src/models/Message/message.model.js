@@ -30,7 +30,14 @@ const messageSchema = new mongoose.Schema(
     },
     attachments: [{
       type: String, // URLs from Cloudinary
-      required: false
+      validate: [
+        {
+          validator: function (val) {
+            return this.attachments.length <= 5;
+          },
+          message: 'Chỉ được phép đính kèm tối đa 5 ảnh'
+        }
+      ]
     }],
   },
   {

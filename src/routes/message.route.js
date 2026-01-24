@@ -10,6 +10,8 @@ import {
 import { protect } from '../middlewares/auth.js';
 import { sanitizeInput, validateObjectId } from '../middlewares/validate.js';
 import { generalLimiter } from '../middlewares/rateLimiter.js';
+import { upload } from '../middlewares/upload.js';
+import { ALLOWED_FILE_TYPES, FILE_SIZE_LIMITS } from '../config/upload.config.js';
 // #endregion
 
 const router = express.Router();
@@ -21,10 +23,8 @@ router.use(sanitizeInput);
 router.use(generalLimiter);
 router.use(protect);
 
-import { upload } from '../middlewares/upload.js';
-
 // Tạo message mới
-router.post('/', upload.array('images', 5), createMessageController);
+router.post('/', upload.array('images', 5, ALLOWED_FILE_TYPES.IMAGES, FILE_SIZE_LIMITS.MESSAGE_IMAGE), createMessageController);
 
 // Lấy danh sách conversations
 router.get('/conversations', getConversationsController);
