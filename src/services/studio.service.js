@@ -273,7 +273,7 @@ export const deleteStudio = async (studioId) => {
     // Check for future bookings
     const futureBookings = await Schedule.exists({
       studioId,
-      status: { $in: [SCHEDULE_STATUS.BOOKED, SCHEDULE_STATUS.ONGOING] },
+      status: SCHEDULE_STATUS.BOOKED,
       startTime: { $gt: new Date() }
     }).hint({ studioId: 1, status: 1, startTime: 1 });
 
@@ -326,10 +326,10 @@ export const getStudioSchedule = async (studioId, options = {}) => {
     throw new NotFoundError('Studio không tồn tại!');
   }
 
-  // Build query for booked/ongoing schedules
+  // Build query for booked schedules
   const query = {
     studioId,
-    status: { $in: [SCHEDULE_STATUS.BOOKED, SCHEDULE_STATUS.ONGOING] }
+    status: SCHEDULE_STATUS.BOOKED
   };
 
   // Add date range filter if provided
@@ -437,10 +437,10 @@ export const getStudioScheduleByDate = async (studioId, date) => {
   const endOfDay = new Date(targetDate);
   endOfDay.setHours(23, 59, 59, 999);
 
-  // Build query for booked/ongoing schedules for this studio on this date
+  // Build query for booked schedules for this studio on this date
   const query = {
     studioId,
-    status: { $in: [SCHEDULE_STATUS.BOOKED, SCHEDULE_STATUS.ONGOING] },
+    status: SCHEDULE_STATUS.BOOKED,
     startTime: { $gte: startOfDay, $lte: endOfDay }
   };
 
@@ -516,12 +516,12 @@ export const getStudiosSchedule = async (options = {}) => {
     sortOrder: 'asc'
   });
 
-  // For each studio, get booked/ongoing schedules grouped by date
+  // For each studio, get booked schedules grouped by date
   const studiosWithSchedules = await Promise.all(
     studiosResult.studios.map(async (studio) => {
       const query = {
         studioId: studio._id,
-        status: { $in: [SCHEDULE_STATUS.BOOKED, SCHEDULE_STATUS.ONGOING] }
+        status: SCHEDULE_STATUS.BOOKED
       };
 
       // Add date range filter if provided
@@ -629,12 +629,12 @@ export const getStudiosScheduleByDate = async (date, page = 1, limit = 10) => {
     sortOrder: 'asc'
   });
 
-  // For each studio, get booked/ongoing schedules for this date
+  // For each studio, get booked schedules for this date
   const studiosWithSchedules = await Promise.all(
     studiosResult.studios.map(async (studio) => {
       const query = {
         studioId: studio._id,
-        status: { $in: [SCHEDULE_STATUS.BOOKED, SCHEDULE_STATUS.ONGOING] },
+        status: SCHEDULE_STATUS.BOOKED,
         startTime: { $gte: startOfDay, $lte: endOfDay }
       };
 
@@ -747,10 +747,10 @@ export const getStudiosAvailability = async (options = {}) => {
       if (mode === 'flexible') {
         // --- FLEXIBLE MODE: Calculate Free Ranges by subtracting Booked Slots ---
         
-        // 1. Get ALL booked/ongoing schedules in range
+        // 1. Get ALL booked schedules in range
         const busySchedules = await Schedule.find({
           studioId: studio._id,
-          status: { $in: [SCHEDULE_STATUS.BOOKED, SCHEDULE_STATUS.ONGOING] },
+          status: SCHEDULE_STATUS.BOOKED,
           startTime: { $lte: endQuery },
           endTime: { $gte: startQuery }
         }).sort({ startTime: 1 }).lean();

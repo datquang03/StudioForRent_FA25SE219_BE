@@ -348,30 +348,8 @@ export const cancelSetDesignOrder = async (orderId, user, reason) => {
       throw new ValidationError('Chỉ có thể hủy đơn hàng khi đang chờ hoặc vừa xác nhận (chưa xử lý)');
     }
 
-    // If confirmed (paid), process "refund" (update status)
-    if (order.status === SET_DESIGN_ORDER_STATUS.CONFIRMED) {
-        // Find paid payments
-        const paidPayments = await Payment.find({
-            targetId: order._id,
-            targetModel: TARGET_MODEL.SET_DESIGN_ORDER,
-            status: PAYMENT_STATUS.PAID
-        }).session(session);
-
-        if (paidPayments.length > 0) {
-            for (const p of paidPayments) {
-                p.status = PAYMENT_STATUS.REFUNDED;
-                p.gatewayResponse = {
-                    ...p.gatewayResponse,
-                    refundedAt: new Date(),
-                    refundReason: reason || 'Customer cancelled'
-                };
-                await p.save({ session });
-            }
-            order.paymentStatus = PAYMENT_STATUS.REFUNDED;
-            order.paidAmount = 0; // Reset paid amount as it is refunded
-            logger.info(`Refunded ${paidPayments.length} payments for order ${orderId}`);
-        }
-    }
+    // Check if order has paid payments (requires refund request)
+    const hasPaidPayments = order.status === SET_DESIGN_ORDER_STATUS.CONFIRMED && order.paidAmount > 0;
 
     order.status = SET_DESIGN_ORDER_STATUS.CANCELLED;
     order.cancelledAt = new Date();
@@ -383,7 +361,14 @@ export const cancelSetDesignOrder = async (orderId, user, reason) => {
 
     logger.info(`Set design order ${orderId} cancelled by customer ${user._id}`);
 
-    return order;
+    // Return order with flag indicating if refund request is needed
+    return {
+      ...order.toObject(),
+      requiresRefundRequest: hasPaidPayments,
+      message: hasPaidPayments 
+        ? 'Đơn hàng đã hủy. Vui lòng tạo yêu cầu hoàn tiền để nhận lại tiền đã thanh toán.'
+        : 'Đơn hàng đã hủy thành công.'
+    };
   } catch (error) {
     await session.abortTransaction();
     logger.error('Cancel set design order error:', error);

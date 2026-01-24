@@ -395,10 +395,18 @@ export const cancelEquipmentOrder = async (orderId, user, reason) => {
       throw new ValidationError('Bạn không có quyền hủy đơn hàng này');
     }
 
-    // Only pending orders can be cancelled by customer
-    if (order.status !== EQUIPMENT_ORDER_STATUS.PENDING) {
-      throw new ValidationError('Chỉ có thể hủy đơn hàng đang chờ thanh toán');
+    // Allow cancellation for PENDING or CONFIRMED orders (not IN_USE or COMPLETED)
+    const allowedStatuses = [EQUIPMENT_ORDER_STATUS.PENDING, EQUIPMENT_ORDER_STATUS.CONFIRMED];
+    if (!allowedStatuses.includes(order.status)) {
+      throw new ValidationError('Chỉ có thể hủy đơn hàng đang chờ hoặc đã xác nhận (chưa sử dụng)');
     }
+
+    // Check if order has actually been paid (requires refund request)
+    // Use paymentStatus instead of just checking CONFIRMED status
+    const hasPaidPayments = order.paymentStatus === PAYMENT_STATUS.PAID;
+
+    // Store original status before changing (for equipment restore logic)
+    const originalStatus = order.status;
 
     order.status = EQUIPMENT_ORDER_STATUS.CANCELLED;
     order.cancelledAt = new Date();
@@ -406,17 +414,31 @@ export const cancelEquipmentOrder = async (orderId, user, reason) => {
 
     await order.save({ session });
 
-    // Return equipment to available
+    // Restore equipment quantity for orders that were reserved
+    // Equipment is reserved in createEquipmentOrder() for all orders (PENDING onwards)
+    // So we need to restore for any cancelled order that had equipment reserved
     const equipment = order.equipmentId;
-    equipment.inUseQty -= order.quantity;
-    equipment.availableQty += order.quantity;
-    await equipment.save({ session });
+    const wasReserved = [EQUIPMENT_ORDER_STATUS.PENDING, EQUIPMENT_ORDER_STATUS.CONFIRMED, EQUIPMENT_ORDER_STATUS.IN_USE].includes(originalStatus);
+    // Only restore if equipment was actually reserved (inUseQty >= order.quantity)
+    // This handles edge cases where order was created without proper reservation
+    if (equipment && wasReserved && equipment.inUseQty >= order.quantity) {
+      equipment.inUseQty -= order.quantity;
+      equipment.availableQty += order.quantity;
+      await equipment.save({ session });
+    }
 
     await session.commitTransaction();
 
     logger.info(`Equipment order ${orderId} cancelled by customer ${user._id}`);
 
-    return order;
+    // Return order with flag indicating if refund request is needed
+    return {
+      ...order.toObject(),
+      requiresRefundRequest: hasPaidPayments,
+      message: hasPaidPayments 
+        ? 'Đơn thuê đã hủy. Vui lòng tạo yêu cầu hoàn tiền để nhận lại tiền đã thanh toán.'
+        : 'Đơn thuê đã hủy thành công.'
+    };
   } catch (error) {
     await session.abortTransaction();
     logger.error('Cancel equipment order error:', error);

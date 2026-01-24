@@ -11,6 +11,7 @@ import {
   getPaymentStatus,
   getOrderPayments,
   refundDeposit,
+  createRefundRequest,
 } from '../controllers/equipmentOrder.controller.js';
 import { protect, authorize } from '../middlewares/auth.js';
 
@@ -74,6 +75,14 @@ router.patch('/:id/status', protect, authorize(['staff', 'admin']), updateOrderS
  * @access  Staff, Admin
  */
 router.post('/:id/refund-deposit', protect, authorize(['staff', 'admin']), refundDeposit);
+
+/**
+ * @route   POST /api/equipment-orders/:id/refund-request
+ * @desc    Create refund request for cancelled equipment order
+ * @access  Customer
+ * @body    { bankName, accountNumber, accountName, reason?, proofImageUrls? }
+ */
+router.post('/:id/refund-request', protect, authorize(['customer']), createRefundRequest);
 
 /**
  * @route   GET /api/equipment-orders/:id/payments

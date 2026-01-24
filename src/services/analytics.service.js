@@ -1,7 +1,7 @@
 // #region Imports
 import { User, Studio, Equipment, Promotion, Notification, Booking, Payment } from '../models/index.js';
 import logger from '../utils/logger.js';
-import { BOOKING_STATUS, PAYMENT_STATUS } from '../utils/constants.js';
+import { BOOKING_STATUS, PAYMENT_STATUS, SCHEDULE_STATUS } from '../utils/constants.js';
 // #endregion
 
 // #region Analytics Service
@@ -650,7 +650,7 @@ export const getOperationalMetrics = async () => {
 
         // Calculate booked hours
         const bookedSchedules = await Schedule.find({
-            status: { $in: ['booked', 'ongoing', 'completed'] },
+            status: SCHEDULE_STATUS.BOOKED,
             startTime: { $gte: startOfMonth }
         }).select('startTime endTime');
 

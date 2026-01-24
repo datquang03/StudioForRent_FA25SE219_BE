@@ -1,10 +1,23 @@
 import mongoose from 'mongoose';
+import { TARGET_MODEL } from '../../utils/constants.js';
 
 const refundSchema = new mongoose.Schema({
+  // Polymorphic reference - supports Booking, SetDesignOrder, EquipmentOrder
+  targetId: {
+    type: mongoose.Schema.Types.ObjectId,
+    refPath: 'targetModel',
+    index: true
+  },
+  targetModel: {
+    type: String,
+    enum: Object.values(TARGET_MODEL),
+    default: TARGET_MODEL.BOOKING
+  },
+
+  // Legacy field for backward compatibility with existing Booking refunds
   bookingId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Booking',
-    required: true,
     index: true
   },
 
@@ -30,10 +43,6 @@ const refundSchema = new mongoose.Schema({
     type: String  // Cloudinary URLs
   }],
 
-  // Refund status workflow
-  // Source of truth for allowed transitions: validators.js (REFUND_TRANSITIONS)
-  // PENDING_APPROVAL → APPROVED → COMPLETED
-  //                └────────────→ REJECTED
   status: {
     type: String,
     enum: ['PENDING_APPROVAL', 'APPROVED', 'COMPLETED', 'REJECTED'],
@@ -83,13 +92,32 @@ const refundSchema = new mongoose.Schema({
 });
 
 // Indexes for performance
-// Ensure only one active refund (PENDING_APPROVAL/APPROVED) exists per booking.
+// Polymorphic index for targetId + targetModel (for SetDesignOrder, EquipmentOrder)
+refundSchema.index(
+  { targetId: 1, targetModel: 1, status: 1 },
+  { unique: true, partialFilterExpression: { status: { $in: ['PENDING_APPROVAL', 'APPROVED'] } } }
+);
+
+// Legacy index for bookingId (backward compatibility)
 refundSchema.index(
   { bookingId: 1, status: 1 },
-  { unique: true, partialFilterExpression: { status: { $in: ['PENDING_APPROVAL', 'APPROVED'] } } }
+  { unique: true, partialFilterExpression: { status: { $in: ['PENDING_APPROVAL', 'APPROVED'] }, bookingId: { $exists: true, $ne: null } } }
 );
 refundSchema.index({ status: 1, requestedAt: -1 });
 refundSchema.index({ requestedAt: 1 });
+
+// Pre-save middleware to sync bookingId with targetId for Booking type
+refundSchema.pre('save', function(next) {
+  if (this.targetModel === TARGET_MODEL.BOOKING && this.targetId && !this.bookingId) {
+    this.bookingId = this.targetId;
+  }
+  // If bookingId is set but targetId is not, sync them (backward compatibility)
+  if (this.bookingId && !this.targetId) {
+    this.targetId = this.bookingId;
+    this.targetModel = TARGET_MODEL.BOOKING;
+  }
+  next();
+});
 
 // Virtual for refund duration
 refundSchema.virtual('processingDuration').get(function() {

@@ -827,14 +827,19 @@ export const checkInBooking = async (bookingId, actorId = null) => {
       const booking = await Booking.findById(bookingId).session(session);
       if (!booking) throw new NotFoundError('Booking không tồn tại');
 
-      // If already checked-in, return
+      // If already checked-in, return (idempotent)
       if (booking.checkInAt) {
         return booking;
       }
 
+      // Validate booking status - only CONFIRMED bookings can check-in
+      if (booking.status !== BOOKING_STATUS.CONFIRMED) {
+        throw new ValidationError(`Chỉ booking đã xác nhận mới có thể check-in. Trạng thái hiện tại: ${booking.status}`);
+      }
+
       // Ensure sufficient payment (>=30%)
       const paidPayments = await Payment.find({
-        bookingId: booking._id,
+        $or: [{ targetId: booking._id }, { bookingId: booking._id }],
         status: PAYMENT_STATUS.PAID
       }).select('amount').session(session);
 
@@ -904,6 +909,23 @@ export const checkOutBooking = async (bookingId, actorId = null) => {
 
       if (booking.checkOutAt) {
         return booking;
+      }
+
+      // Validate booking must be checked-in first
+      if (booking.status !== BOOKING_STATUS.CHECKED_IN) {
+        throw new ValidationError(`Booking cần được check-in trước khi check-out. Trạng thái hiện tại: ${booking.status}`);
+      }
+
+      // Validate full payment before checkout
+      const paidPayments = await Payment.find({
+        $or: [{ targetId: booking._id }, { bookingId: booking._id }],
+        status: PAYMENT_STATUS.PAID
+      }).select('amount').session(session);
+
+      const totalPaid = paidPayments.reduce((sum, p) => sum + p.amount, 0);
+      if (totalPaid < booking.finalAmount) {
+        const remaining = booking.finalAmount - totalPaid;
+        throw new ValidationError(`Cần thanh toán đủ 100% trước khi check-out. Còn thiếu ${remaining.toLocaleString()} VND`);
       }
 
       booking.checkOutAt = new Date();

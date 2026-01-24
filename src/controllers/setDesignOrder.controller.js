@@ -13,6 +13,8 @@ import {
   getSetDesignPaymentStatus,
   getSetDesignOrderPayments,
 } from '../services/setDesignOrder.service.js';
+import { createRefundRequestForTarget } from '../services/refund.service.js';
+import { TARGET_MODEL } from '../utils/constants.js';
 import logger from '../utils/logger.js';
 import { isValidObjectId } from '../utils/validators.js';
 //#endregion
@@ -280,6 +282,39 @@ export const getOrderPaymentsController = asyncHandler(async (req, res) => {
   });
 });
 
+/**
+ * Create refund request for cancelled order
+ * POST /api/set-design-orders/:id/refund-request
+ */
+export const createRefundRequestController = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { bankName, accountNumber, accountName, reason, proofImageUrls } = req.body;
+
+  if (!id || !isValidObjectId(id)) {
+    res.status(400);
+    throw new Error('ID đơn hàng không hợp lệ');
+  }
+
+  const refund = await createRefundRequestForTarget(
+    id, 
+    TARGET_MODEL.SET_DESIGN_ORDER,
+    {
+      bankName,
+      accountNumber,
+      accountName,
+      reason,
+      proofImageUrls,
+      userId: req.user._id
+    }
+  );
+
+  res.status(201).json({
+    success: true,
+    message: 'Yêu cầu hoàn tiền đã được tạo thành công',
+    data: refund,
+  });
+});
+
 //#endregion
 
 export default {
@@ -294,4 +329,5 @@ export default {
   paymentWebhookController,
   getPaymentStatusController,
   getOrderPaymentsController,
+  createRefundRequestController,
 };
