@@ -11,7 +11,7 @@ import logger from '../utils/logger.js';
  * detailsArray: [{ detailType, equipmentId?, extraServiceId?, quantity }]
  * Returns { details: [BookingDetail], total }
  */
-export const createBookingDetails = async (bookingId, detailsArray, session = null) => {
+export const createBookingDetails = async (bookingId, detailsArray, session = null, durationHours = 1) => {
   try {
     if (!bookingId) {
       throw new ValidationError('ID booking là bắt buộc');
@@ -60,7 +60,7 @@ export const createBookingDetails = async (bookingId, detailsArray, session = nu
         reserved.push({ equipmentId, quantity });
 
         const pricePerUnit = equipment.pricePerHour || 0;
-        const subtotal = pricePerUnit * quantity;
+        const subtotal = pricePerUnit * quantity * durationHours;
 
         const [detail] = await BookingDetail.create(
           [
