@@ -897,9 +897,9 @@ export const checkInBooking = async (bookingId, actorId = null) => {
       try {
         await (await import('./notification.service.js')).createAndSendNotification(
           booking.userId,
-          'CHECKIN',
-          'Bạn đã được check-in',
-          `Booking ${booking._id} đã được check-in lúc ${booking.checkInAt}`,
+          NOTIFICATION_TYPE.SUCCESS,
+          'Bạn đã check-in thành công',
+          `Booking ${booking.scheduleId?._id || booking._id} đã được check-in lúc ${new Date(booking.checkInAt).toLocaleTimeString('vi-VN')}`,
           true,
           null,
           booking._id
@@ -1010,9 +1010,9 @@ export const checkOutBooking = async (bookingId, actorId = null) => {
       const { createAndSendNotification } = await import('./notification.service.js');
       await createAndSendNotification(
         updatedBooking.userId,
-        'CHECKOUT',
-        'Bạn đã checkout',
-        `Booking ${updatedBooking._id} đã checkout lúc ${updatedBooking.checkOutAt}`,
+        NOTIFICATION_TYPE.SUCCESS,
+        'Bạn đã check-out thành công',
+        `Booking ${updatedBooking._id} đã check-out lúc ${new Date(updatedBooking.checkOutAt).toLocaleTimeString('vi-VN')}`,
         true,
         null,
         updatedBooking._id

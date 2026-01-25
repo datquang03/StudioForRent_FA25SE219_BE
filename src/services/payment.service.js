@@ -254,7 +254,7 @@ export const createPaymentOptions = async (bookingId) => {
         } else if (payos && typeof payos.paymentRequests?.create === 'function') {
           paymentLinkResponse = await payos.paymentRequests.create(paymentData);
         } else {
-          throw new Error('PayOS client does not support createPaymentLink or paymentRequests.create');
+          throw new Error('PayOS client không hỗ trợ tạo payment link');
         }
 
         // Normalize response (support different SDK shapes)
@@ -274,7 +274,7 @@ export const createPaymentOptions = async (bookingId) => {
         });
 
         if (!checkoutUrl) {
-          throw new Error('PayOS did not return a valid checkout URL');
+          throw new Error('PayOS không trả về URL thanh toán hợp lệ');
         }
 
       } catch (payosError) {
@@ -284,7 +284,7 @@ export const createPaymentOptions = async (bookingId) => {
           orderCode
         });
 
-        throw new Error(`Payment gateway error: ${payosError.message || 'Failed to create payment link'}`);
+        throw new Error(`Lỗi cổng thanh toán: ${payosError.message || 'Tạo link thanh toán thất bại'}`);
       }
 
       // Save payment record to database within transaction
@@ -392,11 +392,11 @@ export const handlePaymentWebhook = async (webhookPayload) => {
         const signature = body.signature;
         
         if (!checksumKey) {
-          throw new ValidationError('Missing PAYOS_CHECKSUM_KEY for webhook verification');
+          throw new ValidationError('Thiếu PAYOS_CHECKSUM_KEY để xác thực webhook');
         }
         
         if (!body.data) {
-          throw new ValidationError('Webhook missing data field');
+          throw new ValidationError('Webhook thiếu trường data');
         }
         
         // PayOS signature: sorted key=value pairs, null/undefined as empty string
@@ -421,14 +421,14 @@ export const handlePaymentWebhook = async (webhookPayload) => {
             expected: computedSignature,
             received: signature
           });
-          throw new ValidationError('Invalid webhook signature');
+          throw new ValidationError('Chữ ký webhook không hợp lệ');
         }
         
         verifiedData = body.data;
       }
     } catch (verifyError) {
       logger.error('Webhook verification failed:', verifyError);
-      throw new ValidationError('Invalid webhook signature: ' + (verifyError.message || 'verification failed'));
+      throw new ValidationError('Chữ ký webhook không hợp lệ: ' + (verifyError.message || 'xác thực thất bại'));
     }
 
     const orderCode = verifiedData.orderCode;
@@ -491,7 +491,7 @@ export const handlePaymentWebhook = async (webhookPayload) => {
           // --- BOOKING LOGIC ---
           const bookingId = payment.targetId || payment.bookingId;
           const booking = await Booking.findById(bookingId).session(session);
-          if (!booking) throw new NotFoundError('Booking not found');
+          if (!booking) throw new NotFoundError('Booking không tồn tại');
 
           const paidPayments = await Payment.find({
             $or: [ { targetId: bookingId }, { bookingId: bookingId } ],
@@ -685,7 +685,7 @@ export const checkPaymentStatusWithPayOS = async (orderCode) => {
       return paymentInfo;
     }
 
-    throw new Error('PayOS client does not support getPaymentLinkInformation');
+    throw new Error('PayOS client không hỗ trợ hàm lấy thông tin thanh toán');
   } catch (error) {
     if (error instanceof ValidationError) {
       throw error;

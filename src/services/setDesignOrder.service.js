@@ -602,7 +602,7 @@ export const createSetDesignPayment = async (orderId, paymentData, user) => {
       } else if (payos && typeof payos.paymentRequests?.create === 'function') {
         paymentLinkResponse = await payos.paymentRequests.create(paymentRequestData);
       } else {
-        throw new Error('PayOS client does not support createPaymentLink or paymentRequests.create');
+        throw new Error('PayOS client không hỗ trợ hàm tạo payment link');
       }
 
       // Normalize response (support different SDK shapes) - same pattern as payment.service.js
@@ -622,7 +622,7 @@ export const createSetDesignPayment = async (orderId, paymentData, user) => {
       });
 
       if (!checkoutUrl) {
-        throw new Error('PayOS did not return a valid checkout URL');
+        throw new Error('PayOS không trả về URL thanh toán hợp lệ');
       }
     } catch (payosError) {
       logger.error('PayOS API Error for set design:', {
@@ -630,7 +630,7 @@ export const createSetDesignPayment = async (orderId, paymentData, user) => {
         code: payosError.code,
         orderCode: payosOrderCode,
       });
-      throw new Error(`Payment gateway error: ${payosError.message || 'Failed to create payment link'}`);
+      throw new Error(`Lỗi cổng thanh toán: ${payosError.message || 'Tạo link thanh toán thất bại'}`);
     }
 
     // Create payment record with expiration time (15 minutes - same as payment.service.js)

@@ -466,7 +466,7 @@ export const refundEquipmentDeposit = async (orderId, user) => {
 
     try {
         const order = await EquipmentOrder.findById(orderId).session(session);
-        if (!order) throw new NotFoundError('Order not found');
+        if (!order) throw new NotFoundError('Đơn hàng không tồn tại');
         
         // Check valid status to refund (COMPLETED means returned)
         if (order.status !== EQUIPMENT_ORDER_STATUS.COMPLETED) {
@@ -662,11 +662,11 @@ export const createEquipmentPayment = async (orderId, user) => {
       } else if (payos && typeof payos.paymentRequests?.create === 'function') {
         paymentLinkResponse = await payos.paymentRequests.create(paymentRequestData);
       } else {
-        throw new Error('PayOS client not configured');
+        throw new Error('Lỗi cấu hình PayOS client');
       }
 
       if (!paymentLinkResponse || !paymentLinkResponse.checkoutUrl) {
-        throw new Error('PayOS did not return a valid payment link response');
+        throw new Error('PayOS không trả về link thanh toán hợp lệ');
       }
 
       checkoutUrl = paymentLinkResponse.checkoutUrl;
@@ -682,7 +682,7 @@ export const createEquipmentPayment = async (orderId, user) => {
         message: payosError.message,
         orderCode: payosOrderCode,
       });
-      throw new Error(`Payment gateway error: ${payosError.message}`);
+      throw new Error(`Lỗi cổng thanh toán: ${payosError.message}`);
     }
 
     // Create payment record with expiration
