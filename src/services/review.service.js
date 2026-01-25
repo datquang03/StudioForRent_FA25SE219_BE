@@ -15,22 +15,30 @@ import { createAndSendNotification } from "./notification.service.js";
  * @returns {Promise<Object>} Created review
  */
 export const createReviewService = async (data, userId) => {
-  const { bookingId, targetType, targetId, rating, content, images } = data;
+  const { rating, content, images } = data;
+  const bookingId = data.bookingId || data.booking_id;
+  const targetType = data.targetType || data.target_type;
+  const targetId = data.targetId || data.target_id;
+
+  // 0. Input Validation
+  if (!bookingId) throw new Error("Mã booking là bắt buộc");
+  if (!targetType || !targetId) throw new Error("Thông tin đối tượng đánh giá (targetId, targetType) là bắt buộc");
+  if (!rating || rating < 1 || rating > 5) throw new Error("Đánh giá phải từ 1 đến 5 sao");
 
   // 1. Validate Booking
   const booking = await Booking.findOne({ _id: bookingId, userId });
   if (!booking) {
-    throw new Error("Booking not found or does not belong to you.");
+    throw new Error("Booking không tồn tại hoặc không thuộc về bạn.");
   }
 
   if (booking.status !== BOOKING_STATUS.COMPLETED) {
-    throw new Error("You can only review completed bookings.");
+    throw new Error("Bạn chỉ có thể đánh giá các booking đã hoàn thành.");
   }
 
   // 2. Check if already reviewed
   const existingReview = await Review.findOne({ bookingId, targetId });
   if (existingReview) {
-    throw new Error("You have already reviewed this item for this booking.");
+    throw new Error("Bạn đã đánh giá dịch vụ này cho booking này rồi.");
   }
 
   // 3. Create Review
@@ -73,8 +81,6 @@ export const createReviewService = async (data, userId) => {
  */
 export const getReviewsService = async (query, user) => {
   const { 
-    targetType, 
-    targetId, 
     page = 1, 
     limit = 10,
     sortBy = 'newest', // newest, oldest, rating_desc, rating_asc
@@ -82,8 +88,11 @@ export const getReviewsService = async (query, user) => {
     rating
   } = query;
 
+  const targetType = query.targetType || query.target_type;
+  const targetId = query.targetId || query.target_id;
+
   if (!targetType || !targetId) {
-    throw new Error("targetType and targetId are required");
+    throw new Error("targetType và targetId là bắt buộc");
   }
 
   const filter = { targetType, targetId };
@@ -143,7 +152,7 @@ export const getReviewsService = async (query, user) => {
 export const replyToReviewService = async (reviewId, content, userId) => {
   const review = await Review.findById(reviewId);
   if (!review) {
-    throw new Error("Review not found");
+    throw new Error("Đánh giá không tồn tại");
   }
 
   review.reply = {
@@ -178,11 +187,11 @@ export const replyToReviewService = async (reviewId, content, userId) => {
 export const updateReviewReplyService = async (reviewId, content, userId) => {
   const review = await Review.findById(reviewId);
   if (!review) {
-    throw new Error("Review not found");
+    throw new Error("Đánh giá không tồn tại");
   }
 
   if (!review.reply) {
-    throw new Error("Review has no reply to update");
+    throw new Error("Đánh giá này chưa có phản hồi để cập nhật");
   }
 
   // Optional: Check if the user updating is the one who replied or is an admin
@@ -204,7 +213,7 @@ export const updateReviewReplyService = async (reviewId, content, userId) => {
 export const updateReviewService = async (reviewId, updateData, userId) => {
   const review = await Review.findOne({ _id: reviewId, userId });
   if (!review) {
-    throw new Error("Review not found or you are not authorized to update it");
+    throw new Error("Đánh giá không tồn tại hoặc bạn không có quyền cập nhật");
   }
 
   const { rating, content, images } = updateData;
@@ -231,7 +240,7 @@ export const updateReviewService = async (reviewId, updateData, userId) => {
 export const toggleReviewVisibilityService = async (reviewId) => {
   const review = await Review.findById(reviewId);
   if (!review) {
-    throw new Error("Review not found");
+    throw new Error("Đánh giá không tồn tại");
   }
 
   review.isHidden = !review.isHidden;
@@ -248,7 +257,7 @@ export const toggleReviewVisibilityService = async (reviewId) => {
 export const toggleReviewLikeService = async (reviewId, userId) => {
   const review = await Review.findById(reviewId);
   if (!review) {
-    throw new Error("Review not found");
+    throw new Error("Đánh giá không tồn tại");
   }
 
   const likeIndex = review.likes.indexOf(userId);
