@@ -15,7 +15,10 @@ import { createAndSendNotification } from "./notification.service.js";
  * @returns {Promise<Object>} Created review
  */
 export const createReviewService = async (data, userId) => {
-  const { bookingId, targetType, targetId, rating, content, images } = data;
+  const { rating, content, images } = data;
+  const bookingId = data.bookingId || data.booking_id;
+  const targetType = data.targetType || data.target_type;
+  const targetId = data.targetId || data.target_id;
 
   // 0. Input Validation
   if (!bookingId) throw new Error("Mã booking là bắt buộc");
@@ -78,14 +81,15 @@ export const createReviewService = async (data, userId) => {
  */
 export const getReviewsService = async (query, user) => {
   const { 
-    targetType, 
-    targetId, 
     page = 1, 
     limit = 10,
     sortBy = 'newest', // newest, oldest, rating_desc, rating_asc
     hasImages,
     rating
   } = query;
+
+  const targetType = query.targetType || query.target_type;
+  const targetId = query.targetId || query.target_id;
 
   if (!targetType || !targetId) {
     throw new Error("targetType và targetId là bắt buộc");
