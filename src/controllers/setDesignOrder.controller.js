@@ -14,6 +14,7 @@ import {
   getSetDesignOrderPayments,
 } from '../services/setDesignOrder.service.js';
 import { createRefundRequestForTarget } from '../services/refund.service.js';
+import { uploadMultipleImages } from '../services/upload.service.js';
 import { TARGET_MODEL } from '../utils/constants.js';
 import logger from '../utils/logger.js';
 import { isValidObjectId } from '../utils/validators.js';
@@ -285,14 +286,24 @@ export const getOrderPaymentsController = asyncHandler(async (req, res) => {
 /**
  * Create refund request for cancelled order
  * POST /api/set-design-orders/:id/refund-request
+ * Supports multipart/form-data with proofImages files
  */
 export const createRefundRequestController = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { bankName, accountNumber, accountName, reason, proofImageUrls } = req.body;
+  const { bankName, accountNumber, accountName, reason } = req.body;
 
   if (!id || !isValidObjectId(id)) {
     res.status(400);
     throw new Error('ID đơn hàng không hợp lệ');
+  }
+
+  // Handle proof images upload (optional, max 3)
+  let proofImageUrls = [];
+  if (req.files && req.files.length > 0) {
+    const uploadResults = await uploadMultipleImages(req.files, {
+      folder: 'studio-rental/refund-proofs'
+    });
+    proofImageUrls = uploadResults.map(r => r.url);
   }
 
   const refund = await createRefundRequestForTarget(
