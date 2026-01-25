@@ -203,8 +203,9 @@ export const createBooking = async (data) => {
         const promo = await Promotion.findById(data.promoId);
         if (promo && promo.isValid()) {
           discountAmount = promo.calculateDiscount(totalBeforeDiscount);
-          // increment usage count
+          // increment usage count and track totalDiscountedAmount for budget cap
           promo.usageCount = (promo.usageCount || 0) + 1;
+          promo.totalDiscountedAmount = (promo.totalDiscountedAmount || 0) + discountAmount;
           await promo.save();
         } else {
           // invalid promo -> ignore
