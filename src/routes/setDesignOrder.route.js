@@ -17,8 +17,8 @@ import {
 import { protect, authorize } from '../middlewares/auth.js';
 import { sanitizeInput, validateObjectId } from '../middlewares/validate.js';
 import { generalLimiter } from '../middlewares/rateLimiter.js';
-import { USER_ROLES, ALLOWED_FILE_TYPES, FILE_SIZE_LIMITS } from '../utils/constants.js';
-import upload from '../middlewares/upload.js';
+import { USER_ROLES } from '../utils/constants.js';
+import { upload, ALLOWED_FILE_TYPES, FILE_SIZE_LIMITS } from '../middlewares/upload.js';
 //#endregion
 
 const router = express.Router();
