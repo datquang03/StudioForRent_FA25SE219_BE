@@ -17,7 +17,8 @@ import {
 import { protect, authorize } from '../middlewares/auth.js';
 import { sanitizeInput, validateObjectId } from '../middlewares/validate.js';
 import { generalLimiter } from '../middlewares/rateLimiter.js';
-import { USER_ROLES } from '../utils/constants.js';
+import { USER_ROLES, ALLOWED_FILE_TYPES, FILE_SIZE_LIMITS } from '../utils/constants.js';
+import upload from '../middlewares/upload.js';
 //#endregion
 
 const router = express.Router();
@@ -155,11 +156,13 @@ router.get(
  * POST /api/set-design-orders/:id/refund-request
  * Create refund request for cancelled order (Customer)
  * Requires: bankName, accountNumber, accountName
+ * Optional: proofImages (max 3 files)
  */
 router.post(
   '/:id/refund-request',
   validateObjectId(),
   authorize(USER_ROLES.CUSTOMER),
+  upload.array('proofImages', 3, ALLOWED_FILE_TYPES.IMAGES, FILE_SIZE_LIMITS.REVIEW_IMAGE),
   createRefundRequestController
 );
 
