@@ -25,6 +25,12 @@ export const createBookingDetails = async (bookingId, detailsArray, session = nu
     let total = 0;
 
     try {
+      // Validate durationHours
+      const validDuration = (typeof durationHours === 'number' && durationHours > 0) ? durationHours : 1;
+      if (validDuration !== durationHours) {
+        logger.warn(`Invalid durationHours passed to createBookingDetails: ${durationHours}. Defaulting to 1.`);
+      }
+
       for (const item of detailsArray) {
         const { detailType, equipmentId, extraServiceId, quantity = 1 } = item;
 
@@ -60,7 +66,7 @@ export const createBookingDetails = async (bookingId, detailsArray, session = nu
         reserved.push({ equipmentId, quantity });
 
         const pricePerUnit = equipment.pricePerHour || 0;
-        const subtotal = pricePerUnit * quantity * durationHours;
+        const subtotal = pricePerUnit * quantity;
 
         const [detail] = await BookingDetail.create(
           [
@@ -150,7 +156,7 @@ export const createBookingDetails = async (bookingId, detailsArray, session = nu
       throw error;
     }
     logger.error('Error in createBookingDetails:', error);
-    throw new Error('Lỗi khi tạo chi tiết booking');
+    throw new Error(error.message || 'Lỗi khi tạo chi tiết booking');
   }
 };
 
