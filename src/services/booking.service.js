@@ -117,10 +117,14 @@ export const createBooking = async (data) => {
       // Mark schedule booked and link
       await markScheduleBookedService(schedule._id, booking._id, session);
 
+      // Calculate duration early to use for booking details pricing
+      const durationMs = new Date(schedule.endTime).getTime() - new Date(schedule.startTime).getTime();
+      const hours = Math.round((durationMs / (1000 * 60 * 60)) * 100) / 100; // rounded to 2 decimals
+
       // Create booking details if provided, and compute totals (details + base studio price)
       let detailsTotal = 0;
       if (Array.isArray(data.details) && data.details.length > 0) {
-        const { total } = await createBookingDetailsService(booking._id, data.details, session);
+        const { total } = await createBookingDetailsService(booking._id, data.details, session, hours);
         detailsTotal = total;
       }
 
@@ -191,8 +195,6 @@ export const createBooking = async (data) => {
         netAmount: 0
       };
 
-      const durationMs = new Date(schedule.endTime).getTime() - new Date(schedule.startTime).getTime();
-      const hours = Math.round((durationMs / (1000 * 60 * 60)) * 100) / 100; // rounded to 2 decimals
       const baseTotal = (studio.basePricePerHour || 0) * hours;
 
       const totalBeforeDiscount = Math.round((baseTotal + detailsTotal) * 100) / 100;
