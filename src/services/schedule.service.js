@@ -51,15 +51,19 @@ export const createSchedule = async (data, session = null) => {
     const MIN_GAP_MS = 30 * 60 * 1000; // 30 minutes in ms
 
     // Prevent overlapping schedules and enforce minimum gap for the same studio
-    const conflict = await Schedule.findOne({
+    const conflictQuery = Schedule.findOne({
       studioId,
       startTime: { $lt: new Date(e.getTime() + MIN_GAP_MS) },
       endTime: { $gt: new Date(s.getTime() - MIN_GAP_MS) },
       status: { $ne: SCHEDULE_STATUS.CANCELLED } // Ignore cancelled schedules
     });
+    if (session) conflictQuery.session(session);
+    const conflict = await conflictQuery;
 
     if (conflict) {
-      throw new ConflictError('Lịch bị trùng hoặc quá gần với lịch đã có (khoảng cách tối thiểu 30 phút)');
+      const conflictStart = new Date(conflict.startTime).toLocaleString('vi-VN');
+      const conflictEnd = new Date(conflict.endTime).toLocaleString('vi-VN');
+      throw new ConflictError(`Lịch bị trùng hoặc quá gần với lịch đã có (${conflictStart} - ${conflictEnd}). Khoảng cách tối thiểu 30 phút.`);
     }
 
     let schedule;
