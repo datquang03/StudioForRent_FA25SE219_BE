@@ -847,7 +847,7 @@ export const checkInBooking = async (bookingId, actorId = null) => {
       const endTime = new Date(schedule.endTime);
       
       // Time Validation Constants
-      const ALLOWED_EARLY_MS = 15 * 60 * 1000; // 15 minutes
+      const ALLOWED_EARLY_MS = 60 * 60 * 1000; // 60 minutes (1 hour)
 
       // 1. Prevent checking in too early
       if (now.getTime() < startTime.getTime() - ALLOWED_EARLY_MS) {

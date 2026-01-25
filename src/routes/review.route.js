@@ -3,6 +3,7 @@ import { protect, authorize, optionalProtect } from "../middlewares/auth.js";
 import { 
   createReview, 
   getReviews, 
+  getMyReviews,
   replyToReview, 
   updateReview, 
   toggleReviewVisibility,
@@ -15,6 +16,9 @@ const router = express.Router();
 
 // Public: Get reviews (Optional Auth for Staff/Admin visibility)
 router.get("/", optionalProtect, getReviews);
+
+// Protected: Get my reviews (Customer)
+router.get("/my-reviews", protect, getMyReviews);
 
 // Protected: Create review (Customer)
 router.post("/", protect, authorize(USER_ROLES.CUSTOMER), createReview);

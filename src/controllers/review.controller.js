@@ -3,6 +3,7 @@ import { ValidationError } from "../utils/errors.js";
 import {
   createReviewService,
   getReviewsService,
+  getMyReviewsService,
   replyToReviewService,
   updateReviewService,
   toggleReviewVisibilityService,
@@ -38,6 +39,24 @@ export const createReview = asyncHandler(async (req, res) => {
 export const getReviews = asyncHandler(async (req, res) => {
   try {
     const result = await getReviewsService(req.query, req.user);
+    res.status(200).json({
+      success: true,
+      data: result.reviews,
+      pagination: result.pagination,
+    });
+  } catch (error) {
+    res.status(400);
+    throw new Error(error.message);
+  }
+});
+
+/**
+ * Get reviews created by current user
+ * GET /api/reviews/my-reviews
+ */
+export const getMyReviews = asyncHandler(async (req, res) => {
+  try {
+    const result = await getMyReviewsService(req.user._id, req.query);
     res.status(200).json({
       success: true,
       data: result.reviews,
