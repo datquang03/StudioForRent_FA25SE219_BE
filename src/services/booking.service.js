@@ -838,6 +838,30 @@ export const checkInBooking = async (bookingId, actorId = null) => {
         throw new ValidationError(`Chỉ booking đã xác nhận mới có thể check-in. Trạng thái hiện tại: ${booking.status}`);
       }
 
+      // Fetch schedule to validate time
+      const schedule = await Schedule.findById(booking.scheduleId).session(session);
+      if (!schedule) throw new NotFoundError('Lịch không tồn tại');
+
+      const now = new Date();
+      const startTime = new Date(schedule.startTime);
+      const endTime = new Date(schedule.endTime);
+      
+      // Time Validation Constants
+      const ALLOWED_EARLY_MS = 15 * 60 * 1000; // 15 minutes
+
+      // 1. Prevent checking in too early
+      if (now.getTime() < startTime.getTime() - ALLOWED_EARLY_MS) {
+        // Import formatTime helper if needed or use simple string
+        // Assuming formatTime is imported or available, if not specific locale string
+        const allowTime = new Date(startTime.getTime() - ALLOWED_EARLY_MS);
+        throw new ValidationError(`Chưa đến giờ nhận phòng. Bạn chỉ có thể check-in từ ${allowTime.toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'})}`);
+      }
+
+      // 2. Prevent checking in after booking has ended
+      if (now.getTime() > endTime.getTime()) {
+        throw new ValidationError('Đã quá giờ kết thúc, không thể check-in. Vui lòng liên hệ quản lý.');
+      }
+
       // Ensure sufficient payment (>=30%)
       const paidPayments = await Payment.find({
         $or: [{ targetId: booking._id }, { bookingId: booking._id }],
@@ -851,11 +875,11 @@ export const checkInBooking = async (bookingId, actorId = null) => {
       }
 
       // Update booking status and checkInAt
-      booking.checkInAt = new Date();
+      booking.checkInAt = now;
       booking.status = BOOKING_STATUS.CHECKED_IN;
       // record event
       booking.events = booking.events || [];
-      booking.events.push({ type: 'CHECK_IN', timestamp: new Date(), actorId });
+      booking.events.push({ type: 'CHECK_IN', timestamp: now, actorId });
 
       await booking.save({ session });
 

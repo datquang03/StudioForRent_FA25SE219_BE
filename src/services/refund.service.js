@@ -308,6 +308,7 @@ export const getPendingRefunds = async (page = 1, limit = 20) => {
   const [refunds, total] = await Promise.all([
     Refund.find({ status: 'PENDING_APPROVAL' })
       .populate('bookingId', 'finalAmount scheduleId userId')
+      .populate('targetId') // Include order details (SetDesignOrder/EquipmentOrder)
       .populate('requestedBy', 'fullName username email')
       .sort({ requestedAt: -1 })
       .skip(skip)
@@ -433,6 +434,7 @@ export const getApprovedRefunds = async (page = 1, limit = 20) => {
   const [refunds, total] = await Promise.all([
     Refund.find({ status: 'APPROVED' })
       .populate('bookingId', 'finalAmount scheduleId userId')
+      .populate('targetId') // Include order details
       .populate('requestedBy', 'fullName username email phone')
       .populate('approvedBy', 'fullName username')
       .sort({ approvedAt: -1 })
@@ -518,6 +520,7 @@ export const confirmManualRefund = async (refundId, staffId, opts = {}) => {
 export const getRefundById = async (refundId) => {
   return await Refund.findById(refundId)
     .populate('bookingId')
+    .populate('targetId') // Include order details
     .populate('paymentId', 'amount status transactionId')
     .populate('requestedBy', 'fullName username')
     .populate('approvedBy', 'fullName username');
@@ -550,17 +553,14 @@ export const getRefundStats = async (startDate, endDate) => {
 export const getMyRefunds = async (userId, page = 1, limit = 20) => {
   const skip = (page - 1) * limit;
   
-  // Find all bookings for this user
-  const userBookings = await Booking.find({ userId }).select('_id');
-  const bookingIds = userBookings.map(b => b._id);
-
   const [refunds, total] = await Promise.all([
-    Refund.find({ bookingId: { $in: bookingIds } })
+    Refund.find({ requestedBy: userId })
       .populate('bookingId', 'finalAmount scheduleId status')
+      .populate('targetId') // Include order details for all types
       .sort({ requestedAt: -1 })
       .skip(skip)
       .limit(limit),
-    Refund.countDocuments({ bookingId: { $in: bookingIds } })
+    Refund.countDocuments({ requestedBy: userId })
   ]);
 
   return {
@@ -642,6 +642,7 @@ export const getAllRefunds = async (filters = {}) => {
           { path: 'scheduleId', select: 'startTime endTime studioId' }
         ]
       })
+      .populate('targetId') // Include order details
       .populate('requestedBy', 'fullName username email')
       .populate('approvedBy', 'fullName username')
       .populate('processedBy', 'fullName username')
