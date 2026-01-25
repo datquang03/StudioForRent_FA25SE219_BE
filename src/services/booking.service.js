@@ -124,7 +124,7 @@ export const createBooking = async (data) => {
       // Create booking details if provided, and compute totals (details + base studio price)
       let detailsTotal = 0;
       if (Array.isArray(data.details) && data.details.length > 0) {
-        const { total } = await createBookingDetailsService(booking._id, data.details, session, hours);
+        const { total } = await createBookingDetailsService(booking._id, data.details, session);
         detailsTotal = total;
       }
 

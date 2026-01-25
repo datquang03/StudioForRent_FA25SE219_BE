@@ -83,11 +83,11 @@ bookingDetailSchema.pre('save', function(next) {
     }
   }
   
-  // Validate subtotal calculation
-  const calculatedSubtotal = this.quantity * this.pricePerUnit;
-  if (Math.abs(this.subtotal - calculatedSubtotal) > 0.01) {
-    return next(new Error('Subtotal must equal quantity * pricePerUnit'));
-  }
+  // Validation: subtotal check removed to support duration-based pricing (price * qty * hours)
+  // const calculatedSubtotal = this.quantity * this.pricePerUnit;
+  // if (Math.abs(this.subtotal - calculatedSubtotal) > 0.01) {
+  //   return next(new Error('Subtotal must equal quantity * pricePerUnit'));
+  // }
   
   next();
 });
