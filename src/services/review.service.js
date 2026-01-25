@@ -91,11 +91,9 @@ export const getReviewsService = async (query, user) => {
   const targetType = query.targetType || query.target_type;
   const targetId = query.targetId || query.target_id;
 
-  if (!targetType || !targetId) {
-    throw new Error("targetType và targetId là bắt buộc");
-  }
-
-  const filter = { targetType, targetId };
+  const filter = {};
+  if (targetType) filter.targetType = targetType;
+  if (targetId) filter.targetId = targetId;
 
   // Only show hidden reviews if user is NOT staff/admin
   const isStaffOrAdmin = user && (user.role === "staff" || user.role === "admin");
@@ -125,6 +123,50 @@ export const getReviewsService = async (query, user) => {
 
   const reviews = await Review.find(filter)
     .populate("userId", "fullName avatar")
+    .sort(sort)
+    .skip((page - 1) * limit)
+    .limit(Number(limit));
+
+  const total = await Review.countDocuments(filter);
+
+  return {
+    reviews,
+    pagination: {
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      pages: Math.ceil(total / limit),
+    },
+  };
+};
+
+/**
+ * Get reviews created by a specific user (My Reviews)
+ * @param {string} userId - User ID
+ * @param {Object} query - Query parameters (page, limit, sortBy)
+ * @returns {Promise<Object>} Reviews and pagination info
+ */
+export const getMyReviewsService = async (userId, query) => {
+  const { 
+    page = 1, 
+    limit = 10,
+    sortBy = 'newest'
+  } = query;
+
+  const filter = { userId };
+
+  // Sorting logic
+  let sort = { createdAt: -1 }; // Default newest
+  if (sortBy === 'oldest') {
+    sort = { createdAt: 1 };
+  } else if (sortBy === 'rating_desc') {
+    sort = { rating: -1 };
+  } else if (sortBy === 'rating_asc') {
+    sort = { rating: 1 };
+  }
+
+  const reviews = await Review.find(filter)
+    .populate("targetId", "name images") // Dynamic populate based on refPath
     .sort(sort)
     .skip((page - 1) * limit)
     .limit(Number(limit));
