@@ -89,11 +89,57 @@ export const createBooking = async (data) => {
           }).session(session);
 
           if (overlapping) {
-            // If overlapping schedule exists (even if status available) we must reject to keep MIN_GAP
-            throw new ConflictError('Lịch bị trùng hoặc quá gần với lịch khác (khoảng cách tối thiểu 30 phút)');
+            // Check if it is AVAILABLE and a Superset (covers the request)
+            const isSuperset = overlapping.status === SCHEDULE_STATUS.AVAILABLE &&
+                               overlapping.startTime.getTime() <= s.getTime() &&
+                               overlapping.endTime.getTime() >= e.getTime();
+
+            if (isSuperset) {
+              // Dynamic Splitting Logic
+              const originalEndTime = new Date(overlapping.endTime.getTime());
+
+              // 1. Calculate Head (Original Start -> Request Start - Gap)
+              const headEnd = new Date(s.getTime() - MIN_GAP_MS);
+              
+              // 2. Calculate Tail (Request End + Gap -> Original End)
+              const tailStart = new Date(e.getTime() + MIN_GAP_MS);
+
+              // Update Existing Schedule (Head)
+              if (headEnd > overlapping.startTime) {
+                // If head exists, shrink overlapping to head
+                overlapping.endTime = headEnd;
+                // If shrinking makes it invalid (too short?), we should probably allow it or check min duration?
+                // For now, simple shrink.
+                await overlapping.save({ session });
+              } else {
+                 // Head is invalid (e.g. requested start is at or before original start + gap)
+                 // Actually if (headEnd <= startTime), the head is gone.
+                 // We should cancel/delete the overlapping schedule as it's being "consumed" or replaced.
+                 overlapping.status = SCHEDULE_STATUS.CANCELLED;
+                 await overlapping.save({ session });
+              }
+
+              // Create Tail Schedule if valid
+              if (tailStart < originalEndTime) {
+                 // Create new Available schedule for tail
+                 await Schedule.create([{
+                   studioId,
+                   startTime: tailStart,
+                   endTime: originalEndTime, 
+                   status: SCHEDULE_STATUS.AVAILABLE
+                 }], { session });
+              }
+              
+              // Proceed to create the NEW booking schedule below.
+            } else {
+              // If overlapping schedule exists (even if status available) we must reject to keep MIN_GAP
+              const conflictStart = new Date(overlapping.startTime).toLocaleString('vi-VN');
+              const conflictEnd = new Date(overlapping.endTime).toLocaleString('vi-VN');
+              throw new ConflictError(`Lịch bị trùng hoặc quá gần với lịch đã có (${conflictStart} - ${conflictEnd}). Khoảng cách tối thiểu 30 phút.`);
+            }
           }
 
-          // No conflicts — create a new schedule
+          // If we are here (either no overlap, or handled splitting), create the schedule.
           schedule = await createScheduleService({ studioId, startTime: s, endTime: e, status: SCHEDULE_STATUS.AVAILABLE }, session);
         }
       }
